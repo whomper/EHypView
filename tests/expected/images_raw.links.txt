@@ -1,0 +1,6 @@
+[Main] lines=2 width=21
+  image x=2 y=0 w=0 h=0 image=2
+  image x=0 y=0 w=1 h=0 image=2 limage
+  image x=0 y=1 w=0 h=0 image=3
+[Index] lines=1 width=12
+  line 0: link "Main" -> node Main

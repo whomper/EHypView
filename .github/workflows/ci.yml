@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit and golden tests
+        run: make test
+      - name: Sanitizers
+        run: make asan
+
+  m68k:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install m68k cross compiler and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu qemu-user-static
+      - name: Big-endian 68020 tests under QEMU
+        run: make m68k-test

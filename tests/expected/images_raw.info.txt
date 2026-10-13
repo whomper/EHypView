@@ -1,0 +1,9 @@
+OS         Atari
+Compiler   5
+Entries    4
+Database   EHypView image test
+Options    -a -c -s -t4 +z -q
+Subject    Test/EHypView
+Charset    atarist
+Width      75
+Flags      $0000

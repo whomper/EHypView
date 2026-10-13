@@ -1,0 +1,6 @@
+[Main] lines=901 width=96
+  line 0: link "Other" -> node Other
+[Other] lines=1 width=11
+[Index] lines=3 width=13
+  line 0: link "Main" -> node Main
+  line 2: link "Other" -> node Other

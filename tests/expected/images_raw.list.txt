@@ -1,0 +1,5 @@
+    # type          offset  packed    size  name
+    0 node             214      70      70  Main
+    1 node             284      14      14  Index
+    2 image            298     264     264  small.img
+    3 image            562  128008  128008  big.img

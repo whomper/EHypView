@@ -1,0 +1,9 @@
+    # type          offset  packed    size  name
+    0 node             370     250     333  Main
+    1 node             620      74      78  Second
+    2 popup            694      14      14  Pop
+    3 node             708      21      21  Help
+    4 node             729      41      66  Index
+    5 external         770       0       0  other.hyp/Main
+    6 external         770       0       0  other.hyp/Start
+    7 quit             770       0       0  ␎¯

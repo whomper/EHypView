@@ -1,0 +1,12 @@
+OS         Atari
+Compiler   4
+Entries    8
+Database   EHypView basic test
+Options    -a -c -s -t4 +z -q
+Author     EHypView project
+Version    $VER: basic.hyp 1.0 (13.10.2026)
+Help       Help
+Subject    Test/EHypView
+Charset    atarist
+Width      70
+Flags      $0002

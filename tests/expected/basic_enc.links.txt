@@ -1,0 +1,22 @@
+[Main] lines=9 width=38
+  line 2: link "to Second" -> node Second
+  line 2: alink "line 3" -> node Second @2
+  line 3: link "popup here" -> popup Pop
+  line 4: link "other file" -> external other.hyp/Start
+  line 8: link "Second" -> node Second
+  xref -> Help "The help page"
+  xref -> other.hyp/Main "other.hyp/Main"
+[Second] lines=4 width=13
+  line 3: link "Main" -> node Main
+  box x=2 y=3 w=10 h=3 pattern=4
+  line x=2 y=3 w=10 h=2 style=1 arrows=1
+  line x=30 y=3 w=-8 h=0 style=1 arrows=3
+  rbox x=20 y=3 w=8 h=2 pattern=2
+[Pop] lines=1 width=13
+[Help] lines=2 width=10
+  line 1: link "Quit" -> quit ␎¯
+[Index] lines=7 width=14
+  line 0: link "Help" -> node Help
+  line 2: link "Main" -> node Main
+  line 4: link "Pop" -> popup Pop
+  line 6: link "Second" -> node Second

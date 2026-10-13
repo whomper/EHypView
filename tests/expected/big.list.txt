@@ -1,0 +1,4 @@
+    # type          offset  packed    size  name
+    0 node             162   12921   50871  Main
+    1 node           13083      12      12  Other
+    2 node           13095      26      30  Index

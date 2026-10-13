@@ -1,0 +1,42 @@
+Basic test - main page
+See also: The help page
+See also: other.hyp/Main
+This is the main page.
+
+Links: to Second and line 3
+Popup: popup here
+External: other file
+bold italic under ghost outline shadow
+Mixed: bold bold+under plain
+Umlauts: äöüÄÖÜß é © α ∞ א
+Default label: Second
+
+
+
+Second
+Line 0
+Line 1
+Line 3 target
+Back to Main
+
+
+
+Pop
+I am a popup.
+
+
+
+Help
+Help text.
+Quit
+
+
+
+Index
+ H  Help      
+
+ M  Main      
+
+ P  Pop       
+
+ S  Second    
