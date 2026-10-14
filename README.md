@@ -5,7 +5,7 @@ A new, modern viewer for **ST-Guide hypertexts** (`.HYP`) on the Atari
 - it finds every guide without `ALL.REF` maintenance
 - it has a library window and one search box
 - it has multiple windows, tabs and unlimited history
-- programs that call ST-Guide for help keep working
+- programs that call ST-Guide for help keep working 
 
 **Status:** the portable core library is done and tested. It reads `.HYP`
 files, decompresses LH5, parses pages, and reads `.REF` and `ST-GUIDE.INF`.
