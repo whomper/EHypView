@@ -26,6 +26,7 @@
 #define hline     ehv_ui_hline
 #define line_col  ehv_ui_line_col
 #define text_at   ehv_ui_text_at
+#define clip_on   ehv_ui_clip_on
 #define clip_off  ehv_ui_clip_off
 #define st_ram    ehv_ui_st_ram
 #define scr_w     ehv_ui_scr_w

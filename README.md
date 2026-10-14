@@ -152,6 +152,11 @@ In the library: type to search, Up/Down to choose, Return or a click to
 open (or to start the full-text search), Esc to clear the search,
 Backspace to delete a letter.
 
+Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the
+viewer and the library have the iconify button: each shrinks to
+EHypView's icon. A page asked for by another program (the Help key)
+brings the viewer back.
+
 `EHVCHECK.PRG` is a self-test, not part of the viewer. It exercises the core
 library through GEMDOS on a test folder: scanning, every page and image,
 links, and the cache. `make hatari-test` compares its report with the same

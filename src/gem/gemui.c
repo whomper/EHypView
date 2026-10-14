@@ -82,6 +82,17 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 	vst_effects(vdi_h, 0);
 }
 
+void clip_on(GRECT *r)
+{
+	short pxy[4];
+
+	pxy[0] = r->x;
+	pxy[1] = r->y;
+	pxy[2] = (short) (r->x + r->w - 1);
+	pxy[3] = (short) (r->y + r->h - 1);
+	vs_clip(vdi_h, 1, pxy);
+}
+
 void clip_off(void)
 {
 	short pxy[4];

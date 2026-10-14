@@ -12,6 +12,8 @@
 #include "gem.h"
 #include "gemapp.h"
 #include "aboutbox.h"
+#include "grect.h"
+#include "iconify.h"
 #include "icon.h"
 #include "icon16.h"
 #include "version.h"
@@ -45,4 +47,16 @@ void about_box(void)
 	status_line(status, sizeof(status));
 	log_event("dialog", "about", app_version);
 	about_show(&a);
+}
+
+/* an iconified window: the icon (common/ui/iconify.c), nothing under it */
+void app_icon_redraw(short h, short x, short y, short w, short ht)
+{
+	GRECT r;
+
+	r.x = x;
+	r.y = y;
+	r.w = w;
+	r.h = ht;
+	icon_redraw(h, w > 0 ? &r : NULL, icon_bits, icon16_px, "");
 }

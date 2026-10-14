@@ -17,11 +17,15 @@
 #include "alert.h"
 #include "hypfile.h"
 #include "library.h"
+#include "grect.h"
+#include "iconify.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
 #define MARGIN 4
 
 static short lib_h = -1;
+static short lib_icon;                 /* shown as EHypView's icon (WM_ICONIFY) */
+static short lib_place[4];             /* where it was before */
 static ehv_library lib;
 static int lib_ready;
 static char lib_name[] = " Hypertexts ";
@@ -30,6 +34,11 @@ static char lib_info[120];
 short libwin_handle(void)
 {
 	return lib_h;
+}
+
+int libwin_iconified(void)
+{
+	return lib_h > 0 && lib_icon;
 }
 
 static void ensure_model(void)
@@ -188,6 +197,11 @@ static void redraw(short x, short y, short w, short h)
 
 	if (lib_h <= 0)
 		return;
+	if (lib_icon)
+	{
+		app_icon_redraw(lib_h, x, y, w, h);
+		return;
+	}
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, NULL);
 	wind_get(lib_h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
@@ -204,12 +218,29 @@ static void redraw(short x, short y, short w, short h)
 	wind_update(END_UPDATE);
 }
 
+/* the iconified window as it was: the menu, ^L */
+static void restore(void)
+{
+	if (lib_h <= 0 || !lib_icon)
+		return;
+	wind_set(lib_h, WF_UNICONIFY, lib_place[0], lib_place[1], lib_place[2], lib_place[3]);
+	lib_icon = 0;
+	log_event("uniconify", "library", NULL);
+	clamp();
+	set_slider();
+}
+
 static void redraw_all(void)
 {
 	short x, y, w, h;
 
 	if (lib_h <= 0)
 		return;
+	if (lib_icon)                      /* the work area is the icon's */
+	{
+		update_info();
+		return;
+	}
 	clamp();
 	set_slider();
 	update_info();
@@ -236,10 +267,12 @@ void libwin_open(void)
 	ensure_model();
 	if (lib_h > 0)
 	{
+		restore();
 		wind_set(lib_h, WF_TOP, lib_h, 0, 0, 0);
 	} else
 	{
-		lib_h = wind_create(LKIND, desk_x, desk_y, desk_w, desk_h);
+		lib_h = wind_create(icon_kind(LKIND), desk_x, desk_y, desk_w, desk_h);
+		lib_icon = 0;
 		if (lib_h <= 0)
 		{
 			lib_h = -1;
@@ -280,6 +313,7 @@ void libwin_close(void)
 		log_event("closed", "library", NULL);
 	}
 	lib_h = -1;
+	lib_icon = 0;
 	app_window_closed();
 }
 
@@ -287,6 +321,7 @@ void libwin_forget(void)
 {
 	/* AC_CLOSE: the AES has taken the window already */
 	lib_h = -1;
+	lib_icon = 0;
 }
 
 void libwin_free(void)
@@ -410,6 +445,8 @@ void libwin_click(short mx, short my)
 	short x, y, w, h;
 	long row;
 
+	if (lib_icon)
+		return;
 	work_area(&x, &y, &w, &h);
 	if (mx < x || mx >= x + w || my < y + header_h() || my >= y + h)
 		return;
@@ -437,7 +474,29 @@ int libwin_message(short *msg)
 	case WM_CLOSED:
 		libwin_close();
 		break;
+	case WM_ICONIFY:
+	case WM_ALLICONIFY:
+		if (!lib_icon)
+		{
+			wind_get(lib_h, WF_CURRXYWH, &lib_place[0], &lib_place[1], &lib_place[2], &lib_place[3]);
+			lib_icon = 1;
+			wind_set(lib_h, WF_ICONIFY, msg[4], msg[5], msg[6], msg[7]);
+			log_event("iconify", "library", NULL);
+		}
+		break;
+	case WM_UNICONIFY:
+		if (lib_icon)
+		{
+			lib_place[0] = msg[4];
+			lib_place[1] = msg[5];
+			lib_place[2] = msg[6];
+			lib_place[3] = msg[7];
+			restore();
+			redraw_all();
+		}
+		break;
 	case WM_FULLED:
+		if (!lib_icon)
 		{
 			short cx, cy, cw_, ch_, fx, fy, fw, fh;
 
@@ -451,6 +510,11 @@ int libwin_message(short *msg)
 		break;
 	case WM_SIZED:
 	case WM_MOVED:
+		if (lib_icon)                  /* the icon goes where it is put */
+		{
+			wind_set(lib_h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
+			break;
+		}
 		w = msg[6] < 20 * cw ? (short) (20 * cw) : msg[6];
 		h = msg[7] < 6 * ch ? (short) (6 * ch) : msg[7];
 		wind_set(lib_h, WF_CURRXYWH, msg[4], msg[5], w, h);

@@ -35,6 +35,7 @@
 #include "popup.h"
 #include "aboutbox.h"
 #include "alert.h"
+#include "iconify.h"
 #include "version.h"
 
 #define VA_START   0x4711
@@ -55,6 +56,8 @@ short desk_x, desk_y, desk_w, desk_h;
 ehv_index *idx;
 static short menu_id = -1;
 static short win_h = -1;
+static short win_icon;                 /* shown as EHypView's icon (WM_ICONIFY) */
+static short win_place[4];             /* where it was before */
 static ehv_menu menu;
 static short has_menu;
 static signed char menu_on[CMD_COUNT];   /* what menu_ienable last set */
@@ -329,6 +332,8 @@ static long max_left(void)
 
 static void clamp_scroll(void)
 {
+	if (win_icon)                      /* the work area is the icon's */
+		return;
 	if (view.top > max_top())
 		view.top = max_top();
 	if (view.top < 0)
@@ -345,6 +350,8 @@ static void set_sliders(void)
 	long c = page_cols(), cols = visible_cols();
 	long mt = max_top(), ml = max_left();
 
+	if (win_icon)
+		return;
 	wind_set(win_h, WF_VSLSIZE, (short) (n > rows ? rows * 1000L / n : 1000), 0, 0, 0);
 	wind_set(win_h, WF_VSLIDE, (short) (mt > 0 ? view.top * 1000L / mt : 0), 0, 0, 0);
 	wind_set(win_h, WF_HSLSIZE, (short) (c > cols ? cols * 1000L / c : 1000), 0, 0, 0);
@@ -607,6 +614,11 @@ static void redraw(short x, short y, short w, short h)
 
 	if (win_h <= 0)
 		return;
+	if (win_icon)
+	{
+		app_icon_redraw(win_h, x, y, w, h);
+		return;
+	}
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, NULL);
 	wind_get(win_h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
@@ -627,10 +639,24 @@ static void redraw_all(void)
 {
 	short x, y, w, h;
 
+	if (win_icon)                      /* nothing of the page shows */
+		return;
 	work_area(&x, &y, &w, &h);
 	clamp_scroll();
 	set_sliders();
 	redraw(x, y, w, h);
+}
+
+/* the iconified window as it was: a page asked for, the menu */
+static void restore(void)
+{
+	if (win_h <= 0 || !win_icon)
+		return;
+	wind_set(win_h, WF_UNICONIFY, win_place[0], win_place[1], win_place[2], win_place[3]);
+	win_icon = 0;
+	log_event("uniconify", "viewer", NULL);
+	clamp_scroll();
+	set_sliders();
 }
 
 /* ---------------------------------------------------------------- */
@@ -657,6 +683,7 @@ static void update_info(void)
 /* after the view changed page */
 static void page_changed(void)
 {
+	restore();
 	if (view.page != NULL)
 		log_event("page", view.doc->path, view.doc->entries[view.page->num].name);
 	make_layout();
@@ -680,6 +707,7 @@ static void after(int rc)
 			wind_close(win_h);
 			wind_delete(win_h);
 			win_h = -1;
+			win_icon = 0;
 		} else
 		{
 			quit_now = 1;
@@ -701,10 +729,12 @@ static void open_window(void)
 
 	if (win_h > 0)
 	{
+		restore();
 		wind_set(win_h, WF_TOP, win_h, 0, 0, 0);
 		return;
 	}
-	win_h = wind_create(WKIND, desk_x, desk_y, desk_w, desk_h);
+	win_h = wind_create(icon_kind(WKIND), desk_x, desk_y, desk_w, desk_h);
+	win_icon = 0;
 	if (win_h <= 0)
 	{
 		win_h = -1;
@@ -744,6 +774,7 @@ static void close_window(void)
 		log_event("closed", "viewer", NULL);
 	}
 	win_h = -1;
+	win_icon = 0;
 	app_window_closed();
 }
 
@@ -754,6 +785,7 @@ short viewer_handle(void)
 
 void viewer_top(void)
 {
+	restore();
 	if (win_h > 0)
 		wind_set(win_h, WF_TOP, win_h, 0, 0, 0);
 }
@@ -1210,8 +1242,29 @@ static void message(short *msg)
 		if (msg[3] == win_h)
 			close_window();
 		break;
+	case WM_ICONIFY:
+	case WM_ALLICONIFY:
+		if (msg[3] == win_h && !win_icon)
+		{
+			wind_get(win_h, WF_CURRXYWH, &win_place[0], &win_place[1], &win_place[2], &win_place[3]);
+			win_icon = 1;
+			wind_set(win_h, WF_ICONIFY, msg[4], msg[5], msg[6], msg[7]);
+			log_event("iconify", "viewer", NULL);
+		}
+		break;
+	case WM_UNICONIFY:
+		if (msg[3] == win_h && win_icon)
+		{
+			win_place[0] = msg[4];
+			win_place[1] = msg[5];
+			win_place[2] = msg[6];
+			win_place[3] = msg[7];
+			restore();
+			redraw_all();
+		}
+		break;
 	case WM_FULLED:
-		if (msg[3] == win_h)
+		if (msg[3] == win_h && !win_icon)
 		{
 			short cx, cy, cw_, ch_, fx, fy, fw, fh;
 
@@ -1225,7 +1278,9 @@ static void message(short *msg)
 		break;
 	case WM_SIZED:
 	case WM_MOVED:
-		if (msg[3] == win_h)
+		if (msg[3] == win_h && win_icon)    /* the icon goes where it is put */
+			wind_set(win_h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
+		else if (msg[3] == win_h)
 		{
 			w = msg[6] < 12 * cw ? (short) (12 * cw) : msg[6];
 			h = msg[7] < 6 * ch ? (short) (6 * ch) : msg[7];
@@ -1277,6 +1332,7 @@ static void message(short *msg)
 		{
 			/* the AES took the windows */
 			win_h = -1;
+			win_icon = 0;
 			libwin_forget();
 		}
 		break;
@@ -1579,9 +1635,12 @@ int main(void)
 		{
 			short top = top_window();
 
-			if (top == libwin_handle() && top > 0)
+			if (top > 0 && ((top == win_h && win_icon) ||
+					(top == libwin_handle() && libwin_iconified())))
+				;                     /* an icon takes no keys */
+			else if (top == libwin_handle() && top > 0)
 				libwin_key(ev.kstate, ev.kreturn);
-			else if (win_h > 0)
+			else if (win_h > 0 && !win_icon)
 				key(ev.kstate, ev.kreturn);
 			else
 				app_key(ev.kstate, ev.kreturn);
@@ -1590,7 +1649,7 @@ int main(void)
 		{
 			short h = wind_find(ev.mx, ev.my);
 
-			if (h == win_h && win_h > 0)
+			if (h == win_h && win_h > 0 && !win_icon)
 				click(ev.mx, ev.my, ev.mbutton);
 			else if (h == libwin_handle() && h > 0)
 				libwin_click(ev.mx, ev.my);

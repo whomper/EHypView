@@ -38,11 +38,16 @@ void app_window_closed(void);             /* quits the program when none is left
 int app_key(short kstate, short kreturn); /* ^O, ^L, ^W, ^Q...: 1 when handled */
 void app_font_changed(void);              /* lay out and redraw both windows */
 
+/* about.c: an iconified window (WM_ICONIFY) drawn as EHypView's icon,
+   where the AES asks (w <= 0: all of it) */
+void app_icon_redraw(short h, short x, short y, short w, short ht);
+
 /* libwin.c: the library window */
 void libwin_open(void);
 void libwin_close(void);
 void libwin_forget(void);                 /* AC_CLOSE took the window */
 short libwin_handle(void);
+int libwin_iconified(void);               /* shown as the icon */
 int libwin_message(short *msg);           /* 1 when the message was for it */
 void libwin_key(short kstate, short kreturn);
 void libwin_click(short mx, short my);
