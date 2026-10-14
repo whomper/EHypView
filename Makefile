@@ -122,13 +122,14 @@ XCPU    ?= -m68020-60
 XFLAGS   = $(XCPU) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin \
            -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-store-merging \
            -fno-asynchronous-unwind-tables -Wall -Wextra -Werror=implicit-function-declaration \
-           -DEHV_TOS -nostdinc -isystem $(GCCINC) -Icommon/atari/include -Icommon/atari -Isrc/core
+           -DEHV_TOS -nostdinc -isystem $(GCCINC) -Icommon/atari/include -Icommon/atari -Isrc/core \
+           -Icommon/ui -Icommon/src
 XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
 ATARI    = build/atari
 HATARI_DIR = build/hatari
-RUNTIME  = crt0 nf libc tos plat_tos gem crash crash_s
+RUNTIME  = crt0 nf libc tos plat_tos gem crash crash_s alert bidi
 RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
 XHDRS    = $(wildcard src/core/*.h common/atari/*.h common/atari/include/*.h)
@@ -140,6 +141,10 @@ $(ATARI)/crash_s.o: common/atari/crash.S | $(ATARI)
 $(ATARI)/crash.o: common/atari/crash.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
 $(ATARI)/%.o: common/atari/%.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
+$(ATARI)/%.o: common/ui/%.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
+$(ATARI)/bidi.o: common/src/bidi.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
 $(ATARI)/%.o: atari/%.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<

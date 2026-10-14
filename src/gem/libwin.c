@@ -14,6 +14,7 @@
 #include "tos.h"
 #include "gem.h"
 #include "gemapp.h"
+#include "alert.h"
 #include "hypfile.h"
 #include "library.h"
 
@@ -242,7 +243,7 @@ void libwin_open(void)
 		if (lib_h <= 0)
 		{
 			lib_h = -1;
-			form_alert(1, "[3][EHypView: no more windows.][ OK ]");
+			alert(1, "[3][EHypView: no more windows.][ OK ]");
 			return;
 		}
 		wind_calc(WC_BORDER, LKIND, 0, 0, (short) (60 * cw + 2 * MARGIN), (short) (desk_h * 2 / 3),

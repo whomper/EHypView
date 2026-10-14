@@ -30,6 +30,7 @@
 #include "gemapp.h"
 #include "menu.h"
 #include "crash.h"
+#include "alert.h"
 #include "version.h"
 
 #define VA_START   0x4711
@@ -704,7 +705,7 @@ static void open_window(void)
 	if (win_h <= 0)
 	{
 		win_h = -1;
-		form_alert(1, "[3][EHypView: no more windows.][ OK ]");
+		alert(1, "[3][EHypView: no more windows.][ OK ]");
 		return;
 	}
 	cols = (short) (view.doc && view.doc->width ? view.doc->width : 75);
@@ -1479,12 +1480,7 @@ int main(void)
 	}
 	inf_free(inf);
 	if (crash_previous())
-	{
-		char a[200];
-
-		snprintf(a, sizeof(a), "[1][EHypView crashed last time|(%s).|What happened is in|CRASH.LOG, next to EHYPVIEW.PRG.][ OK ]", crash_previous());
-		form_alert(1, a);
-	}
+		alert(1, "[1][EHypView crashed last time|(%s).|What happened is in|CRASH.LOG, next to EHYPVIEW.PRG.][ OK ]", crash_previous());
 
 	while (!quit_now)
 	{
