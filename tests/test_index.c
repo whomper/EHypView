@@ -24,6 +24,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "fsys.h"
+#include "plat.h"
 #include "index.h"
 #include "scan.h"
 #include "resolve.h"
@@ -92,7 +93,7 @@ static void rm_tree(const char *path)
 	if (S_ISDIR(st.st_mode))
 	{
 		char **names;
-		long n = fs_list_dir(path, &names), i;
+		long n = pf_list_dir(path, &names), i;
 
 		for (i = 0; i < n; i++)
 		{
@@ -101,7 +102,7 @@ static void rm_tree(const char *path)
 			rm_tree(sub);
 			free(sub);
 		}
-		fs_free_list(names, n);
+		pf_free_list(names, n);
 		rmdir(path);
 	} else
 	{

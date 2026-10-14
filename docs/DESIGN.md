@@ -73,7 +73,11 @@ interface**.
 - The main build is a regular GEM program (`EHYPVIEW.APP`).
 - An accessory build is kept for single-tasking TOS, where an accessory is
   the only way to stay available inside other programs.
-- Toolchain: m68k-atari-mint gcc with gemlib.
+- Toolchain: Ubuntu's stock `gcc-m68k-linux-gnu`, as for ECal. There is
+  no MiNTLib: `atari/` is a small freestanding runtime (start-up code for
+  both program and accessory, libc, GEMDOS, AES/VDI bindings) shared with
+  ECal, EMail and Claude ST, and `tools/elf2tos.py` writes the TOS
+  program file.
 
 ## Architecture
 
@@ -90,6 +94,12 @@ src/core/      portable C, no GEM: builds on the Atari and on the host
   index.c      the guide index: lookups, "similar" suggestions, cache
   scan.c       step-wise folder scanner (all subfolders), default roots
   resolve.c    links, bare names and help requests -> file + page
+  plat.h       the platform layer: every disk access goes through it
+  plat.c       whole-file load/save on top of it
+  plat_posix.c the platform layer on POSIX (host tools and tests)
+atari/         the TOS runtime (from ECal) and plat_tos.c: the platform
+               layer on GEMDOS (Dopendir/Fxattr on MiNT and MagiC,
+               Fsfirst/Fsnext on TOS and EmuTOS)
   (next) image.c   planar image -> VDI raster for any screen depth
   (next) search.c  full-text search
 src/gem/       (next) the GEM application
@@ -98,9 +108,9 @@ tests/         unit tests, golden tests, fixture generators
 ```
 
 Rules for `src/core`:
-- C99 subset. No GEM; POSIX only in `fsys.c` (dirent/stat, which
-  mintlib provides with and without MiNT). No globals except the LH5
-  scratch state.
+- C99 subset. No GEM, and no file access except through `plat.h`.
+  Only what the freestanding libc in `atari/` offers (no stdio
+  streams, no `sscanf`). No globals except the LH5 scratch state.
 - Text stays in the file's character set. GEM fonts use the Atari set, so
   the viewer never converts.
 - Files are **not kept open** between calls. An accessory on plain TOS
@@ -166,6 +176,12 @@ Rules for `src/core`:
 - `make m68k-test`: the same suite compiled as big-endian 68020 code and run
   under QEMU, to catch byte-order and alignment mistakes before they reach
   real hardware.
+- `make hatari-test` builds `EHVCHECK.PRG` for the Atari and runs it in
+  Hatari as a Falcon with EmuTOS. The program scans a test folder, decodes
+  every page and image, resolves links and saves, reloads and reuses the
+  cache, all through GEMDOS. Its report must match the same program built
+  for the host, line for line. The program reports through NatFeats and
+  ends the emulator with `NF_EXIT`, so the run takes a few seconds.
 - `tests/test_index.c` builds a real folder tree for the scanner and
   resolver tests: mixed-case names, a folder with spaces, a duplicate, a
   damaged file, a symbolic link loop, a REF beside a file and an ALL.REF
@@ -180,7 +196,8 @@ Rules for `src/core`:
 1. ~~Core library: HYP, LH5, pages, REF, INF, with tests~~ ✔
 2. ~~Folder scanner and index cache. Resolving `file.hyp/node` links and
    bare node names without `ALL.REF`.~~ ✔
-3. First GEM version: one window, page display with attributes and
+3. ~~Atari build with the shared runtime; the platform layer on GEMDOS,
+   tested in Hatari.~~ ✔ Next: the first GEM version: one window, page display with attributes and
    graphics, links, back/forward, answering `VA_START` and `AC_HELP`.
    Tested in Hatari/ARAnyM and on the Falcon.
 4. Library window and search.

@@ -8,54 +8,16 @@
  *              NUL-terminated string [, u16 line number for labels]
  *   8 zero bytes (a module header with length 0) ends the file
  */
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "charset.h"
+#include "plat.h"
 #include "ref.h"
 
 static unsigned long be32(const unsigned char *p)
 {
 	return ((unsigned long) p[0] << 24) | ((unsigned long) p[1] << 16) |
 		((unsigned long) p[2] << 8) | (unsigned long) p[3];
-}
-
-static unsigned char *read_file(const char *path, unsigned long *size, int *err)
-{
-	FILE *fp = fopen(path, "rb");
-	unsigned char *buf;
-	long n;
-
-	if (fp == NULL)
-	{
-		*err = REF_ERR_OPEN;
-		return NULL;
-	}
-	if (fseek(fp, 0L, SEEK_END) != 0 || (n = ftell(fp)) < 0)
-	{
-		fclose(fp);
-		*err = REF_ERR_OPEN;
-		return NULL;
-	}
-	rewind(fp);
-	buf = malloc((size_t) n + 1);
-	if (buf == NULL)
-	{
-		fclose(fp);
-		*err = REF_ERR_MEMORY;
-		return NULL;
-	}
-	if (fread(buf, 1, (size_t) n, fp) != (size_t) n)
-	{
-		free(buf);
-		fclose(fp);
-		*err = REF_ERR_OPEN;
-		return NULL;
-	}
-	fclose(fp);
-	buf[n] = '\0';
-	*size = (unsigned long) n;
-	return buf;
 }
 
 /* walk the file; with db->modules == NULL only count */
@@ -174,9 +136,12 @@ ref_db *ref_open(const char *path, int *err)
 		goto fail;
 	}
 	strcpy(db->path, path);
-	db->data = read_file(path, &db->size, err);
+	db->data = (unsigned char *) pf_load(path, &db->size);
 	if (db->data == NULL)
+	{
+		*err = REF_ERR_OPEN;
 		goto fail;
+	}
 	if (db->size < 4 || memcmp(db->data, "HREF", 4) != 0)
 	{
 		*err = REF_ERR_FORMAT;

@@ -6,6 +6,7 @@
 #include <string.h>
 #include "charset.h"
 #include "fsys.h"
+#include "plat.h"
 #include "inf.h"
 #include "ref.h"
 #include "resolve.h"
@@ -82,9 +83,9 @@ static char *with_ext(const char *file)
 
 static int is_file(const char *path)
 {
-	fs_info info;
+	pf_info info;
 
-	return fs_stat(path, &info) == 0 && !info.is_dir;
+	return pf_stat(path, &info) == 0 && !info.is_dir;
 }
 
 /* look for name (no folder) next to the open hypertext */

@@ -15,7 +15,9 @@ A new, modern viewer for **ST-Guide hypertexts** (`.HYP`) on the Atari
 - It resolves links, page names and help requests, with "did you mean"
   suggestions.
 
-The GEM application is next. See [docs/DESIGN.md](docs/DESIGN.md) for the
+- It builds into Atari programs and is tested in Hatari (Falcon, EmuTOS).
+
+The GEM viewer is next. See [docs/DESIGN.md](docs/DESIGN.md) for the
 assessment of ST-Guide, the goals and the roadmap, and
 [docs/FORMAT.md](docs/FORMAT.md) for the file formats.
 
@@ -47,14 +49,22 @@ build/host/hypdump resolve -c guides.idx name appl_init
 
 ## Building for the Atari
 
-This needs the [m68k-atari-mint cross tools](http://vincent.riviere.free.fr/soft/m68k-atari-mint/).
+The Atari programs are built the same way as ECal: with Ubuntu's stock m68k
+compiler and no MiNTLib. `atari/` holds a small freestanding runtime
+(start-up code, libc, GEMDOS file access, AES/VDI bindings), and
+`tools/elf2tos.py` writes the TOS program file.
 
 ```sh
-make atari       # 68020-60 (Falcon, TT)
-make firebee     # ColdFire (FireBee)
+sudo apt install gcc-m68k-linux-gnu      # Debian/Ubuntu
+make atari          # build/hatari/EHVCHECK.PRG (68020-60: Falcon, TT)
+make hatari-test    # run it in Hatari as a Falcon with EmuTOS (apt install hatari)
 ```
 
-For now these build only the core library.
+`EHVCHECK.PRG` is a self-test, not the viewer yet. It exercises the core
+library through GEMDOS on a test folder: scanning, every page and image,
+links, and the cache. `make hatari-test` compares its report with the same
+program built for Linux. To run it on a real Atari, copy `build/hatari/`
+(the program and its `FIXT` folder) to a drive and start `EHVCHECK.PRG`.
 
 ## License
 

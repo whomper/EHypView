@@ -1,11 +1,11 @@
 /*
  * EHypView - reader for ST-GUIDE.INF style configuration files.
  */
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "charset.h"
 #include "inf.h"
+#include "plat.h"
 
 static int is_blank(char c)
 {
@@ -82,42 +82,15 @@ inf_file *inf_parse(const char *text, int *err)
 
 inf_file *inf_load(const char *path, int *err)
 {
-	FILE *fp = fopen(path, "rb");
-	char *text;
-	long n;
+	char *text = pf_load(path, NULL);
 	inf_file *inf;
-	int dummy;
 
-	if (err == NULL)
-		err = &dummy;
-	if (fp == NULL)
-	{
-		*err = INF_ERR_OPEN;
-		return NULL;
-	}
-	if (fseek(fp, 0L, SEEK_END) != 0 || (n = ftell(fp)) < 0)
-	{
-		fclose(fp);
-		*err = INF_ERR_OPEN;
-		return NULL;
-	}
-	rewind(fp);
-	text = malloc((size_t) n + 1);
 	if (text == NULL)
 	{
-		fclose(fp);
-		*err = INF_ERR_MEMORY;
+		if (err != NULL)
+			*err = INF_ERR_OPEN;
 		return NULL;
 	}
-	if (fread(text, 1, (size_t) n, fp) != (size_t) n)
-	{
-		free(text);
-		fclose(fp);
-		*err = INF_ERR_OPEN;
-		return NULL;
-	}
-	fclose(fp);
-	text[n] = '\0';
 	inf = inf_parse(text, err);
 	free(text);
 	return inf;

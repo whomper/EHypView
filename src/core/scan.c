@@ -1,10 +1,12 @@
 /*
  * EHypView - find every hypertext below a list of folders.
  */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "charset.h"
 #include "fsys.h"
+#include "plat.h"
 #include "hypfile.h"
 #include "scan.h"
 
@@ -194,7 +196,7 @@ const ehv_scan_status *ehv_scan_status_get(const ehv_scan *s)
  * Identify a directory: by device and inode where the OS has them (this
  * also catches symbolic link loops), else by its path ignoring case.
  */
-static char *dir_key(const char *path, const fs_info *info)
+static char *dir_key(const char *path, const pf_info *info)
 {
 	char *key;
 
@@ -221,7 +223,7 @@ static char *dir_key(const char *path, const fs_info *info)
 }
 
 /* queue a directory unless it was seen before; -1 = out of memory */
-static int push_dir(ehv_scan *s, const char *path, const fs_info *info, unsigned short depth)
+static int push_dir(ehv_scan *s, const char *path, const pf_info *info, unsigned short depth)
 {
 	char *key = dir_key(path, info);
 	int r;
@@ -286,10 +288,10 @@ static int read_dir(ehv_scan *s, dir_item *d)
 
 	set_current(s, d->path);
 	s->st.dirs++;
-	n = fs_list_dir(d->path, &names);
+	n = pf_list_dir(d->path, &names);
 	if (n <= 0)
 	{
-		fs_free_list(names, n);
+		pf_free_list(names, n);
 		return 0;                    /* unreadable folders are skipped */
 	}
 	qsort(names, (size_t) n, sizeof(char *), cmp_names);
@@ -302,11 +304,11 @@ static int read_dir(ehv_scan *s, dir_item *d)
 	for (i = 0; i < n; i++)
 	{
 		char *full = fs_join(d->path, names[i]);
-		fs_info info;
+		pf_info info;
 
 		if (full == NULL)
 			goto nomem;
-		if (fs_stat(full, &info) != 0)
+		if (pf_stat(full, &info) != 0)
 		{
 			free(full);
 			continue;
@@ -335,10 +337,10 @@ static int read_dir(ehv_scan *s, dir_item *d)
 	while (nsub > 0)
 	{
 		char *sub = subs[--nsub];
-		fs_info info;
+		pf_info info;
 		int r = 0;
 
-		if (fs_stat(sub, &info) == 0)
+		if (pf_stat(sub, &info) == 0)
 		{
 			s->cur_root = d->root;
 			r = push_dir(s, sub, &info, (unsigned short) (d->depth + 1));
@@ -352,7 +354,7 @@ static int read_dir(ehv_scan *s, dir_item *d)
 		}
 	}
 	free(subs);
-	fs_free_list(names, n);
+	pf_free_list(names, n);
 	return 0;
 
 nomem:
@@ -360,11 +362,11 @@ nomem:
 		while (nsub > 0)
 			free(subs[--nsub]);
 	free(subs);
-	fs_free_list(names, n);
+	pf_free_list(names, n);
 	return -1;
 }
 
-static int same_ref(const ehv_guide *g, const char *ref, const fs_info *ri)
+static int same_ref(const ehv_guide *g, const char *ref, const pf_info *ri)
 {
 	if (ref == NULL || g->ref_path == NULL)
 		return ref == NULL && g->ref_path == NULL;
@@ -451,14 +453,14 @@ static int read_guide(ehv_scan *s, const file_item *f, ehv_guide *g)
 
 static int index_file(ehv_scan *s, const file_item *f, unsigned short root)
 {
-	fs_info info, rinfo;
+	pf_info info, rinfo;
 	ehv_guide g;
 
 	set_current(s, f->path);
-	if (fs_stat(f->path, &info) != 0)
+	if (pf_stat(f->path, &info) != 0)
 		return 0;                    /* vanished meanwhile */
 	memset(&rinfo, 0, sizeof(rinfo));
-	if (f->ref != NULL && fs_stat(f->ref, &rinfo) != 0)
+	if (f->ref != NULL && pf_stat(f->ref, &rinfo) != 0)
 		memset(&rinfo, 0, sizeof(rinfo));
 
 	if (s->prev != NULL)
@@ -510,9 +512,9 @@ static int next_root(ehv_scan *s)
 	/* reverse, so the first one is scanned first */
 	for (i = n; i-- > 0 && rc == 0; )
 	{
-		fs_info info;
+		pf_info info;
 
-		if (fs_stat(paths[i], &info) == 0 && info.is_dir)
+		if (pf_stat(paths[i], &info) == 0 && info.is_dir)
 			rc = push_dir(s, paths[i], &info, 0);
 	}
 	inf_free_list(paths, n);
