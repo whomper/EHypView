@@ -9,7 +9,10 @@
 #                   build/hatari (needs gcc-m68k-linux-gnu)
 #   make hatari-test run EHVCHECK.PRG in Hatari (Falcon, EmuTOS) and compare
 #                   its report with the host build's (needs hatari)
-#   make gui-test   drive EHYPVIEW.PRG in Hatari with the keyboard
+#   make gui-test   drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
+#                   (needs Xvfb and xdotool for the mouse)
+#   make icons      draw the icon again: src/gem/icon*.h, docs/icon*.png and
+#                   binary/icons/EHYPVIEW.RSC (needs python3-pil for the PNGs)
 
 CC      ?= cc
 CFLAGS  ?= -O2 -g
@@ -150,9 +153,18 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/ehypview.o \
-           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/fontsel.o
-$(ATARI)/ehypview.elf: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) atari/link.ld
-	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) -lgcc
+           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/fontsel.o $(ATARI)/about.o
+
+# every build counts the version up (VERSION, major.minor as in EMail,
+# ECal and EContact): version.c is written again when anything else in
+# the program was compiled again.  Commit VERSION with binary/.
+$(ATARI)/version.c: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) src/gem/version.h tools/bump.py
+	python3 tools/bump.py VERSION $@
+$(ATARI)/version.o: $(ATARI)/version.c
+	$(XCC) $(XFLAGS) -std=c99 -c -o $@ $<
+
+$(ATARI)/ehypview.elf: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o atari/link.ld
+	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o -lgcc
 
 # one program, two names: it sees at start-up whether TOS loaded it as
 # an accessory or started it as an application (PRGFLAGS 7: fast load,
@@ -183,7 +195,19 @@ $(HATARI_DIR)/EHVCHECK.PRG: $(ATARI)/ehvcheck.elf tools/elf2tos.py
 $(HOST)/ehvcheck: tests/ehvcheck.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
 
-atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPVIEW.ACC
+atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPVIEW.ACC \
+       binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC
+
+# the programs as released, committed with VERSION (as in EMail and ECal)
+binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC: binary/%: $(HATARI_DIR)/%
+	mkdir -p binary
+	cp $< $@
+
+# the icon: src/gem/icon.h and icon16.h (the About box), docs/icon*.png,
+# and binary/icons/ (EHYPVIEW.RSC and ICN files for desktop icons)
+icons: tools/icon/make_icon.py tools/icon/make_rsc.py
+	python3 tools/icon/make_icon.py >/dev/null
+	cd tools/icon && python3 make_rsc.py
 
 # drive EHYPVIEW.PRG in Hatari with the keyboard (screenshots in build/gui)
 gui-test: atari
@@ -198,4 +222,4 @@ hatari-test: atari $(HOST)/ehvcheck
 clean:
 	rm -rf build
 
-.PHONY: all test asan m68k-test atari hatari-test gui-test clean
+.PHONY: icons all test asan m68k-test atari hatari-test gui-test clean

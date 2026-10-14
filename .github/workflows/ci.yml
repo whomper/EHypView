@@ -32,10 +32,10 @@ jobs:
       - name: Install m68k cross compiler and Hatari
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu hatari
+          sudo apt-get install -y gcc-m68k-linux-gnu hatari xvfb xdotool x11-utils
       - name: Build the Atari programs and run them in Hatari (Falcon, EmuTOS)
         run: make hatari-test
-      - name: Drive the viewer in Hatari with the keyboard
+      - name: Drive the viewer in Hatari with the keyboard and mouse
         run: make gui-test
       - uses: actions/upload-artifact@v4
         if: always()

@@ -89,6 +89,26 @@ static void use_sys(void)
 	ch = sys_ch;
 }
 
+/* dialogs and the About box draw in the system font; the text font
+   comes back afterwards */
+static short sys_depth, saved_id, saved_pt;
+
+void font_sys_push(void)
+{
+	if (sys_depth++ == 0)
+	{
+		saved_id = cur_id;
+		saved_pt = cur_pt;
+		use_sys();
+	}
+}
+
+void font_sys_pop(void)
+{
+	if (sys_depth > 0 && --sys_depth == 0)
+		set_font(saved_id, saved_pt);
+}
+
 /* ---------------- the fonts ---------------- */
 
 /* names only: quick, whatever the number of fonts */

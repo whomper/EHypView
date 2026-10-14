@@ -850,12 +850,6 @@ static short top_window(void)
 	return top;
 }
 
-static void about(void)
-{
-	form_alert(1, "[1][EHypView|A hypertext viewer for ST-Guide|"
-		"files.  Free software under the|GNU General Public License.][ OK ]");
-}
-
 /* the VIEW_ target of a navigation command, or -1 */
 static int nav_target(int cmd)
 {
@@ -880,7 +874,7 @@ static void command(int cmd)
 	switch (cmd)
 	{
 	case CMD_ABOUT:
-		about();
+		about_box();
 		return;
 	case CMD_OPEN:
 		open_file_selector();
