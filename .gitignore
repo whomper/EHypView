@@ -3,3 +3,4 @@ build/
 tests/fixtures/src/
 test_core_*.hyp
 __pycache__/
+test_index_tree/

@@ -1,0 +1,5 @@
+    # type          offset  packed    size  name
+    0 node             228      40      40  Start
+    1 node             268      13      13  Detail
+    2 node             281      27      30  Index
+    3 external         308       0       0  basic.hyp/Second

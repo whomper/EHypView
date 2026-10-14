@@ -4,22 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "charset.h"
 #include "inf.h"
-
-static int lower(int c)
-{
-	return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
-}
-
-static int casecmp(const char *a, const char *b)
-{
-	while (*a != '\0' && lower((unsigned char) *a) == lower((unsigned char) *b))
-	{
-		a++;
-		b++;
-	}
-	return lower((unsigned char) *a) - lower((unsigned char) *b);
-}
 
 static int is_blank(char c)
 {
@@ -151,7 +137,7 @@ const char *inf_get(const inf_file *inf, const char *key)
 	unsigned int i = inf->npairs;
 
 	while (i-- > 0)
-		if (casecmp(inf->pairs[i].key, key) == 0)
+		if (atari_casecmp(inf->pairs[i].key, key) == 0)
 			return inf->pairs[i].value;
 	return NULL;
 }

@@ -7,8 +7,14 @@ A new, modern viewer for **ST-Guide hypertexts** (`.HYP`) on the Atari
 - it has multiple windows, tabs and unlimited history
 - programs that call ST-Guide for help keep working 
 
-**Status:** the portable core library is done and tested. It reads `.HYP`
-files, decompresses LH5, parses pages, and reads `.REF` and `ST-GUIDE.INF`.
+**Status:** the portable core library is done and tested.
+- It reads `.HYP` files, decompresses LH5, parses pages, and reads `.REF`
+  and `ST-GUIDE.INF`.
+- It finds every hypertext below a set of folders, including all
+  subfolders, and keeps an index of them with a cache.
+- It resolves links, page names and help requests, with "did you mean"
+  suggestions.
+
 The GEM application is next. See [docs/DESIGN.md](docs/DESIGN.md) for the
 assessment of ST-Guide, the goals and the roadmap, and
 [docs/FORMAT.md](docs/FORMAT.md) for the file formats.
@@ -30,6 +36,13 @@ build/host/hypdump list  GUIDE.HYP           # index table
 build/host/hypdump text  GUIDE.HYP [NODE]    # pages as UTF-8 text
 build/host/hypdump links GUIDE.HYP [NODE]    # links, see-also, graphics
 build/host/hypdump check *.HYP               # decode everything, report damage
+
+# find every hypertext below some folders (with cache and ALL.REF)
+build/host/hypdump scan -c guides.idx -r ALL.REF /path/to/guides /more/guides
+# where does a link or help request lead?
+build/host/hypdump resolve -c guides.idx -f OPEN.HYP xref "AES.HYP/appl_init"
+build/host/hypdump resolve -c guides.idx request "'*:\AES.HYP' appl_init"
+build/host/hypdump resolve -c guides.idx name appl_init
 ```
 
 ## Building for the Atari
@@ -42,6 +55,11 @@ make firebee     # ColdFire (FireBee)
 ```
 
 For now these build only the core library.
+
+## License
+
+EHypView is free software under the GNU General Public License, version 2
+or (at your option) any later version. See [COPYING](COPYING).
 
 ## Test fixtures
 

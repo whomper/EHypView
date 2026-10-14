@@ -17,4 +17,13 @@ unsigned long atari_to_unicode(unsigned char c);
    returns the number of bytes written */
 size_t atari_to_utf8(unsigned char c, char *out);
 
+/* lower-case an Atari character: ASCII and the accented capitals */
+unsigned char atari_tolower(unsigned char c);
+
+/* compare ignoring case (Atari character set), like strcmp */
+int atari_casecmp(const char *a, const char *b);
+
+/* the same for at most n characters */
+int atari_ncasecmp(const char *a, const char *b, unsigned long n);
+
 #endif
