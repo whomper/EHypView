@@ -227,6 +227,7 @@ void vrt_cpyfm(short h, short mode, const short *pxy, MFDB *src, MFDB *dst, cons
 void vq_extnd(short h, short owflag, short *work_out);
 short vq_gdos(void);			/* 1 if a GDOS (NVDI, SpeedoGDOS...) is loaded */
 short vst_load_fonts(short h, short select);
+void vst_unload_fonts(short h, short select);
 short vqt_name(short h, short index, char *name);	/* -> font id; name of 33 chars */
 long  vqt_char_index(short h, unsigned short c, short from, short to);
 short vst_map_mode(short h, short mode);

@@ -17,7 +17,8 @@
 
 /* ehypview.c */
 extern short ap_id, is_acc, quit_now;
-extern short vdi_h, cw, ch, planes, ncolors;
+extern short vdi_h, cw, ch, planes, ncolors;  /* cw, ch: the text font's cell */
+extern short sys_cw, sys_ch;              /* the system font's cell (menus, dialogs) */
 extern short desk_x, desk_y, desk_w, desk_h;
 extern ehv_index *idx;
 
@@ -34,7 +35,8 @@ void viewer_show(const char *path, const char *node, unsigned short line);
 void viewer_top(void);                    /* bring the viewer to the front */
 short viewer_handle(void);                /* -1 when closed */
 void app_window_closed(void);             /* quits the program when none is left */
-int app_key(short kstate, short kreturn); /* ^O, ^L, ^W, ^Q: 1 when handled */
+int app_key(short kstate, short kreturn); /* ^O, ^L, ^W, ^Q...: 1 when handled */
+void app_font_changed(void);              /* lay out and redraw both windows */
 
 /* libwin.c: the library window */
 void libwin_open(void);
@@ -47,5 +49,15 @@ void libwin_click(short mx, short my);
 int libwin_idle(void);                    /* 1 while the full-text search runs */
 void libwin_index_changed(void);          /* a new index (or progress) */
 void libwin_free(void);
+void libwin_font_changed(void);
+
+/* fontsel.c: the text font */
+void font_init(const char *dir);          /* the font from EHYPVIEW.INF in dir */
+void font_exit(void);
+void font_dialog(void);                   /* View > Font... */
+int font_step(int dir);                   /* the next size up or down: 1 when changed */
+int font_protocol(short id, short point); /* FONT_CHANGED: 1 when taken */
+const char *font_name(void);
+short font_point(void);
 
 #endif

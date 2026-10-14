@@ -68,7 +68,7 @@ static void test_tree(short cw, short ch, short sw, short sh)
 
 	CHECK(menu_build(&m, cw, ch, sw, sh) == 0);
 	t = m.tree;
-	CHECK(m.ntitles == 3);
+	CHECK(m.ntitles == 4);
 
 	/* every object reached exactly once from the root */
 	memset(visits, 0, sizeof(visits));
@@ -133,6 +133,8 @@ static void test_tree(short cw, short ch, short sw, short sh)
 	CHECK(strncmp(text(&t[menu_object(&m, CMD_QUIT)]), "  Quit", 6) == 0);
 	CHECK(ends_with(text(&t[menu_object(&m, CMD_QUIT)]), "^Q "));
 	CHECK(ends_with(text(&t[menu_object(&m, CMD_NEXT)]), "^Right "));
+	CHECK(ends_with(text(&t[menu_object(&m, CMD_LARGER)]), "^+ "));
+	CHECK(strcmp(menu_command_name(CMD_SMALLER), "smaller") == 0);
 	CHECK(strncmp(text(&t[menu_object(&m, CMD_ABOUT)]), "  About EHypView", 16) == 0);
 	menu_free(&m);
 	CHECK(m.tree == NULL);

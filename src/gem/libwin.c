@@ -295,6 +295,11 @@ void libwin_free(void)
 	lib_ready = 0;
 }
 
+void libwin_font_changed(void)
+{
+	redraw_all();
+}
+
 void libwin_index_changed(void)
 {
 	if (!lib_ready)
