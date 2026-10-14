@@ -17,7 +17,17 @@ A new, modern viewer for **ST-Guide hypertexts** (`.HYP`) on the Atari
 
 - It builds into Atari programs and is tested in Hatari (Falcon, EmuTOS).
 
-The GEM viewer is next. See [docs/DESIGN.md](docs/DESIGN.md) for the
+**The first GEM viewer** (`EHYPVIEW.PRG`, also `EHYPVIEW.ACC`) works:
+- one window with styled text, links, lines, boxes and images
+- links followed with the mouse or keyboard, including into other hypertexts
+  anywhere in the index
+- history, help requests (`VA_START`, `AC_HELP`)
+- it opens `DEFHYP` from an existing `ST-GUIDE.INF`
+- a background index scan with cache
+
+Still to come: the library window and search, a menu bar, several windows
+and tabs, font choice, and pop-ups as small windows (for now they open as
+pages). See [docs/DESIGN.md](docs/DESIGN.md) for the
 assessment of ST-Guide, the goals and the roadmap, and
 [docs/FORMAT.md](docs/FORMAT.md) for the file formats.
 
@@ -56,11 +66,36 @@ compiler and no MiNTLib. `atari/` holds a small freestanding runtime
 
 ```sh
 sudo apt install gcc-m68k-linux-gnu      # Debian/Ubuntu
-make atari          # build/hatari/EHVCHECK.PRG (68020-60: Falcon, TT)
-make hatari-test    # run it in Hatari as a Falcon with EmuTOS (apt install hatari)
+make atari          # build/hatari/: EHYPVIEW.PRG, EHYPVIEW.ACC, EHVCHECK.PRG
+make hatari-test    # run EHVCHECK.PRG in Hatari as a Falcon with EmuTOS
+make gui-test       # drive EHYPVIEW.PRG in Hatari with the keyboard
+                    # (apt install hatari; screenshots in build/gui)
 ```
 
-`EHVCHECK.PRG` is a self-test, not the viewer yet. It exercises the core
+### Using the viewer
+
+`EHYPVIEW.PRG` opens the hypertext given on its command line, else `DEFHYP`
+(or `HYPTOP`) from `ST-GUIDE.INF` in the boot drive's root. It looks for
+hypertexts in the `PATHS` from that file, the folder of `REF`, `\GUIDES` and
+`\GEMSYS\GUIDES`, including all subfolders. The index is kept in
+`EHYPVIEW.IDX` next to the program. To replace the ST-Guide accessory,
+copy `EHYPVIEW.ACC` to the boot drive's root as `ST-GUIDE.ACC`, so that
+programs asking for ST-Guide find it.
+
+| Keys | Action |
+|---|---|
+| click a link, or Tab / Shift+Tab then Return | follow a link |
+| Backspace, Undo, right mouse button | back |
+| Help | the hypertext's help page |
+| Control+I / Control+T | index / table of contents |
+| Control+Left / Control+Right | previous / next page |
+| Control+Clr/Home | main page |
+| arrows, Shift+arrows | scroll by line / page |
+| Clr/Home, Shift+Clr/Home | top / bottom |
+| Control+O | open a hypertext |
+| Control+W or Control+U / Control+Q | close / quit |
+
+`EHVCHECK.PRG` is a self-test, not part of the viewer. It exercises the core
 library through GEMDOS on a test folder: scanning, every page and image,
 links, and the cache. `make hatari-test` compares its report with the same
 program built for Linux. To run it on a real Atari, copy `build/hatari/`

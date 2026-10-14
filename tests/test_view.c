@@ -1,0 +1,213 @@
+/*
+ * EHypView tests for the viewer model (src/view): opening, links,
+ * history, page navigation and keyboard link selection.
+ *
+ *   test_view FIXTURE_DIR
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "view.h"
+#include "scan.h"
+
+static int failures, checks;
+static const char *fixdir;
+
+#define CHECK(cond) do { \
+	checks++; \
+	if (!(cond)) { \
+		failures++; \
+		printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); \
+	} \
+} while (0)
+
+static char *fx(const char *name)
+{
+	static char buf[2][1024];
+	static int k;
+
+	k ^= 1;
+	snprintf(buf[k], sizeof(buf[k]), "%s/%s", fixdir, name);
+	return buf[k];
+}
+
+static const char *page_name(const ehv_view *v)
+{
+	return v->page ? v->doc->entries[v->page->num].name : "(none)";
+}
+
+static int ends_with(const char *s, const char *tail)
+{
+	size_t ls = strlen(s), lt = strlen(tail);
+
+	return ls >= lt && strcmp(s + ls - lt, tail) == 0;
+}
+
+/* the run whose text is s */
+static long run_named(const ehv_view *v, const char *s)
+{
+	unsigned long i;
+	size_t n = strlen(s);
+
+	for (i = 0; v->page && i < v->page->nruns; i++)
+		if (v->page->runs[i].len == n && memcmp(v->page->runs[i].text, s, n) == 0)
+			return (long) i;
+	return -1;
+}
+
+static void test_open_and_links(void)
+{
+	ehv_view v;
+	char title[100];
+	long r;
+
+	view_init(&v, NULL);
+	CHECK(!view_has_page(&v));
+	view_title(&v, title, sizeof(title));
+	CHECK(strcmp(title, "EHypView") == 0);
+
+	CHECK(view_open(&v, fx("basic.hyp"), NULL, 0) == VIEW_OK);
+	CHECK(strcmp(page_name(&v), "Main") == 0 && v.nhist == 0);
+	view_title(&v, title, sizeof(title));
+	CHECK(strcmp(title, " EHypView basic test - Basic test - main page ") == 0);
+
+	/* a plain link */
+	r = run_named(&v, "to Second");
+	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_OK);
+	CHECK(strcmp(page_name(&v), "Second") == 0 && v.nhist == 1 && v.top == 0);
+	CHECK(view_back(&v) == VIEW_OK && strcmp(page_name(&v), "Main") == 0 && v.nhist == 0);
+	CHECK(view_back(&v) == VIEW_ERROR && v.status[0] != '\0');
+
+	/* a link to a line (0-based line 2) */
+	r = run_named(&v, "line 3");
+	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_OK);
+	CHECK(strcmp(page_name(&v), "Second") == 0 && v.top == 2);
+	view_back(&v);
+
+	/* popups show as pages for now */
+	r = run_named(&v, "popup here");
+	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_OK && strcmp(page_name(&v), "Pop") == 0);
+	view_back(&v);
+
+	/* an external link: other.hyp is found next to basic.hyp */
+	r = run_named(&v, "other file");
+	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_OK);
+	CHECK(ends_with(v.doc->path, "other.hyp") && strcmp(page_name(&v), "Start") == 0);
+	/* ... and back across files */
+	r = run_named(&v, "basic second");
+	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_OK);
+	CHECK(ends_with(v.doc->path, "basic.hyp") && strcmp(page_name(&v), "Second") == 0 && v.nhist == 2);
+	CHECK(view_back(&v) == VIEW_OK && ends_with(v.doc->path, "other.hyp"));
+	CHECK(view_back(&v) == VIEW_OK && ends_with(v.doc->path, "basic.hyp") && strcmp(page_name(&v), "Main") == 0);
+
+	/* a quit link closes the window */
+	CHECK(view_relative(&v, VIEW_HELP) == VIEW_OK && strcmp(page_name(&v), "Help") == 0);
+	r = run_named(&v, "Quit");
+	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_CLOSE);
+
+	/* non-links are not followed */
+	CHECK(view_follow(&v, NULL) == VIEW_ERROR);
+	view_free(&v);
+}
+
+static void test_relative(void)
+{
+	ehv_view v;
+
+	view_init(&v, NULL);
+	CHECK(view_open(&v, fx("other.hyp"), NULL, 0) == VIEW_OK);
+	CHECK(strcmp(page_name(&v), "Start") == 0);               /* @default */
+	CHECK(view_relative(&v, VIEW_NEXT) == VIEW_OK && strcmp(page_name(&v), "Detail") == 0);
+	CHECK(view_relative(&v, VIEW_PREV) == VIEW_OK && strcmp(page_name(&v), "Start") == 0);
+	CHECK(view_relative(&v, VIEW_INDEX) == VIEW_OK && strcmp(page_name(&v), "Index") == 0);
+	CHECK(view_relative(&v, VIEW_HOME) == VIEW_OK && strcmp(page_name(&v), "Start") == 0);
+	CHECK(view_relative(&v, VIEW_HELP) == VIEW_ERROR && v.status[0] != '\0');
+	CHECK(view_relative(&v, VIEW_PREV) == VIEW_ERROR);
+	CHECK(v.nhist == 4);
+	view_free(&v);
+}
+
+static void test_open_errors(void)
+{
+	ehv_view v;
+
+	view_init(&v, NULL);
+	CHECK(view_open(&v, fx("no-such.hyp"), NULL, 0) == VIEW_ERROR && v.status[0] != '\0');
+	CHECK(!view_has_page(&v));
+	CHECK(view_open(&v, fx("basic.ref"), NULL, 0) == VIEW_ERROR);
+	CHECK(view_open(&v, fx("basic.hyp"), "NoSuchPage", 0) == VIEW_OK);
+	CHECK(strcmp(page_name(&v), "Main") == 0 && strstr(v.status, "NoSuchPage") != NULL);
+	CHECK(view_open(&v, fx("basic.hyp"), "second", 99) == VIEW_OK);    /* ignoring case */
+	CHECK(strcmp(page_name(&v), "Second") == 0 && v.top == 3);          /* clamped */
+	view_free(&v);
+}
+
+static void test_selection(void)
+{
+	ehv_view v;
+	long line, first;
+
+	view_init(&v, NULL);
+	view_open(&v, fx("basic.hyp"), NULL, 0);
+	/* links on Main: lines 2 (two), 3, 4, 8 */
+	line = view_select_link(&v, 1, 0, 8);
+	CHECK(line == 2 && strncmp(v.page->runs[v.sel].text, "to Second", 9) == 0);
+	first = v.sel;
+	CHECK(view_select_link(&v, 1, 0, 8) == 2);
+	CHECK(view_select_link(&v, 1, 0, 8) == 3);
+	CHECK(view_select_link(&v, 1, 0, 8) == 4);
+	CHECK(view_select_link(&v, 1, 0, 8) == 8);
+	CHECK(view_select_link(&v, 1, 0, 8) == -1 && v.page->runs[v.sel].len == 6);  /* stays on last */
+	CHECK(view_select_link(&v, -1, 0, 8) == 4);
+	/* a selection scrolled out of view: start from the visible part */
+	CHECK(view_select_link(&v, 1, 6, 8) == 8);
+	CHECK(view_select_link(&v, -1, 0, 1) == -1);
+	v.sel = -1;
+	CHECK(view_select_link(&v, -1, 0, 8) == 8);
+	v.sel = first;
+	CHECK(view_follow_selected(&v) == VIEW_OK && strcmp(page_name(&v), "Second") == 0 && v.sel == -1);
+	CHECK(view_follow_selected(&v) == VIEW_ERROR);
+
+	/* hit testing: "Links: " is 7 columns, then "to Second" */
+	view_back(&v);
+	CHECK(view_link_at(&v, 2, 6) == -1);
+	CHECK(view_link_at(&v, 2, 7) == first && view_link_at(&v, 2, 15) == first);
+	CHECK(view_link_at(&v, 2, 16) == -1);
+	CHECK(view_link_at(&v, 0, 0) == -1 && view_link_at(&v, 99, 0) == -1);
+	CHECK(view_run_line(&v, first) == 2);
+	view_free(&v);
+}
+
+static void test_request(void)
+{
+	const char *roots[1];
+	ehv_index *idx;
+	ehv_view v;
+
+	roots[0] = fixdir;
+	idx = ehv_scan_all(roots, 1, NULL, NULL);
+	CHECK(idx != NULL);
+	view_init(&v, idx);
+	CHECK(view_request(&v, "*:\\OTHER.HYP Detail") == VIEW_OK);
+	CHECK(ends_with(v.doc->path, "other.hyp") && strcmp(page_name(&v), "Detail") == 0);
+	CHECK(view_request(&v, "Zweite") == VIEW_OK && strcmp(page_name(&v), "Second") == 0);
+	CHECK(view_request(&v, "Secnd") == VIEW_ERROR);
+	CHECK(strstr(v.status, "did you mean") != NULL && strstr(v.status, "Second") != NULL);
+	CHECK(strcmp(page_name(&v), "Second") == 0);          /* unchanged */
+	CHECK(view_request(&v, "*:\\OTHER.HYP Strat") == VIEW_OK);
+	CHECK(strcmp(page_name(&v), "Start") == 0 && strstr(v.status, "Strat") != NULL);
+	view_free(&v);
+	ehv_index_free(idx);
+}
+
+int main(int argc, char **argv)
+{
+	fixdir = argc > 1 ? argv[1] : "tests/fixtures";
+	test_open_and_links();
+	test_relative();
+	test_open_errors();
+	test_selection();
+	test_request();
+	printf("%d checks, %d failures\n", checks, failures);
+	return failures ? 1 : 0;
+}

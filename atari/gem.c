@@ -681,3 +681,59 @@ void v_gtext_n(short h, short x, short y, const char *s, short n)
 	ptsin[1] = y;
 	vdi(8, 1, n, h);
 }
+
+/* ---------------- EHypView additions ---------------- */
+
+/* a GDP call (opcode 11) with its sub-function */
+static void gdp(short sub, short nptsin, short h)
+{
+	contrl[0] = 11;
+	contrl[1] = nptsin;
+	contrl[3] = 0;
+	contrl[5] = sub;
+	contrl[6] = h;
+	__asm__ volatile("move.l %0,%%d1\n\tmove.w #115,%%d0\n\ttrap #2"
+		: : "r"((long)vdipb) : "d0", "d1", "d2", "a0", "a1", "a2", "memory", "cc");
+}
+
+static void gdp_box(short sub, short h, const short *pxy)
+{
+	short i;
+	for (i = 0; i < 4; i++)
+		ptsin[i] = pxy[i];
+	gdp(sub, 2, h);
+}
+
+void v_bar(short h, const short *pxy) { gdp_box(1, h, pxy); }
+void v_rbox(short h, const short *pxy) { gdp_box(8, h, pxy); }
+void v_rfbox(short h, const short *pxy) { gdp_box(9, h, pxy); }
+
+void vsl_ends(short h, short beg, short end)
+{
+	vintin[0] = beg;
+	vintin[1] = end;
+	vdi(108, 0, 2, h);
+}
+
+void vr_trnfm(short h, MFDB *src, MFDB *dst)
+{
+	contrl[7] = (short)((u32)src >> 16);
+	contrl[8] = (short)((u32)src & 0xffff);
+	contrl[9] = (short)((u32)dst >> 16);
+	contrl[10] = (short)((u32)dst & 0xffff);
+	vdi(110, 0, 0, h);
+}
+
+short appl_find(const char *name)
+{
+	addrin[0] = (void *)name;
+	return aes(13, 0, 1, 1, 0);
+}
+
+short appl_write(short id, short len, void *buf)
+{
+	aintin[0] = id;
+	aintin[1] = len;
+	addrin[0] = buf;
+	return aes(12, 2, 1, 1, 0);
+}

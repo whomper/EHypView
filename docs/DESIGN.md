@@ -102,7 +102,9 @@ atari/         the TOS runtime (from ECal) and plat_tos.c: the platform
                Fsfirst/Fsnext on TOS and EmuTOS)
   (next) image.c   planar image -> VDI raster for any screen depth
   (next) search.c  full-text search
-src/gem/       (next) the GEM application
+src/view/      the viewer model without GEM: open, links, history,
+               keyboard link selection (tested on the host)
+src/gem/       the GEM program: window, VDI drawing, events, AV protocol
 tools/hypdump  host command-line inspector, used by the tests
 tests/         unit tests, golden tests, fixture generators
 ```
@@ -182,6 +184,14 @@ Rules for `src/core`:
   cache, all through GEMDOS. Its report must match the same program built
   for the host, line for line. The program reports through NatFeats and
   ends the emulator with `NF_EXIT`, so the run takes a few seconds.
+- `make gui-test` drives `EHYPVIEW.PRG` in Hatari through its command
+  FIFO with the keyboard: following links (also into a hypertext three
+  folders down, found by the background index), back, help, next page and
+  quit. The viewer reports its page changes through NatFeats, and each
+  step waits for the expected event. A second run boots with
+  `EHYPVIEW.ACC` and checks that the accessory registers and indexes.
+  Screenshots of every step are kept as a CI artifact. Mouse clicks are
+  not covered, since Hatari's FIFO has no mouse movement.
 - `tests/test_index.c` builds a real folder tree for the scanner and
   resolver tests: mixed-case names, a folder with spaces, a duplicate, a
   damaged file, a symbolic link loop, a REF beside a file and an ALL.REF
@@ -197,9 +207,10 @@ Rules for `src/core`:
 2. ~~Folder scanner and index cache. Resolving `file.hyp/node` links and
    bare node names without `ALL.REF`.~~ ✔
 3. ~~Atari build with the shared runtime; the platform layer on GEMDOS,
-   tested in Hatari.~~ ✔ Next: the first GEM version: one window, page display with attributes and
+   tested in Hatari.~~ ✔ ~~The first GEM version: one window, page display with attributes and
    graphics, links, back/forward, answering `VA_START` and `AC_HELP`.
-   Tested in Hatari/ARAnyM and on the Falcon.
+   Tested in Hatari/ARAnyM and on the Falcon.~~ ✔ (in Hatari; the Falcon
+   and MiNT/MagiC are still to try)
 4. Library window and search.
 5. Multiple windows, tabs, bookmarks, settings dialog, font selection,
    colour images.
