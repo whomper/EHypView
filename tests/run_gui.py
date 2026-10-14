@@ -3,8 +3,8 @@
 
     tests/run_gui.py HATARI_DIR EMUTOS_IMAGE OUT_DIR
 
-HATARI_DIR becomes drive C: and holds EHYPVIEW.PRG, ST-GUIDE.INF and the
-test folder FIXT.  Keys go in through Hatari's command FIFO; the viewer
+HATARI_DIR holds EHYPVIEW.PRG, EHYPVIEW.ACC and the test folder FIXT; each
+scenario gets its own drive C: under OUT_DIR with an ST-GUIDE.INF.  Keys go in through Hatari's command FIFO; the viewer
 reports what it does through NatFeats ("EHV page ...", "EHV select ...")
 and each step waits for the event it expects.  A screenshot of every
 step is saved in OUT_DIR for people to look at.
@@ -19,8 +19,9 @@ ACC_DIR = os.path.join(OUT, "acc")
 BASIC = r"C:\FIXT\BASIC.HYP"
 OTHER = r"C:\FIXT\SUB\DEEP\OTHER.HYP"
 
-TAB, RETURN, BACKSPACE, HELP, UNDO = 15, 28, 14, 0x62, 0x61
-RIGHT, Q, CTRL = 0x4D, 0x10, 29
+TAB, RETURN, BACKSPACE, HELP, UNDO, ESC = 15, 28, 14, 0x62, 0x61, 1
+RIGHT, Q, L, CTRL = 0x4D, 0x10, 0x26, 29
+IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
 # (keys to send, events expected afterwards, in order)
 STEPS = [
@@ -34,6 +35,23 @@ STEPS = [
     ([HELP], ["status This hypertext has no help page"]),
     ([("ctrl", RIGHT)], ["page %s Detail" % OTHER]),   # next page
     ([UNDO], ["page %s Start" % OTHER]),               # back
+    # the library: 4 readable hypertexts (BROKEN.HYP is left out)
+    ([("ctrl", L)], ["library 4"]),
+    (list("det"), ['search "det" 1']),                 # page names as you type
+    ([RETURN], ["page %s Detail" % OTHER]),
+    ([("ctrl", L)], ["library 4"]),
+    ([ESC], ['search "" 4']),
+    (list("beside"), ['search "beside" 0']),
+    ([RETURN], ['fulltext-start "beside"', 'fulltext "beside" 1']),
+    ([RETURN], ["page %s Main" % IMAGES]),             # the full-text hit
+    ([("ctrl", Q)], ["quit"]),
+]
+
+# started without DEFHYP: the library opens, fills when the index is done
+LIBRARY_START = [
+    ([], ["library 0", "index 5 guides"]),
+    (list("zweite"), ['search "zweite" 1']),
+    ([RETURN], ["page %s Second" % BASIC]),
     ([("ctrl", Q)], ["quit"]),
 ]
 
@@ -59,7 +77,8 @@ def accessory_smoke():
         shutil.rmtree(ACC_DIR)
     shutil.copytree(os.path.join(HDIR, "FIXT"), os.path.join(ACC_DIR, "FIXT"))
     shutil.copy(os.path.join(HDIR, "EHYPVIEW.ACC"), ACC_DIR)
-    shutil.copy(os.path.join(HDIR, "ST-GUIDE.INF"), ACC_DIR)
+    with open(os.path.join(ACC_DIR, "ST-GUIDE.INF"), "w") as f:
+        f.write("PATHS=C:\\FIXT\r\nREF=C:\\FIXT\\ALL.REF\r\n")
     fifo = os.path.join(OUT, "acc.fifo")
     log_path = os.path.join(OUT, "acc.log")
     hatari = start_hatari(ACC_DIR, None, fifo, log_path)
@@ -84,11 +103,16 @@ def accessory_smoke():
     return ok
 
 
-def main():
-    os.makedirs(OUT, exist_ok=True)
-    fifo = os.path.join(OUT, "hatari.fifo")
-    log_path = os.path.join(OUT, "hatari.log")
-    hatari = start_hatari(HDIR, r"C:\EHYPVIEW.PRG", fifo, log_path)
+def matches(ev, expected):
+    if expected.endswith("*"):
+        return ev.startswith(expected[:-1])
+    return ev == expected
+
+
+def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG"):
+    fifo = os.path.join(OUT, name + ".fifo")
+    log_path = os.path.join(OUT, name + ".log")
+    hatari = start_hatari(hdir, auto, fifo, log_path)
     for _ in range(100):
         if os.path.exists(fifo):
             break
@@ -111,7 +135,7 @@ def main():
         while time.time() < deadline:
             new = events()[len(seen):]
             for i, ev in enumerate(new):
-                if ev == expected:
+                if matches(ev, expected):
                     seen.extend(new[:i + 1])
                     return True
             time.sleep(0.2)
@@ -119,30 +143,56 @@ def main():
 
     ok = True
     try:
-        for n, (keys, expect) in enumerate(STEPS):
+        for n, (keys, expect) in enumerate(steps):
             for k in keys:
                 if isinstance(k, tuple):
-                    send("hatari-event keydown %d" % CTRL)
-                    send("hatari-event keypress %d" % k[1])
-                    send("hatari-event keyup %d" % CTRL)
+                    send("hatari-event keydown 0x%x" % CTRL)
+                    send("hatari-event keypress 0x%x" % k[1])
+                    send("hatari-event keyup 0x%x" % CTRL)
+                elif isinstance(k, str):
+                    send("hatari-event keypress %s" % k)
                 else:
-                    send("hatari-event keypress %d" % k)
+                    send("hatari-event keypress 0x%x" % k)
             for e in expect:
                 if not wait_for(e):
-                    print("FAIL  step %d: no '%s'" % (n, e))
+                    print("FAIL  %s step %d: no '%s'" % (name, n, e))
                     print("      events so far: %s" % events())
                     ok = False
                     break
-            send("hatari-debug screenshot %s" % os.path.abspath(os.path.join(OUT, "step%02d.png" % n)))
+            send("hatari-debug screenshot %s" % os.path.abspath(
+                os.path.join(OUT, "%s-%02d.png" % (name, n))))
             if not ok:
                 break
-            print("ok    step %d: %s" % (n, expect[-1]))
+            print("ok    %s step %d: %s" % (name, n, expect[-1]))
     finally:
         send("hatari-debug quit")
         try:
             hatari.wait(10)
         except subprocess.TimeoutExpired:
             hatari.kill()
+    return ok
+
+
+def copy_dir(name, inf):
+    """A drive C: with the program (not the accessory), FIXT and an INF."""
+    import shutil
+    d = os.path.join(OUT, name)
+    if os.path.exists(d):
+        shutil.rmtree(d)
+    shutil.copytree(os.path.join(HDIR, "FIXT"), os.path.join(d, "FIXT"))
+    shutil.copy(os.path.join(HDIR, "EHYPVIEW.PRG"), d)
+    with open(os.path.join(d, "ST-GUIDE.INF"), "w") as f:
+        f.write(inf.replace("\n", "\r\n"))
+    return d
+
+
+def main():
+    os.makedirs(OUT, exist_ok=True)
+    d = copy_dir("viewer", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
+    ok = run_scenario("viewer", d, STEPS)
+    if ok:
+        d = copy_dir("libstart", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n")
+        ok = run_scenario("libstart", d, LIBRARY_START)
     if ok:
         ok = accessory_smoke()
     return 0 if ok else 1
