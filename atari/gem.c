@@ -573,6 +573,12 @@ short vst_load_fonts(short h, short select)
 	return vintout[0];
 }
 
+void vst_unload_fonts(short h, short select)
+{
+	vintin[0] = select;
+	vdi(120, 0, 1, h);
+}
+
 short vqt_name(short h, short index, char *name)
 {
 	short i;

@@ -20,13 +20,20 @@ BASIC = r"C:\FIXT\BASIC.HYP"
 OTHER = r"C:\FIXT\SUB\DEEP\OTHER.HYP"
 
 TAB, RETURN, BACKSPACE, HELP, UNDO, ESC = 15, 28, 14, 0x62, 0x61, 1
-RIGHT, Q, L, W, I, CTRL = 0x4D, 0x10, 0x26, 0x11, 0x17, 29
+RIGHT, LEFT, Q, L, W, I, F, CTRL, SHIFT = 0x4D, 0x4B, 0x10, 0x26, 0x11, 0x17, 0x21, 29, 0x2A
+MINUS, EQUALS = 0x0C, 0x0D
 IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
 # (keys to send, events expected afterwards, in order)
 STEPS = [
-    ([], ["menu shown", "page %s Main" % BASIC]),      # DEFHYP from ST-GUIDE.INF
+    ([], ["font System font 16", "menu shown", "page %s Main" % BASIC]),  # DEFHYP
     ([], ["index 5 guides"]),                          # background scan done
+    # the font: sizes with Control+- and Control+=, then the selector
+    ([("ctrl", MINUS)], ["font System font 8"]),
+    ([("ctrl", EQUALS)], ["font System font 16"]),
+    ([("ctrl", EQUALS)], ["status No larger size"]),
+    ([("ctrl+shift", F)], ["dialog font"]),
+    ([LEFT, RETURN], ["font System font 8"]),          # 8 x 8, kept in EHYPVIEW.INF
     ([TAB], ["select 2"]),                             # first link
     ([RETURN], ["page %s Second" % BASIC]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
@@ -53,8 +60,9 @@ STEPS = [
 ]
 
 # started without DEFHYP: the library opens, fills when the index is done
+# (and with the 8 x 8 font kept in EHYPVIEW.INF)
 LIBRARY_START = [
-    ([], ["library 0", "index 5 guides"]),
+    ([], ["font System font 8", "library 0", "index 5 guides"]),
     (list("zweite"), ['search "zweite" 1']),
     ([RETURN], ["page %s Second" % BASIC]),
     ([("ctrl", Q)], ["quit"]),
@@ -151,9 +159,12 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG"):
         for n, (keys, expect) in enumerate(steps):
             for k in keys:
                 if isinstance(k, tuple):
-                    send("hatari-event keydown 0x%x" % CTRL)
+                    mods = [CTRL] + ([SHIFT] if k[0] == "ctrl+shift" else [])
+                    for m in mods:
+                        send("hatari-event keydown 0x%x" % m)
                     send("hatari-event keypress 0x%x" % k[1])
-                    send("hatari-event keyup 0x%x" % CTRL)
+                    for m in reversed(mods):
+                        send("hatari-event keyup 0x%x" % m)
                 elif isinstance(k, str):
                     send("hatari-event keypress %s" % k)
                 else:
@@ -178,7 +189,7 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG"):
     return ok
 
 
-def copy_dir(name, inf):
+def copy_dir(name, inf, settings=None):
     """A drive C: with the program (not the accessory), FIXT and an INF."""
     import shutil
     d = os.path.join(OUT, name)
@@ -188,7 +199,21 @@ def copy_dir(name, inf):
     shutil.copy(os.path.join(HDIR, "EHYPVIEW.PRG"), d)
     with open(os.path.join(d, "ST-GUIDE.INF"), "w") as f:
         f.write(inf.replace("\n", "\r\n"))
+    if settings is not None:
+        with open(os.path.join(d, "EHYPVIEW.INF"), "w") as f:
+            f.write(settings.replace("\n", "\r\n"))
     return d
+
+
+def check_file(path, expected):
+    try:
+        with open(path, newline="") as f:
+            got = f.read()
+    except OSError as e:
+        got = str(e)
+    ok = got == expected
+    print("%s  %s: %r" % ("ok  " if ok else "FAIL", os.path.basename(path), got))
+    return ok
 
 
 def main():
@@ -196,7 +221,10 @@ def main():
     d = copy_dir("viewer", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
     ok = run_scenario("viewer", d, STEPS)
     if ok:
-        d = copy_dir("libstart", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n")
+        ok = check_file(os.path.join(d, "EHYPVIEW.INF"), "FONT=System font\r\nPOINT=8\r\n")
+    if ok:
+        d = copy_dir("libstart", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n",
+                     "FONT=System font\nPOINT=8\n")
         ok = run_scenario("libstart", d, LIBRARY_START)
     if ok:
         ok = accessory_smoke()

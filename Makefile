@@ -25,13 +25,13 @@ CORE_PORT = src/core/lh5.c src/core/hypfile.c src/core/page.c src/core/charset.c
             src/core/index.c src/core/scan.c src/core/resolve.c src/core/plat.c \
             src/core/search.c
 CORE_SRC  = $(CORE_PORT) src/core/plat_posix.c
-VIEW_SRC  = src/view/view.c src/view/library.c
+VIEW_SRC  = src/view/view.c src/view/library.c src/view/fontpref.c
 
 HOST     = build/host
-CORE_OBJ = $(patsubst src/core/%.c,$(HOST)/%.o,$(CORE_SRC)) $(HOST)/view.o $(HOST)/library.o
+CORE_OBJ = $(patsubst src/core/%.c,$(HOST)/%.o,$(CORE_SRC)) $(HOST)/view.o $(HOST)/library.o $(HOST)/fontpref.o
 
 all: $(HOST)/hypdump $(HOST)/test_core $(HOST)/test_index $(HOST)/test_view $(HOST)/test_library \
-     $(HOST)/test_menu
+     $(HOST)/test_menu $(HOST)/test_fonts
 
 $(HOST)/%.o: src/core/%.c src/core/*.h | $(HOST)
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -c -o $@ $<
@@ -58,6 +58,9 @@ $(HOST)/test_view: tests/test_view.c $(HOST)/libehv.a
 $(HOST)/test_library: tests/test_library.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
 
+$(HOST)/test_fonts: tests/test_fonts.c $(HOST)/libehv.a
+	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
+
 # the menu tree is plain data: built and checked on the host too
 $(HOST)/test_menu: tests/test_menu.c src/gem/menu.c src/gem/menu.h atari/gem.h | $(HOST)
 	$(CC) -Isrc/gem -Iatari $(WARN) $(CFLAGS) -o $@ tests/test_menu.c src/gem/menu.c
@@ -71,6 +74,7 @@ test: all
 	$(HOST)/test_view tests/fixtures
 	$(HOST)/test_library tests/fixtures
 	$(HOST)/test_menu
+	$(HOST)/test_fonts
 	sh tests/run_golden.sh $(HOST)/hypdump
 
 asan:
@@ -81,13 +85,14 @@ asan:
 M68K_CC = m68k-linux-gnu-gcc
 M68K    = build/m68k-linux
 
-m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c tests/test_menu.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
+m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c tests/test_menu.c tests/test_fonts.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
 	mkdir -p $(M68K)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_core tests/test_core.c $(CORE_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_index tests/test_index.c $(CORE_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_view tests/test_view.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_library tests/test_library.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) -Isrc/gem -Iatari $(WARN) -O2 -static -o $(M68K)/test_menu tests/test_menu.c src/gem/menu.c
+	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_fonts tests/test_fonts.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/hypdump tools/hypdump.c $(CORE_SRC)
 	printf '#!/bin/sh\nexec qemu-m68k-static "%s" "$$@"\n' "$(CURDIR)/$(M68K)/hypdump" > $(M68K)/hypdump.sh
 	chmod +x $(M68K)/hypdump.sh
@@ -96,6 +101,7 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c tests/test_menu.c
 	qemu-m68k-static $(M68K)/test_view tests/fixtures
 	qemu-m68k-static $(M68K)/test_library tests/fixtures
 	qemu-m68k-static $(M68K)/test_menu
+	qemu-m68k-static $(M68K)/test_fonts
 	sh tests/run_golden.sh $(M68K)/hypdump.sh
 
 # --- Atari programs ----------------------------------------------------
@@ -131,6 +137,8 @@ $(ATARI)/view.o: src/view/view.c src/view/view.h $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -Isrc/view -std=c99 -pedantic -Wshadow -c -o $@ $<
 $(ATARI)/library.o: src/view/library.c src/view/library.h $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -Isrc/view -std=c99 -pedantic -Wshadow -c -o $@ $<
+$(ATARI)/fontpref.o: src/view/fontpref.c src/view/fontpref.h $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -Isrc/view -std=c99 -pedantic -Wshadow -c -o $@ $<
 $(ATARI)/%.o: src/gem/%.c src/gem/*.h src/view/*.h $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -Isrc/view -Isrc/gem -std=gnu99 -c -o $@ $<
 $(ATARI)/ehvcheck.o: tests/ehvcheck.c $(XHDRS) | $(ATARI)
@@ -141,7 +149,8 @@ $(ATARI):
 $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
-GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/ehypview.o $(ATARI)/libwin.o $(ATARI)/menu.o
+GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/ehypview.o \
+           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/fontsel.o
 $(ATARI)/ehypview.elf: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) -lgcc
 

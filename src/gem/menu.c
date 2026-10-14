@@ -67,10 +67,20 @@ static const item_def nav_items[] = {
 	{ NULL, NULL, CMD_NONE }
 };
 
+/* \x01 is the Shift arrow in the Atari character set */
+static const item_def view_items[] = {
+	{ "Font...", "\x01^F", CMD_FONT },
+	{ "-", NULL, CMD_NONE },
+	{ "Larger text", "^+", CMD_LARGER },
+	{ "Smaller text", "^-", CMD_SMALLER },
+	{ NULL, NULL, CMD_NONE }
+};
+
 static const title_def titles[] = {
 	{ " Desk ", desk_items },
 	{ " File ", file_items },
 	{ " Navigate ", nav_items },
+	{ " View ", view_items },
 	{ NULL, NULL }
 };
 
@@ -272,7 +282,8 @@ const char *menu_command_name(int cmd)
 {
 	static const char *const names[CMD_COUNT] = {
 		"none", "about", "open", "library", "close", "quit",
-		"back", "home", "index", "toc", "help", "prev", "next"
+		"back", "home", "index", "toc", "help", "prev", "next",
+		"font", "larger", "smaller"
 	};
 
 	return cmd > CMD_NONE && cmd < CMD_COUNT ? names[cmd] : "none";

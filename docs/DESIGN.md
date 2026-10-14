@@ -105,10 +105,12 @@ atari/         the TOS runtime (from ECal) and plat_tos.c: the platform
 src/view/      without GEM, tested on the host:
   view.c       the viewer model: open, links, history, link selection
   library.c    the library: grouped list, name search, full-text hits
+  fontpref.c   the font setting in EHYPVIEW.INF, size steps
 src/gem/       the GEM program
   ehypview.c   viewer window, VDI drawing, events, AV protocol, startup
   libwin.c     library window
   menu.c       the menu bar, built in code (no resource file)
+  fontsel.c    the text font: selector dialog (from ECal), sizes, font protocol
 tools/hypdump  host command-line inspector, used by the tests
 tests/         unit tests, golden tests, fixture generators
 ```
@@ -194,7 +196,9 @@ Rules for `src/core`:
   quit; then the library: opening it, searching names as you type,
   opening a hit, the full-text search and opening its hit; closing both
   windows (the program, with its menu bar, stays) and reopening the
-  library. Another run
+  library; font sizes with the keyboard and choosing one in the font
+  selector, which must end up in `EHYPVIEW.INF` (and a run started with
+  that file must come up in that font). Another run
   starts without `DEFHYP` and must open the library. The viewer reports
   its page changes, searches and selections through NatFeats, and each
   step waits for the expected event. A second run boots with
@@ -222,7 +226,8 @@ Rules for `src/core`:
    graphics, links, back/forward, answering `VA_START` and `AC_HELP`.
    Tested in Hatari/ARAnyM and on the Falcon.~~ ✔ (in Hatari; the Falcon
    and MiNT/MagiC are still to try)
-4. ~~Library window and search.~~ ✔ ~~Menu bar.~~ ✔
-5. Multiple windows, tabs, bookmarks, settings dialog, font selection,
+4. ~~Library window and search.~~ ✔ ~~Menu bar.~~ ✔ ~~Font choice.~~ ✔
+   (GDOS fonts are untested: EmuTOS in Hatari has no GDOS)
+5. Multiple windows, tabs, bookmarks, settings dialog,
    colour images.
 6. Accessory build, FireBee build, release packaging.

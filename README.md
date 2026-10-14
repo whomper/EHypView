@@ -24,10 +24,19 @@ A new, modern viewer for **ST-Guide hypertexts** (`.HYP`) on the Atari
 - history, help requests (`VA_START`, `AC_HELP`)
 - it opens `DEFHYP` from an existing `ST-GUIDE.INF`
 - a background index scan with cache
-- a menu bar (Desk, File, Navigate) in the application; every item has a
+- a menu bar (Desk, File, Navigate, View) in the application; every item has a
   keyboard shortcut, and items that can't be used right now are greyed out.
   With the menu bar the program keeps running when its windows are closed,
   until you choose Quit.
+- a choice of font for the text (View > Font...), with the same font
+  selector as ECal and EMail. You get the system font in 8x8 or 8x16
+  and, with NVDI, SpeedoGDOS or another GDOS, all monospaced GDOS fonts
+  (bitmap, Speedo, TrueType, Type 1). Hypertexts are laid out in character
+  cells, so proportional fonts are shown but can't be picked. Control+Plus
+  and Control+Minus change the size. A font dropped on a window from a
+  font selector (the font protocol) is used too. The choice is kept in
+  `EHYPVIEW.INF` next to the program, and the list of which fonts are
+  monospaced in `EHYPVIEW.FNT`.
 
 **The library window** (Control+L, and what you see when no page was
 asked for) lists every hypertext found, grouped by subject, with one search
@@ -37,8 +46,7 @@ box:
 - Return on "Search the full text" searches every page of every hypertext
   in the background; ST-Guide needed the separate HypFind tool for that.
 
-Still to come: several viewer windows and tabs, font choice,
-and pop-ups as small windows (for now they open as pages). See [docs/DESIGN.md](docs/DESIGN.md) for the
+Still to come: several viewer windows and tabs, and pop-ups as small windows (for now they open as pages). See [docs/DESIGN.md](docs/DESIGN.md) for the
 assessment of ST-Guide, the goals and the roadmap, and
 [docs/FORMAT.md](docs/FORMAT.md) for the file formats.
 
@@ -106,6 +114,8 @@ programs asking for ST-Guide find it.
 | Control+L | the library (and back to the viewer) |
 | Control+O | open a hypertext |
 | Control+W or Control+U / Control+Q | close the top window / quit |
+| Shift+Control+F | choose the font |
+| Control+Plus / Control+Minus (keypad, or `=` and `-`) | larger / smaller text |
 
 The accessory has no menu bar. Its entry in the Desk menu opens the viewer,
 or the library when no page is shown.

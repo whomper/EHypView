@@ -33,6 +33,8 @@
 #define VA_START   0x4711
 #define AV_STARTED 0x4738
 #define AC_HELP    1025
+#define FONT_CHANGED 0x7a18        /* the font protocol */
+#define FONT_ACK     0x7a1a
 
 #define MARGIN       4             /* pixels left of the text */
 #define WKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | \
@@ -42,6 +44,7 @@ extern short _is_acc;              /* crt0.S */
 
 short ap_id, is_acc, quit_now;
 short vdi_h, cw, ch, planes, ncolors;
+short sys_cw, sys_ch;
 short desk_x, desk_y, desk_w, desk_h;
 ehv_index *idx;
 static short menu_id = -1;
@@ -891,6 +894,14 @@ static void command(int cmd)
 		else
 			close_window();
 		return;
+	case CMD_FONT:
+		font_dialog();
+		return;
+	case CMD_LARGER:
+	case CMD_SMALLER:
+		if (!font_step(cmd == CMD_LARGER ? 1 : -1))
+			log_event("status", cmd == CMD_LARGER ? "No larger size" : "No smaller size", NULL);
+		return;
 	case CMD_QUIT:
 		if (is_acc)
 		{
@@ -934,13 +945,50 @@ static void update_menu(void)
 	}
 }
 
+static void log_font(void)
+{
+	char pt[8];
+
+	sprintf(pt, "%d", font_point());
+	log_event("font", font_name(), pt);
+}
+
+/* the font changed: lay out and redraw */
+void app_font_changed(void)
+{
+	log_font();
+	make_layout();
+	if (win_h > 0)
+	{
+		clamp_scroll();
+		set_sliders();
+		redraw_all();
+	}
+	libwin_font_changed();
+}
+
 /* shortcuts that work whichever window (or none) is on top */
 int app_key(short kstate, short kreturn)
 {
 	if (!(kstate & K_CTRL))
 		return 0;
+	/* by scan code: with Control, '-' gives the code of Return */
+	switch (KEY_SCAN(kreturn))
+	{
+	case 0x0d:                                        /* ^= (^+ on many keyboards) */
+	case 0x1b:                                        /* ^+ on German keyboards */
+	case 0x4e: command(CMD_LARGER); return 1;         /* ^+ on the keypad */
+	case 0x0c:                                        /* ^- (^ß on German keyboards) */
+	case 0x35:                                        /* ^- on German keyboards */
+	case 0x4a: command(CMD_SMALLER); return 1;        /* ^- on the keypad */
+	}
 	switch (KEY_ASCII(kreturn))
 	{
+	case 0x06:                                        /* Shift+^F */
+		if (!(kstate & K_SHIFT))
+			return 0;
+		command(CMD_FONT);
+		return 1;
 	case 0x11: command(CMD_QUIT); return 1;          /* ^Q */
 	case 0x15:                                        /* ^U */
 	case 0x17: command(CMD_CLOSE); return 1;          /* ^W */
@@ -1157,6 +1205,19 @@ static void message(short *msg)
 	case AP_TERM:
 		quit_now = 1;
 		break;
+	case FONT_CHANGED:
+		/* a font selector dropped a font on one of our windows */
+		if (msg[3] == win_h || msg[3] == libwin_handle() || msg[3] < 0)
+		{
+			short reply[8];
+
+			memset(reply, 0, sizeof(reply));
+			reply[0] = FONT_ACK;
+			reply[1] = ap_id;
+			reply[3] = (short) font_protocol(msg[4], msg[5]);
+			appl_write(msg[1], 16, reply);
+		}
+		break;
 	case VA_START:
 	case AC_HELP:
 		{
@@ -1329,7 +1390,9 @@ int main(void)
 		menu_id = menu_register(ap_id, "  Hypertext");
 		log_event("acc", menu_id >= 0 ? "registered" : "no menu entry", NULL);
 	}
-	vdi_h = graf_handle(&cw, &ch, &d, &d);
+	vdi_h = graf_handle(&sys_cw, &sys_ch, &d, &d);
+	cw = sys_cw;
+	ch = sys_ch;
 	vdi_h = v_opnvwk_(vdi_h, work_out);
 	screen_w = (short) (work_out[0] + 1);
 	screen_h = (short) (work_out[1] + 1);
@@ -1345,11 +1408,13 @@ int main(void)
 	if (start_dir[2] == '\0')
 		strcpy(start_dir + 2, "\\");
 
+	font_init(start_dir);
+	log_font();
 	view_init(&view, NULL);
 	inf = read_inf();
 	start_index(inf);
 
-	if (!is_acc && menu_build(&menu, cw, ch, screen_w, screen_h) == 0)
+	if (!is_acc && menu_build(&menu, sys_cw, sys_ch, screen_w, screen_h) == 0)
 	{
 		memset(menu_on, -1, sizeof(menu_on));
 		has_menu = menu_bar(menu.tree, 1) != 0;
@@ -1437,6 +1502,7 @@ int main(void)
 	if (has_menu)
 		menu_bar(menu.tree, 0);
 	menu_free(&menu);
+	font_exit();
 	if (libwin_handle() > 0)
 	{
 		wind_close(libwin_handle());
