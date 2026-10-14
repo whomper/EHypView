@@ -25,14 +25,11 @@
 #include "inf.h"
 #include "scan.h"
 #include "view.h"
+#include "gemapp.h"
 
 #define VA_START   0x4711
 #define AV_STARTED 0x4738
 #define AC_HELP    1025
-
-#define KEY_SCAN(k)  (((unsigned short) (k)) >> 8)
-#define KEY_ASCII(k) ((k) & 0xff)
-#define K_SHIFT      (K_RSHIFT | K_LSHIFT)
 
 #define MARGIN       4             /* pixels left of the text */
 #define WKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | \
@@ -40,14 +37,15 @@
 
 extern short _is_acc;              /* crt0.S */
 
-static short ap_id, menu_id = -1, is_acc, quit_now;
-static short vdi_h, cw, ch, planes, ncolors;
-static short desk_x, desk_y, desk_w, desk_h;
+short ap_id, is_acc, quit_now;
+short vdi_h, cw, ch, planes, ncolors;
+short desk_x, desk_y, desk_w, desk_h;
+ehv_index *idx;
+static short menu_id = -1;
 static short win_h = -1;
 static char win_name[160], win_info[200];
 
 static ehv_view view;
-static ehv_index *idx;
 static ehv_scan *scanner;
 static ref_db *allref;
 static char cache_path[200];
@@ -57,7 +55,7 @@ static char start_dir[160];
  * Events for the emulator console (NatFeats NF_STDERR; a no-op on real
  * hardware).  tests/run_gui.py follows them to check what happened.
  */
-static void log_event(const char *what, const char *a, const char *b)
+void log_event(const char *what, const char *a, const char *b)
 {
 	char line[300];
 
@@ -339,12 +337,12 @@ static void set_sliders(void)
 /* ---------------------------------------------------------------- */
 /* drawing                                                           */
 
-static short link_color(void)
+short link_color(void)
 {
 	return ncolors >= 16 ? 4 : 1;          /* blue, or black */
 }
 
-static void fill(short color, short x1, short y1, short x2, short y2)
+void fill(short color, short x1, short y1, short x2, short y2)
 {
 	short pxy[4];
 
@@ -359,7 +357,7 @@ static void fill(short color, short x1, short y1, short x2, short y2)
 	vr_recfl(vdi_h, pxy);
 }
 
-static void text_at(short x, short y, const char *s, long n)
+void text_at(short x, short y, const char *s, long n)
 {
 	while (n > 0)
 	{
@@ -569,7 +567,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	vs_clip(vdi_h, 0, clip);
 }
 
-static int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short w2, short h2)
+int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short w2, short h2)
 {
 	short l = *x > x2 ? *x : x2;
 	short t = *y > y2 ? *y : y2;
@@ -713,6 +711,12 @@ static void open_window(void)
 	set_sliders();
 }
 
+void app_window_closed(void)
+{
+	if (!is_acc && win_h <= 0 && libwin_handle() <= 0)
+		quit_now = 1;
+}
+
 static void close_window(void)
 {
 	if (win_h > 0)
@@ -721,8 +725,36 @@ static void close_window(void)
 		wind_delete(win_h);
 	}
 	win_h = -1;
-	if (!is_acc)
-		quit_now = 1;
+	app_window_closed();
+}
+
+short viewer_handle(void)
+{
+	return win_h;
+}
+
+void viewer_top(void)
+{
+	if (win_h > 0)
+		wind_set(win_h, WF_TOP, win_h, 0, 0, 0);
+}
+
+void viewer_show(const char *path, const char *node, unsigned short line)
+{
+	int rc = view_open(&view, path, node, line);
+
+	if (win_h <= 0)
+	{
+		make_layout();
+		open_window();
+		if (rc != VIEW_OK)
+			log_event("status", view.status, NULL);
+		else if (view.page != NULL)
+			log_event("page", view.doc->path, view.doc->entries[view.page->num].name);
+		return;
+	}
+	viewer_top();
+	after(rc);
 }
 
 /* ---------------------------------------------------------------- */
@@ -819,6 +851,9 @@ static void key(short kstate, short kreturn)
 		return;
 	case 0x0f:                         /* ^O */
 		open_file_selector();
+		return;
+	case 0x0c:                         /* ^L: the library */
+		libwin_open();
 		return;
 	case 0x09:                         /* ^I and Tab share 9: Tab has scan 0x0f */
 		if (scan != 0x0f)
@@ -991,11 +1026,20 @@ static void message(short *msg)
 		break;
 	case AC_OPEN:
 		if (msg[4] == menu_id)
-			open_window();
+		{
+			if (view.page != NULL)
+				open_window();
+			else
+				libwin_open();
+		}
 		break;
 	case AC_CLOSE:
 		if (msg[3] == menu_id)
-			win_h = -1;                /* the AES took the window */
+		{
+			/* the AES took the windows */
+			win_h = -1;
+			libwin_forget();
+		}
 		break;
 	case AP_TERM:
 		quit_now = 1;
@@ -1061,6 +1105,21 @@ static void start_index(const inf_file *inf)
 	inf_free_list(roots, n);
 }
 
+int scanning(void)
+{
+	return scanner != NULL;
+}
+
+unsigned long scan_found(void)
+{
+	const ehv_scan_status *st;
+
+	if (scanner == NULL)
+		return 0;
+	st = ehv_scan_status_get(scanner);
+	return st->opened + st->reused;
+}
+
 /* a little more scanning; called when there is nothing else to do */
 static void scan_some(void)
 {
@@ -1074,10 +1133,12 @@ static void scan_some(void)
 		static unsigned long last;
 		const ehv_scan_status *st = ehv_scan_status_get(scanner);
 
-		if (st->opened + st->reused != last && view.status[0] == '\0')
+		if (st->opened + st->reused != last)
 		{
 			last = st->opened + st->reused;
-			update_info();
+			if (view.status[0] == '\0')
+				update_info();
+			libwin_index_changed();
 		}
 		return;
 	}
@@ -1103,6 +1164,7 @@ static void scan_some(void)
 		scanner = NULL;
 	}
 	update_info();
+	libwin_index_changed();
 }
 
 /* ---------------------------------------------------------------- */
@@ -1142,6 +1204,7 @@ int main(void)
 	short work_out[57], msg[8], d;
 	AEVENT ev;
 	inf_file *inf;
+	int fts_busy = 0;
 
 	is_acc = _is_acc;
 	ap_id = appl_init();
@@ -1184,35 +1247,61 @@ int main(void)
 		else if (def != NULL)
 			view_open(&view, def, NULL, 0);
 		graf_mouse(ARROW, NULL);
-		make_layout();
-		open_window();
-		if (win_h <= 0)
+		if (view.page != NULL || view.status[0] != '\0')
+		{
+			make_layout();
+			open_window();
+			if (view.page != NULL)
+				log_event("page", view.doc->path, view.doc->entries[view.page->num].name);
+			else
+				log_event("status", view.status, NULL);
+		} else
+		{
+			libwin_open();
+		}
+		if (win_h <= 0 && libwin_handle() <= 0)
 			quit_now = 1;
-		else if (view.page != NULL)
-			log_event("page", view.doc->path, view.doc->entries[view.page->num].name);
-		else if (view.status[0] != '\0')
-			log_event("status", view.status, NULL);
 	}
 	inf_free(inf);
 
 	while (!quit_now)
 	{
 		short flags = MU_MESAG, which;
-		unsigned long wait = scanner ? 0 : 1000;
+		int busy = scanner != NULL || fts_busy;
 
-		if (win_h > 0)
+		if (win_h > 0 || libwin_handle() > 0)
 			flags |= MU_KEYBD | MU_BUTTON;
-		if (scanner != NULL)
+		if (busy)
 			flags |= MU_TIMER;
-		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, wait, msg, &ev);
-		if (which & MU_MESAG)
+		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, busy ? 0 : 1000, msg, &ev);
+		if ((which & MU_MESAG) && !libwin_message(msg))
 			message(msg);
-		if ((which & MU_KEYBD) && win_h > 0)
-			key(ev.kstate, ev.kreturn);
-		if ((which & MU_BUTTON) && win_h > 0 && wind_find(ev.mx, ev.my) == win_h)
-			click(ev.mx, ev.my, ev.mbutton);
+		if (which & MU_KEYBD)
+		{
+			short top, dd;
+
+			wind_get(0, WF_TOP, &top, &dd, &dd, &dd);
+			if (top == libwin_handle() && top > 0)
+				libwin_key(ev.kstate, ev.kreturn);
+			else if (win_h > 0)
+				key(ev.kstate, ev.kreturn);
+		}
+		if (which & MU_BUTTON)
+		{
+			short h = wind_find(ev.mx, ev.my);
+
+			if (h == win_h && win_h > 0)
+				click(ev.mx, ev.my, ev.mbutton);
+			else if (h == libwin_handle() && h > 0)
+				libwin_click(ev.mx, ev.my);
+		}
 		if (which & MU_TIMER)
+		{
 			scan_some();
+			fts_busy = libwin_idle();
+		}
+		else if (fts_busy == 0)
+			fts_busy = libwin_idle();
 	}
 
 	if (win_h > 0)
@@ -1221,6 +1310,12 @@ int main(void)
 		wind_delete(win_h);
 	}
 	log_event("quit", NULL, NULL);
+	if (libwin_handle() > 0)
+	{
+		wind_close(libwin_handle());
+		wind_delete(libwin_handle());
+	}
+	libwin_free();
 	free_layout();
 	view_free(&view);
 	ehv_scan_abort(scanner);

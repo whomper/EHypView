@@ -101,10 +101,13 @@ atari/         the TOS runtime (from ECal) and plat_tos.c: the platform
                layer on GEMDOS (Dopendir/Fxattr on MiNT and MagiC,
                Fsfirst/Fsnext on TOS and EmuTOS)
   (next) image.c   planar image -> VDI raster for any screen depth
-  (next) search.c  full-text search
-src/view/      the viewer model without GEM: open, links, history,
-               keyboard link selection (tested on the host)
-src/gem/       the GEM program: window, VDI drawing, events, AV protocol
+  search.c     step-wise full-text search through every hypertext
+src/view/      without GEM, tested on the host:
+  view.c       the viewer model: open, links, history, link selection
+  library.c    the library: grouped list, name search, full-text hits
+src/gem/       the GEM program
+  ehypview.c   viewer window, VDI drawing, events, AV protocol, startup
+  libwin.c     library window
 tools/hypdump  host command-line inspector, used by the tests
 tests/         unit tests, golden tests, fixture generators
 ```
@@ -187,7 +190,10 @@ Rules for `src/core`:
 - `make gui-test` drives `EHYPVIEW.PRG` in Hatari through its command
   FIFO with the keyboard: following links (also into a hypertext three
   folders down, found by the background index), back, help, next page and
-  quit. The viewer reports its page changes through NatFeats, and each
+  quit; then the library: opening it, searching names as you type,
+  opening a hit, the full-text search and opening its hit. Another run
+  starts without `DEFHYP` and must open the library. The viewer reports
+  its page changes, searches and selections through NatFeats, and each
   step waits for the expected event. A second run boots with
   `EHYPVIEW.ACC` and checks that the accessory registers and indexes.
   Screenshots of every step are kept as a CI artifact. Mouse clicks are
@@ -211,7 +217,7 @@ Rules for `src/core`:
    graphics, links, back/forward, answering `VA_START` and `AC_HELP`.
    Tested in Hatari/ARAnyM and on the Falcon.~~ ✔ (in Hatari; the Falcon
    and MiNT/MagiC are still to try)
-4. Library window and search.
+4. ~~Library window and search.~~ ✔
 5. Multiple windows, tabs, bookmarks, settings dialog, font selection,
    colour images.
 6. Accessory build, FireBee build, release packaging.
