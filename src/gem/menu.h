@@ -1,5 +1,6 @@
 /*
- * EHypView - the menu bar, built in code (no resource file).
+ * EHypView - the menu bar: EHypView's titles and items, built by the
+ * AERA programs' shared builder (common/ui/mbar.c, which started here).
  *
  * menu_build() only fills in an OBJECT tree; it makes no AES calls, so
  * tests/test_menu.c checks the tree on the host.
@@ -12,6 +13,7 @@
 #define EHV_MENU_H
 
 #include "gem.h"
+#include "mbar.h"
 
 /* commands */
 enum {
@@ -34,13 +36,8 @@ enum {
 	CMD_COUNT
 };
 
-typedef struct {
-	OBJECT *tree;
-	char *pool;                /* the item texts */
-	short nobjects;
-	short ntitles;
-	short cmd_of[96];          /* command of each object, CMD_NONE */
-} ehv_menu;
+/* the menu bar itself is the shared builder's (common/ui/mbar.c) */
+typedef MBAR ehv_menu;
 
 /*
  * Build the menu tree for character cells cw x ch on a screen of

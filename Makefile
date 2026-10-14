@@ -65,8 +65,8 @@ $(HOST)/test_fonts: tests/test_fonts.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
 
 # the menu tree is plain data: built and checked on the host too
-$(HOST)/test_menu: tests/test_menu.c src/gem/menu.c src/gem/menu.h common/atari/gem.h | $(HOST)
-	$(CC) -Isrc/gem -Icommon/atari $(WARN) $(CFLAGS) -o $@ tests/test_menu.c src/gem/menu.c
+$(HOST)/test_menu: tests/test_menu.c src/gem/menu.c src/gem/menu.h common/ui/mbar.c common/ui/mbar.h common/atari/gem.h | $(HOST)
+	$(CC) -Isrc/gem -Icommon/ui -Icommon/atari $(WARN) $(CFLAGS) -o $@ tests/test_menu.c src/gem/menu.c common/ui/mbar.c
 
 $(HOST):
 	mkdir -p $@
@@ -88,13 +88,13 @@ asan:
 M68K_CC = m68k-linux-gnu-gcc
 M68K    = build/m68k-linux
 
-m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c tests/test_menu.c tests/test_fonts.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
+m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c common/ui/mbar.c tests/test_menu.c tests/test_fonts.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
 	mkdir -p $(M68K)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_core tests/test_core.c $(CORE_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_index tests/test_index.c $(CORE_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_view tests/test_view.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_library tests/test_library.c $(CORE_SRC) $(VIEW_SRC)
-	$(M68K_CC) -Isrc/gem -Icommon/atari $(WARN) -O2 -static -o $(M68K)/test_menu tests/test_menu.c src/gem/menu.c
+	$(M68K_CC) -Isrc/gem -Icommon/ui -Icommon/atari $(WARN) -O2 -static -o $(M68K)/test_menu tests/test_menu.c src/gem/menu.c common/ui/mbar.c
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_fonts tests/test_fonts.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/hypdump tools/hypdump.c $(CORE_SRC)
 	printf '#!/bin/sh\nexec qemu-m68k-static "%s" "$$@"\n' "$(CURDIR)/$(M68K)/hypdump" > $(M68K)/hypdump.sh
@@ -167,7 +167,7 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/ehypview.o \
-           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/fontsel.o $(ATARI)/about.o
+           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o
 
 # every build counts the version up (VERSION, major.minor as in EMail,
 # ECal and EContact): version.c is written again when anything else in
