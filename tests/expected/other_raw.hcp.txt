@@ -1,0 +1,15 @@
+Start
+Start of other.
+Back: basic second
+
+
+
+Detail
+Detail page.
+
+
+
+Index
+ D  Detail    
+
+ S  Start     

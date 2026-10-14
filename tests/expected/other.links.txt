@@ -1,0 +1,6 @@
+[Start] lines=2 width=18
+  line 1: link "basic second" -> external basic.hyp/Second
+[Detail] lines=1 width=12
+[Index] lines=3 width=14
+  line 0: link "Detail" -> node Detail
+  line 2: link "Start" -> node Start

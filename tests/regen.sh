@@ -10,6 +10,7 @@
 #
 # Outputs (all committed):
 #   tests/fixtures/*.hyp, *.ref      compiled fixtures
+#   tests/fixtures/all.ref           ALL.REF: basic + other + a missing "ghost"
 #   tests/expected/*.hcp.txt         hcp's own text rendering (oracle)
 #   tests/expected/*.links.txt       hypdump link/graphics listing
 #   tests/expected/*.list.txt        hypdump index listing
@@ -31,13 +32,14 @@ export HOME=${TMPDIR:-/tmp}/ehv-regen-home
 mkdir -p "$HOME/.hypview/guides"
 
 cd "$FIX/src"
-for src in basic images big; do
+for src in basic other images big; do
 	"$HCP" -q -o "$FIX/$src.hyp" "$src.stg" >/dev/null
 	"$HCP" -q -c -o "$FIX/${src}_raw.hyp" "$src.stg" >/dev/null
 done
 mv -f "$FIX/src/"*.ref "$FIX/" 2>/dev/null || true
 rm -f "$FIX/"*_raw.ref
 python3 "$TOP/tests/tools/mkencrypted.py" "$FIX/basic_raw.hyp" "$FIX/basic_enc.hyp"
+python3 "$TOP/tests/tools/mkallref.py" "$FIX/all.ref" "$FIX/basic.ref" "$FIX/other.ref"
 
 cd "$FIX"
 for f in *.hyp; do

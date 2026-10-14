@@ -123,6 +123,27 @@ Help text.
 @endnode
 """
 
+OTHER = r"""@if VERSION >= 6
+@os Atari
+@charset atarist
+@inputenc atarist
+@endif
+@database "EHypView other test"
+@subject "Test/EHypView"
+@default "Start"
+@options "-a +z -s"
+
+@node "Start"
+@alias "Anfang"
+Start of other.
+Back: @{"basic second" link "basic.hyp/Second"}
+@endnode
+
+@node "Detail"
+Detail page.
+@endnode
+"""
+
 IMAGES = r"""@if VERSION >= 6
 @os Atari
 @charset atarist
@@ -164,6 +185,7 @@ def big_text():
 def main():
     os.makedirs(OUT, exist_ok=True)
     write_stg("basic.stg", BASIC)
+    write_stg("other.stg", OTHER)
     write_stg("images.stg", IMAGES)
     write_stg("big.stg", big_text())
 

@@ -6,6 +6,11 @@
  *   hypdump text  FILE [NODE...]  pages as plain UTF-8 text
  *   hypdump links FILE [NODE...]  links, cross references and graphics
  *   hypdump check FILE...         decode every object, report problems
+ *   hypdump scan [-c CACHE] [-r ALL.REF] ROOT...
+ *                                 find every hypertext below the folders
+ *   hypdump resolve [-c CACHE] [-r ALL.REF] [-f OPEN.HYP] [ROOT...]
+ *                   xref|name|request ARG
+ *                                 show where a link or help request leads
  *
  * Runs on the build host; used by the test suite.
  */
@@ -15,6 +20,9 @@
 #include "hypfile.h"
 #include "page.h"
 #include "charset.h"
+#include "index.h"
+#include "scan.h"
+#include "resolve.h"
 
 static void put_atari(const char *s, unsigned long len)
 {
@@ -330,8 +338,208 @@ static void usage(void)
 {
 	fputs("usage: hypdump info|list FILE\n"
 		  "       hypdump text|links FILE [NODE...]\n"
-		  "       hypdump check FILE...\n", stderr);
+		  "       hypdump check FILE...\n"
+		  "       hypdump scan [-c CACHE] [-r ALL.REF] ROOT...\n"
+		  "       hypdump resolve [-c CACHE] [-r ALL.REF] [-f OPEN.HYP] [ROOT...] xref|name|request ARG\n",
+		  stderr);
 	exit(2);
+}
+
+typedef struct {
+	const char *cache, *allref, *current;
+	char **roots;
+	int nroots;
+} index_opts;
+
+/* parse -c/-r/-f; the remaining arguments are roots */
+static void parse_index_opts(int argc, char **argv, index_opts *o)
+{
+	int i;
+
+	memset(o, 0, sizeof(*o));
+	o->roots = argv;
+	for (i = 0; i < argc; i++)
+	{
+		if (argv[i][0] == '-' && argv[i][1] != '\0' && argv[i][2] == '\0' && i + 1 < argc)
+		{
+			switch (argv[i][1])
+			{
+			case 'c': o->cache = argv[++i]; continue;
+			case 'r': o->allref = argv[++i]; continue;
+			case 'f': o->current = argv[++i]; continue;
+			default: usage();
+			}
+		}
+		o->roots[o->nroots++] = argv[i];
+	}
+}
+
+/*
+ * The index: rescan the roots (reusing the cache) when roots are given,
+ * else just load the cache.  The cache is updated after a scan.
+ */
+static ehv_index *get_index(const index_opts *o, int verbose)
+{
+	ehv_index *prev = o->cache ? ehv_index_load(o->cache) : NULL;
+	ref_db *allref = NULL;
+	ehv_index *idx;
+
+	if (o->allref != NULL && (allref = ref_open(o->allref, NULL)) == NULL)
+		fprintf(stderr, "hypdump: cannot read %s\n", o->allref);
+	if (o->nroots == 0)
+	{
+		if (prev != NULL && allref != NULL)
+		{
+			/* merge ALL.REF into a copy of the cached index */
+			unsigned long g;
+
+			idx = ehv_index_new();
+			for (g = 0; idx != NULL && g < prev->nguides; g++)
+				ehv_index_copy_guide(idx, prev, g);
+			if (idx != NULL)
+			{
+				ehv_index_merge_ref(idx, allref);
+				ehv_index_finish(idx);
+			}
+			ehv_index_free(prev);
+			prev = idx;
+		}
+		ref_close(allref);
+		return prev;
+	}
+	{
+		ehv_scan *s = ehv_scan_begin((const char *const *) o->roots, (unsigned int) o->nroots, prev);
+		const ehv_scan_status *st;
+		int r;
+
+		if (s == NULL)
+			exit(1);
+		while ((r = ehv_scan_step(s, 64)) == 0)
+			;
+		st = ehv_scan_status_get(s);
+		if (verbose)
+			printf("%lu folders, %lu hypertexts read, %lu from cache, %lu damaged\n",
+				st->dirs, st->opened, st->reused, st->failed);
+		idx = r == 1 ? ehv_scan_finish(s, allref) : NULL;
+		if (r != 1)
+			ehv_scan_abort(s);
+	}
+	ehv_index_free(prev);
+	ref_close(allref);
+	if (idx != NULL && o->cache != NULL && ehv_index_save(idx, o->cache) != 0)
+		fprintf(stderr, "hypdump: cannot write %s\n", o->cache);
+	return idx;
+}
+
+static int cmd_scan(int argc, char **argv)
+{
+	index_opts o;
+	ehv_index *idx;
+	unsigned long g, i;
+
+	parse_index_opts(argc, argv, &o);
+	idx = get_index(&o, 1);
+	if (idx == NULL)
+	{
+		fputs("hypdump: no index\n", stderr);
+		return 1;
+	}
+	for (g = 0; g < idx->nguides; g++)
+	{
+		const ehv_guide *gd = &idx->guides[g];
+
+		printf("%s\n", gd->path);
+		if (gd->error != HYP_OK)
+		{
+			printf("    ERROR: %s\n", hyp_strerror(gd->error));
+			continue;
+		}
+		printf("    ");
+		put_str(gd->database ? gd->database : gd->key);
+		if (gd->subject)
+		{
+			printf("  [");
+			put_str(gd->subject);
+			printf("]");
+		}
+		printf("  %lu names%s\n", gd->nsyms, gd->ref_path ? ", own REF" : "");
+	}
+	for (i = 0; i < idx->norphans; i++)
+		printf("ALL.REF lists a missing hypertext: %s\n", idx->orphans[i]);
+	printf("%lu hypertexts, %lu names\n", idx->nguides, idx->nsyms);
+	ehv_index_free(idx);
+	return 0;
+}
+
+static int cmd_resolve(int argc, char **argv)
+{
+	index_opts o;
+	ehv_index *idx;
+	ehv_context ctx;
+	ehv_target t;
+	hyp_doc *doc = NULL;
+	const char *kind, *arg;
+	unsigned int i;
+	static const char *status[] = { "found", "page not found (opening default page)",
+		"hypertext not found", "name not found" };
+
+	if (argc < 2)
+		usage();
+	kind = argv[argc - 2];
+	arg = argv[argc - 1];
+	parse_index_opts(argc - 2, argv, &o);
+	idx = get_index(&o, 0);
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.idx = idx;
+	ctx.current = o.current;
+	if (o.current != NULL)
+		doc = hyp_open(o.current, NULL);
+	ctx.doc = doc;
+
+	if (strcmp(kind, "xref") == 0)
+		ehv_resolve_xref(&ctx, arg, &t);
+	else if (strcmp(kind, "name") == 0)
+		ehv_resolve_name(&ctx, arg, &t);
+	else if (strcmp(kind, "request") == 0)
+		ehv_resolve_request(&ctx, arg, &t);
+	else
+		usage();
+
+	if (t.status < 0)
+	{
+		fputs("hypdump: out of memory\n", stderr);
+		return 1;
+	}
+	printf("status:  %s\n", status[t.status]);
+	if (t.path)
+		printf("file:    %s\n", t.path);
+	if (t.path)
+	{
+		printf("page:    ");
+		put_str(t.node ? t.node : "(default page)");
+		if (t.line)
+			printf(", line %u", t.line);
+		putchar('\n');
+	}
+	for (i = 0; i < t.nalt; i++)
+		printf("also in: %s\n", idx->guides[idx->syms[t.alt[i]].guide].path);
+	for (i = 0; i < t.nsuggest; i++)
+	{
+		printf("did you mean: ");
+		if (t.status == EHV_NO_FILE)
+			printf("%s", idx->guides[t.suggest[i]].path);
+		else
+		{
+			put_str(idx->syms[t.suggest[i]].name);
+			printf(" (%s)", idx->guides[idx->syms[t.suggest[i]].guide].path);
+		}
+		putchar('\n');
+	}
+	i = (unsigned int) t.status;
+	ehv_target_free(&t);
+	hyp_close(doc);
+	ehv_index_free(idx);
+	return i == EHV_FOUND ? 0 : 1;
 }
 
 int main(int argc, char **argv)
@@ -348,6 +556,10 @@ int main(int argc, char **argv)
 		return cmd_links(argv[2], argc - 3, argv + 3);
 	if (strcmp(argv[1], "check") == 0)
 		return cmd_check(argc - 2, argv + 2);
+	if (strcmp(argv[1], "scan") == 0)
+		return cmd_scan(argc - 2, argv + 2);
+	if (strcmp(argv[1], "resolve") == 0)
+		return cmd_resolve(argc - 2, argv + 2);
 	usage();
 	return 2;
 }

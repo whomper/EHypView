@@ -1,0 +1,626 @@
+/*
+ * EHypView tests for finding hypertexts: scanner, index, cache, resolver.
+ *
+ *   test_index FIXTURE_DIR
+ *
+ * Builds a folder tree in the current directory (test_index_tree) from
+ * the fixtures:
+ *
+ *   r1/BASIC.HYP                       basic.hyp
+ *   r1/Basic.Ref                       its REF file, other spelling
+ *   r1/notes.txt
+ *   r1/Long Folder Name/images.hyp
+ *   r1/sub/deeper/deepest/Other.Hyp    other.hyp, no REF beside it
+ *   r2/basic.hyp                       the same file again
+ *   r2/broken.hyp                      damaged
+ *   r2/sub/                            empty
+ *   r2/loop -> ..                      symbolic link back up (POSIX hosts)
+ *   all.ref                            basic + other + missing "ghost"
+ */
+#define _POSIX_C_SOURCE 200809L
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include "fsys.h"
+#include "index.h"
+#include "scan.h"
+#include "resolve.h"
+#include "inf.h"
+
+static int failures, checks;
+static const char *fixdir;
+static char tree[1024];
+
+#define CHECK(cond) do { \
+	checks++; \
+	if (!(cond)) { \
+		failures++; \
+		printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); \
+	} \
+} while (0)
+
+/* ---------------------------------------------------------------- */
+/* tree setup                                                        */
+
+static char *tp(const char *rel)
+{
+	static char buf[8][1200];
+	static int k;
+
+	k = (k + 1) % 8;
+	snprintf(buf[k], sizeof(buf[k]), "%s/%s", tree, rel);
+	return buf[k];
+}
+
+static void copy_file(const char *src, const char *dst)
+{
+	char path[1024];
+	FILE *in, *out;
+	char buf[4096];
+	size_t n;
+
+	snprintf(path, sizeof(path), "%s/%s", fixdir, src);
+	in = fopen(path, "rb");
+	out = fopen(dst, "wb");
+	if (in == NULL || out == NULL)
+	{
+		printf("FAIL cannot copy %s to %s\n", path, dst);
+		exit(1);
+	}
+	while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
+		fwrite(buf, 1, n, out);
+	fclose(in);
+	fclose(out);
+}
+
+static void write_file(const char *path, const char *data, size_t len)
+{
+	FILE *fp = fopen(path, "wb");
+
+	fwrite(data, 1, len, fp);
+	fclose(fp);
+}
+
+static void rm_tree(const char *path)
+{
+	struct stat st;
+
+	if (lstat(path, &st) != 0)
+		return;
+	if (S_ISDIR(st.st_mode))
+	{
+		char **names;
+		long n = fs_list_dir(path, &names), i;
+
+		for (i = 0; i < n; i++)
+		{
+			char *sub = fs_join(path, names[i]);
+
+			rm_tree(sub);
+			free(sub);
+		}
+		fs_free_list(names, n);
+		rmdir(path);
+	} else
+	{
+		unlink(path);
+	}
+}
+
+static void make_tree(void)
+{
+	char cwd[512];
+
+	if (getcwd(cwd, sizeof(cwd)) == NULL)
+		exit(1);
+	snprintf(tree, sizeof(tree), "%s/test_index_tree", cwd);
+	rm_tree(tree);
+	mkdir(tree, 0755);
+	mkdir(tp("r1"), 0755);
+	mkdir(tp("r1/Long Folder Name"), 0755);
+	mkdir(tp("r1/sub"), 0755);
+	mkdir(tp("r1/sub/deeper"), 0755);
+	mkdir(tp("r1/sub/deeper/deepest"), 0755);
+	mkdir(tp("r2"), 0755);
+	mkdir(tp("r2/sub"), 0755);
+	copy_file("basic.hyp", tp("r1/BASIC.HYP"));
+	copy_file("basic.ref", tp("r1/Basic.Ref"));
+	write_file(tp("r1/notes.txt"), "not a hypertext\n", 16);
+	copy_file("images.hyp", tp("r1/Long Folder Name/images.hyp"));
+	copy_file("other.hyp", tp("r1/sub/deeper/deepest/Other.Hyp"));
+	copy_file("basic.hyp", tp("r2/basic.hyp"));
+	write_file(tp("r2/broken.hyp"), "HDOC\0\0\0\x40\0\x05\x03\x02garbage", 19);
+	if (symlink("..", tp("r2/loop")) != 0)
+		printf("note: no symbolic link loop test\n");
+	copy_file("all.ref", tp("all.ref"));
+}
+
+/* ---------------------------------------------------------------- */
+/* helpers                                                           */
+
+static int ends_with(const char *s, const char *tail)
+{
+	size_t ls, lt;
+
+	if (s == NULL)
+		return 0;
+	ls = strlen(s);
+	lt = strlen(tail);
+	return ls >= lt && strcmp(s + ls - lt, tail) == 0;
+}
+
+static long guide_named(const ehv_index *idx, const char *tail)
+{
+	unsigned long g;
+
+	for (g = 0; g < idx->nguides; g++)
+		if (ends_with(idx->guides[g].path, tail))
+			return (long) g;
+	return -1;
+}
+
+/* symbol of a guide by name and kind */
+static const ehv_sym *sym_of(const ehv_index *idx, long g, const char *name, int kind)
+{
+	unsigned long i;
+
+	if (g < 0)
+		return NULL;
+	for (i = idx->guides[g].first_sym; i < idx->guides[g].first_sym + idx->guides[g].nsyms; i++)
+		if (strcmp(idx->syms[i].name, name) == 0 && idx->syms[i].kind == kind)
+			return &idx->syms[i];
+	return NULL;
+}
+
+static int has_suggestion_sym(const ehv_index *idx, const ehv_target *t, const char *name)
+{
+	unsigned int i;
+
+	for (i = 0; i < t->nsuggest; i++)
+		if (strcmp(idx->syms[t->suggest[i]].name, name) == 0)
+			return 1;
+	return 0;
+}
+
+static char *roots[4];
+
+static ehv_index *scan_tree(const ehv_index *prev, const ref_db *allref, ehv_scan_status *st)
+{
+	ehv_scan *s = ehv_scan_begin((const char *const *) roots, 4, prev);
+	int r;
+
+	while ((r = ehv_scan_step(s, 3)) == 0)
+		;
+	CHECK(r == 1);
+	*st = *ehv_scan_status_get(s);
+	return ehv_scan_finish(s, allref);
+}
+
+/* ---------------------------------------------------------------- */
+
+static void test_fsys(void)
+{
+	char *s;
+	char **list;
+
+	s = fs_dirname("C:\\GUIDES\\X.HYP");
+	CHECK(strcmp(s, "C:\\GUIDES") == 0);
+	free(s);
+	s = fs_dirname("C:\\X.HYP");
+	CHECK(strcmp(s, "C:\\") == 0);
+	free(s);
+	s = fs_dirname("X.HYP");
+	CHECK(strcmp(s, "") == 0);
+	free(s);
+	CHECK(strcmp(fs_basename("C:X.HYP"), "X.HYP") == 0);
+	CHECK(strcmp(fs_basename("/a/b/c.hyp"), "c.hyp") == 0);
+	s = fs_join("C:\\GUIDES", "A.HYP");
+	CHECK(strcmp(s, "C:\\GUIDES\\A.HYP") == 0);
+	free(s);
+	s = fs_join("/tmp/", "a");
+	CHECK(strcmp(s, "/tmp/a") == 0);
+	free(s);
+	s = fs_join("C:", "A.HYP");
+	CHECK(strcmp(s, "C:A.HYP") == 0);
+	free(s);
+	CHECK(fs_has_ext("FOO.HYP", ".hyp") && !fs_has_ext(".hyp", ".hyp") && !fs_has_ext("foo.hy", ".hyp"));
+	CHECK(fs_has_dir("C:FOO.HYP") && fs_has_dir("a/b") && !fs_has_dir("b.hyp"));
+#ifndef __MINT__
+	CHECK(fs_expand_root("*:\\GUIDES", &list) == 0 && list == NULL);
+#endif
+	CHECK(fs_expand_root("C:\\GUIDES", &list) == 1 && strcmp(list[0], "C:\\GUIDES") == 0);
+	inf_free_list(list, 1);
+}
+
+static void test_similarity(void)
+{
+	CHECK(ehv_similarity("Gr\x81\x9e" "e", "GRUESSE", 3) == 0);   /* umlauts spelled out */
+	CHECK(ehv_similarity("appl_", "appl_init", 2) == 1);          /* prefix */
+	CHECK(ehv_similarity("Detial", "Detail", 2) == 1);            /* transposition */
+	CHECK(ehv_similarity("Secnd", "Second", 2) == 1);             /* deletion */
+	CHECK(ehv_similarity("form do", "form_do", 1) == 0);          /* blanks/underscores */
+	CHECK(ehv_similarity("abc", "xyz", 1) == 2);                  /* not similar */
+}
+
+static void test_default_roots(void)
+{
+	inf_file *inf = inf_parse("PATHS=C:\\GUIDES\\;c:\\guides;D:\\DOC\n"
+		"HYPFOLD=C:\\GUIDES\nREF=E:\\REFS\\ALL.REF\n", NULL);
+	char **r;
+	unsigned int n = ehv_default_roots(inf, &r);
+
+	CHECK(n == 5);
+	if (n == 5)
+	{
+		CHECK(strcmp(r[0], "C:\\GUIDES\\") == 0);
+		CHECK(strcmp(r[1], "D:\\DOC") == 0);
+		CHECK(strcmp(r[2], "E:\\REFS") == 0);
+		CHECK(strcmp(r[3], "*:\\GUIDES") == 0);
+		CHECK(strcmp(r[4], "*:\\GEMSYS\\GUIDES") == 0);
+	}
+	inf_free_list(r, n);
+	inf_free(inf);
+	n = ehv_default_roots(NULL, &r);
+	CHECK(n == 2);
+	inf_free_list(r, n);
+}
+
+static void test_scan(const ehv_index *idx, const ehv_scan_status *st)
+{
+	long b1 = guide_named(idx, "/r1/BASIC.HYP");
+	long b2 = guide_named(idx, "/r2/basic.hyp");
+	long other = guide_named(idx, "/deepest/Other.Hyp");
+	long img = guide_named(idx, "/Long Folder Name/images.hyp");
+	long broken = guide_named(idx, "/r2/broken.hyp");
+	unsigned long hits[8], n;
+	const ehv_sym *s;
+	unsigned long i;
+	int ghost = 0;
+
+	CHECK(idx->nguides == 5);
+	CHECK(b1 >= 0 && b2 >= 0 && other >= 0 && img >= 0 && broken >= 0);
+	if (b1 < 0 || b2 < 0 || other < 0 || img < 0 || broken < 0)
+		return;
+	CHECK(st->opened == 4 && st->failed == 1 && st->reused == 0);
+	/* r1 (5 folders), r2 (2), and the tree itself via r2/loop; the loop
+	   back into r1/r2 and the repeated root r1/sub are not read again */
+	CHECK(st->dirs == 8);
+
+	/* roots: r1 is root 0, r2 root 1; r1/sub was reached from r1 */
+	CHECK(idx->guides[b1].root == 0 && idx->guides[other].root == 0 && idx->guides[b2].root == 1);
+	CHECK(idx->guides[broken].error != HYP_OK);
+	CHECK(idx->guides[b1].error == HYP_OK);
+
+	/* metadata */
+	CHECK(idx->guides[other].database && strcmp(idx->guides[other].database, "EHypView other test") == 0);
+	CHECK(idx->guides[other].subject && strcmp(idx->guides[other].subject, "Test/EHypView") == 0);
+	CHECK(idx->guides[other].default_node && strcmp(idx->guides[other].default_node, "Start") == 0);
+	CHECK(strcmp(idx->guides[other].key, "Other") == 0);
+
+	/* REF beside the file, matched ignoring case */
+	CHECK(ends_with(idx->guides[b1].ref_path, "/r1/Basic.Ref"));
+	CHECK(idx->guides[other].ref_path == NULL);
+	s = sym_of(idx, b1, "Zweite", EHV_SYM_ALIAS);
+	CHECK(s && strcmp(s->node, "Second") == 0 && s->from_ref == 1);
+	s = sym_of(idx, b1, "secondkw", EHV_SYM_LABEL);
+	CHECK(s && strcmp(s->node, "Second") == 0);
+	CHECK(sym_of(idx, b1, "Pop", EHV_SYM_POPUP) != NULL);
+	CHECK(sym_of(idx, b1, "Main", EHV_SYM_NODE) != NULL);
+
+	/* ALL.REF fills in guides without their own REF */
+	s = sym_of(idx, other, "Anfang", EHV_SYM_ALIAS);
+	CHECK(s && strcmp(s->node, "Start") == 0 && s->from_ref == 2);
+	s = sym_of(idx, b2, "Zweite", EHV_SYM_ALIAS);
+	CHECK(s && s->from_ref == 2);
+	/* ... but never replaces the guide's own REF data */
+	n = 0;
+	for (i = idx->guides[b1].first_sym; i < idx->guides[b1].first_sym + idx->guides[b1].nsyms; i++)
+		if (idx->syms[i].from_ref == 2)
+			n++;
+	CHECK(n == 0);
+	for (i = 0; i < idx->norphans; i++)
+		if (strcmp(idx->orphans[i], "ghost.hyp") == 0)
+			ghost = 1;
+	CHECK(idx->norphans == 1 && ghost);
+
+	/* lookups */
+	n = ehv_index_find_guides(idx, "BASIC.HYP", hits, 8);
+	CHECK(n == 2 && hits[0] == (unsigned long) b1 && hits[1] == (unsigned long) b2);
+	CHECK(ehv_index_find_guides(idx, "basic", hits, 8) == 2);
+	n = ehv_index_find_guides(idx, "C:\\GUIDES\\OTHER.HYP", hits, 8);
+	CHECK(n == 1 && hits[0] == (unsigned long) other);
+	CHECK(ehv_index_find_guides(idx, "nosuch.hyp", hits, 8) == 0);
+	CHECK(ehv_index_find_path(idx, idx->guides[img].path) == img);
+
+	n = ehv_index_find_symbol(idx, "Second", -1, hits, 8);
+	CHECK(n == 2 && idx->syms[hits[0]].guide == (unsigned long) b1);
+	n = ehv_index_find_symbol(idx, "second", -1, hits, 8);
+	CHECK(n == 2);
+	n = ehv_index_find_symbol(idx, "Zweite", -1, hits, 8);
+	CHECK(n == 2 && idx->syms[hits[0]].from_ref == 1);
+	n = ehv_index_find_symbol(idx, "Detail", other, hits, 8);
+	CHECK(n == 1);
+	CHECK(ehv_index_find_symbol(idx, "Detail", b1, hits, 8) == 0);
+
+	n = ehv_index_suggest_guides(idx, "othr", hits, 8);
+	CHECK(n >= 1 && hits[0] == (unsigned long) other);
+}
+
+static void test_resolve(const ehv_index *idx)
+{
+	long b1 = guide_named(idx, "/r1/BASIC.HYP");
+	long b2 = guide_named(idx, "/r2/basic.hyp");
+	long other = guide_named(idx, "/deepest/Other.Hyp");
+	ehv_context ctx;
+	ehv_target t;
+	char req[1200];
+	hyp_doc *doc;
+
+	if (b1 < 0 || b2 < 0 || other < 0)
+		return;
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.idx = idx;
+	ctx.current = idx->guides[b1].path;
+
+	/* external links */
+	CHECK(ehv_resolve_xref(&ctx, "other.hyp/Start", &t) == EHV_FOUND);
+	CHECK(t.guide == other && ends_with(t.path, "/deepest/Other.Hyp") && t.node && strcmp(t.node, "Start") == 0);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_xref(&ctx, "OTHER.HYP/start", &t) == EHV_FOUND);
+	CHECK(t.node && strcmp(t.node, "Start") == 0);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_xref(&ctx, "other.hyp/Main", &t) == EHV_FOUND && t.node == NULL);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_xref(&ctx, "other.hyp/Anfang", &t) == EHV_FOUND);
+	CHECK(t.node && strcmp(t.node, "Start") == 0);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_xref(&ctx, "C:\\GUIDES\\OTHER.HYP/Detail", &t) == EHV_FOUND);
+	CHECK(t.guide == other && t.node && strcmp(t.node, "Detail") == 0);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_xref(&ctx, "other.hyp/Strat", &t) == EHV_NO_NODE);
+	CHECK(t.guide == other && t.path != NULL && t.node == NULL);
+	CHECK(has_suggestion_sym(idx, &t, "Start"));
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_xref(&ctx, "othr.hyp/Start", &t) == EHV_NO_FILE);
+	CHECK(t.path == NULL && t.nsuggest >= 1 && t.suggest[0] == (unsigned long) other);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_xref(&ctx, "nosuch.hyp/x", &t) == EHV_NO_FILE && t.nsuggest == 0);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_xref(&ctx, "other.hyp", &t) == EHV_FOUND && t.guide == other && t.node == NULL);
+	ehv_target_free(&t);
+
+	/* a copy next to the open file wins over the index order */
+	ctx.current = idx->guides[b2].path;
+	CHECK(ehv_resolve_xref(&ctx, "basic.hyp/Second", &t) == EHV_FOUND);
+	CHECK(t.guide == b2);
+	ehv_target_free(&t);
+
+	/* bare names: the open hypertext first */
+	doc = hyp_open(idx->guides[b2].path, NULL);
+	ctx.doc = doc;
+	CHECK(ehv_resolve_name(&ctx, "Second", &t) == EHV_FOUND && t.guide == b2 && t.nalt == 0);
+	ehv_target_free(&t);
+	CHECK(ehv_resolve_xref(&ctx, "Help", &t) == EHV_FOUND && t.guide == b2);
+	ehv_target_free(&t);
+	hyp_close(doc);
+	ctx.doc = NULL;
+
+	ctx.current = NULL;
+	CHECK(ehv_resolve_name(&ctx, "Second", &t) == EHV_FOUND);
+	CHECK(t.guide == b1 && t.nalt == 1 && idx->syms[t.alt[0]].guide == (unsigned long) b2);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_name(&ctx, "Anfang", &t) == EHV_FOUND);
+	CHECK(t.guide == other && t.node && strcmp(t.node, "Start") == 0);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_name(&ctx, "secondkw", &t) == EHV_FOUND);
+	CHECK(t.node && strcmp(t.node, "Second") == 0 && t.line == 0);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_name(&ctx, "Secnd", &t) == EHV_NOT_FOUND && t.path == NULL);
+	CHECK(has_suggestion_sym(idx, &t, "Second"));
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_name(&ctx, "Detial", &t) == EHV_NOT_FOUND);
+	CHECK(has_suggestion_sym(idx, &t, "Detail"));
+	ehv_target_free(&t);
+
+	/* help requests */
+	CHECK(ehv_resolve_request(&ctx, "'*:\\OTHER.HYP'", &t) == EHV_FOUND);
+	CHECK(t.guide == other && t.node == NULL);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_request(&ctx, "*:\\OTHER.HYP Detail", &t) == EHV_FOUND);
+	CHECK(t.node && strcmp(t.node, "Detail") == 0);
+	ehv_target_free(&t);
+
+	snprintf(req, sizeof(req), "%s Second", tp("r1/BASIC.HYP"));
+	CHECK(ehv_resolve_request(&ctx, req, &t) == EHV_FOUND);
+	CHECK(t.path && strcmp(t.path, tp("r1/BASIC.HYP")) == 0 && t.node && strcmp(t.node, "Second") == 0);
+	ehv_target_free(&t);
+
+	snprintf(req, sizeof(req), "'%s'", tp("r1/Long Folder Name/images.hyp"));
+	CHECK(ehv_resolve_request(&ctx, req, &t) == EHV_FOUND && ends_with(t.path, "images.hyp"));
+	ehv_target_free(&t);
+
+	snprintf(req, sizeof(req), "%s Zweite", tp("r1/Basic.Ref"));
+	CHECK(ehv_resolve_request(&ctx, req, &t) == EHV_FOUND);
+	CHECK(t.guide == b1 && t.node && strcmp(t.node, "Second") == 0);
+	ehv_target_free(&t);
+
+	CHECK(ehv_resolve_request(&ctx, "Anfang", &t) == EHV_FOUND && t.guide == other);
+	ehv_target_free(&t);
+	CHECK(ehv_resolve_request(&ctx, "  ", &t) == EHV_NOT_FOUND);
+	ehv_target_free(&t);
+
+	/* without an index: the folder of the open file and its REF */
+	ctx.idx = NULL;
+	ctx.current = tp("r1/BASIC.HYP");
+	CHECK(ehv_resolve_xref(&ctx, "basic.hyp/zweite", &t) == EHV_FOUND);
+	CHECK(t.path && strcmp(t.path, tp("r1/BASIC.HYP")) == 0 && t.node && strcmp(t.node, "Second") == 0);
+	ehv_target_free(&t);
+	CHECK(ehv_resolve_xref(&ctx, "other.hyp/Start", &t) == EHV_NO_FILE);
+	ehv_target_free(&t);
+}
+
+static void test_split_args(void)
+{
+	char **a;
+	unsigned int n = ehv_split_args(" 'it''s here'  two \"x y\"", &a);
+
+	CHECK(n == 3);
+	if (n == 3)
+	{
+		CHECK(strcmp(a[0], "it's here") == 0);
+		CHECK(strcmp(a[1], "two") == 0);
+		CHECK(strcmp(a[2], "x y") == 0);
+	}
+	inf_free_list(a, n);
+	CHECK(ehv_split_args("", &a) == 0 && a == NULL);
+}
+
+static unsigned long own_syms(const ehv_index *idx, long g)
+{
+	unsigned long i, n = 0;
+
+	for (i = idx->guides[g].first_sym; i < idx->guides[g].first_sym + idx->guides[g].nsyms; i++)
+		if (idx->syms[i].from_ref != 2)
+			n++;
+	return n;
+}
+
+static void test_cache(const ehv_index *idx, const ref_db *allref)
+{
+	const char *cache = tp("cache.idx");
+	ehv_index *loaded, *again;
+	ehv_scan_status st;
+	unsigned long g;
+	FILE *fp;
+	long size;
+	char *data;
+	int k;
+
+	CHECK(ehv_index_save(idx, cache) == 0);
+	loaded = ehv_index_load(cache);
+	CHECK(loaded != NULL);
+	if (loaded == NULL)
+		return;
+	CHECK(loaded->nguides == idx->nguides);
+	for (g = 0; g < idx->nguides; g++)
+	{
+		long lg = ehv_index_find_path(loaded, idx->guides[g].path);
+
+		CHECK(lg >= 0);
+		if (lg < 0)
+			continue;
+		CHECK(own_syms(loaded, lg) == own_syms(idx, (long) g));
+		CHECK(loaded->guides[lg].size == idx->guides[g].size);
+		CHECK(loaded->guides[lg].error == idx->guides[g].error);
+		CHECK((loaded->guides[lg].database == NULL) == (idx->guides[g].database == NULL));
+	}
+	{
+		unsigned long hit;
+
+		CHECK(ehv_index_find_symbol(loaded, "Detail", -1, &hit, 1) == 1);
+		CHECK(ehv_index_find_symbol(loaded, "Zweite", -1, &hit, 1) == 1);  /* own REF only */
+	}
+
+	/* rescan with the cache: nothing is read again */
+	again = scan_tree(loaded, allref, &st);
+	CHECK(again != NULL && again->nguides == 5);
+	CHECK(st.opened == 0 && st.reused == 5 && st.failed == 1);
+	CHECK(again && again->norphans == 1);
+	ehv_index_free(again);
+
+	/* change one file: only that one is read */
+	copy_file("other_raw.hyp", tp("r1/sub/deeper/deepest/Other.Hyp"));
+	again = scan_tree(loaded, allref, &st);
+	CHECK(st.opened == 1 && st.reused == 4);
+	if (again != NULL)
+	{
+		long o = guide_named(again, "/deepest/Other.Hyp");
+
+		CHECK(o >= 0 && sym_of(again, o, "Anfang", EHV_SYM_ALIAS) != NULL);
+	}
+	ehv_index_free(again);
+	ehv_index_free(loaded);
+
+	/* damaged caches are refused, never crash */
+	fp = fopen(cache, "rb");
+	fseek(fp, 0, SEEK_END);
+	size = ftell(fp);
+	rewind(fp);
+	data = malloc((size_t) size);
+	if (fread(data, 1, (size_t) size, fp) != (size_t) size)
+		size = 0;
+	fclose(fp);
+	write_file(cache, data, (size_t) size / 2);
+	CHECK(ehv_index_load(cache) == NULL);
+	write_file(cache, "EHYPVIEW-INDEX 99\nEND\t0\t0\n", 27);
+	CHECK(ehv_index_load(cache) == NULL);
+	CHECK(ehv_index_load(tp("no-such-cache")) == NULL);
+	for (k = 0; k < 300 && size > 0; k++)
+	{
+		unsigned int seed = (unsigned int) k * 2654435761u;
+		long pos = (long) (seed % (unsigned long) size);
+		char save = data[pos];
+
+		data[pos] = (char) (k % 3 == 0 ? '\t' : k % 3 == 1 ? '\n' : (char) (save ^ 0x55));
+		write_file(cache, data, (size_t) size);
+		ehv_index_free(ehv_index_load(cache));
+		data[pos] = save;
+	}
+	free(data);
+	checks++;
+}
+
+int main(int argc, char **argv)
+{
+	ehv_index *idx;
+	ehv_scan_status st;
+	ref_db *allref;
+
+	fixdir = argc > 1 ? argv[1] : "tests/fixtures";
+	make_tree();
+	roots[0] = strdup(tp("r1"));
+	roots[1] = strdup(tp("r2"));
+	roots[2] = strdup(tp("r1/sub"));        /* already inside r1 */
+	roots[3] = strdup(tp("missing"));
+
+	test_fsys();
+	test_similarity();
+	test_default_roots();
+	test_split_args();
+
+	allref = ref_open(tp("all.ref"), NULL);
+	CHECK(allref != NULL && allref->nmodules == 3);
+	idx = scan_tree(NULL, allref, &st);
+	CHECK(idx != NULL);
+	if (idx != NULL)
+	{
+		test_scan(idx, &st);
+		test_resolve(idx);
+		test_cache(idx, allref);
+	}
+	ehv_index_free(idx);
+	ref_close(allref);
+	rm_tree(tree);
+	free(roots[0]);
+	free(roots[1]);
+	free(roots[2]);
+	free(roots[3]);
+
+	printf("%d checks, %d failures\n", checks, failures);
+	return failures ? 1 : 0;
+}

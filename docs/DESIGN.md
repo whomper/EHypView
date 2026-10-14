@@ -84,17 +84,22 @@ src/core/      portable C, no GEM: builds on the Atari and on the host
   page.c       page byte stream -> lines of runs, graphics, xrefs
   ref.c        .REF / ALL.REF reader
   inf.c        ST-GUIDE.INF reader
-  charset.c    Atari character set -> Unicode (host tools/export)
-  (next) index.c   folder scanner + own index cache
+  charset.c    Atari character set: Unicode, case folding
+  pool.c       string pool for the index
+  fsys.c       directories, paths, case-insensitive file lookup
+  index.c      the guide index: lookups, "similar" suggestions, cache
+  scan.c       step-wise folder scanner (all subfolders), default roots
+  resolve.c    links, bare names and help requests -> file + page
   (next) image.c   planar image -> VDI raster for any screen depth
-  (next) search.c  name, keyword and full-text search
+  (next) search.c  full-text search
 src/gem/       (next) the GEM application
 tools/hypdump  host command-line inspector, used by the tests
 tests/         unit tests, golden tests, fixture generators
 ```
 
 Rules for `src/core`:
-- C99 subset. No GEM, no POSIX beyond stdio, no globals except the LH5
+- C99 subset. No GEM; POSIX only in `fsys.c` (dirent/stat, which
+  mintlib provides with and without MiNT). No globals except the LH5
   scratch state.
 - Text stays in the file's character set. GEM fonts use the Atari set, so
   the viewer never converts.
@@ -104,6 +109,56 @@ Rules for `src/core`:
 - Every parser takes untrusted input. The mutation tests run under
   AddressSanitizer.
 
+## Finding hypertexts
+
+### The index
+- **Scanner.** It walks every root including all subfolders, up to 16
+  levels deep.
+  - A folder reachable from several roots, or through a symbolic link loop,
+    is read once. Folders are identified by device and inode, or by their
+    path ignoring case where there are no inodes (TOS).
+  - The scan runs in small steps (one folder or one file per unit), so the
+    GEM program stays responsive.
+- **Sources of names.**
+  - Every `.HYP` contributes its title data and all page names, read from
+    its own index table without decompressing anything.
+  - A `.REF` file beside it (matched ignoring case) adds aliases, labels
+    and `@keywords`.
+  - `ALL.REF` fills in the same for guides that have no REF of their own.
+    Entries for files that don't exist are listed so the user can see
+    them; that is RefCheck's job done automatically.
+- **Cache.** The index is saved as a small text file. On the next start it
+  loads instantly, and a rescan re-reads only files whose size, date or
+  REF changed.
+- **Default roots.** `PATHS`, `HYPFOLD` and the folder of `REF` from an
+  existing `ST-GUIDE.INF`, then `*:\GUIDES` and `*:\GEMSYS\GUIDES`
+  (`*:` = every hard disk).
+
+### Resolving
+- **Files** are found in this order:
+  1. the path as written, when it has one
+  2. the folder of the open hypertext
+  3. the index (earlier roots first, readable files first)
+
+  All matching ignores case. `FOO.HYP` finds `foo.hyp` and long names, and
+  `*:\FOO.HYP` means "from anywhere".
+- **Links** `FILE.HYP/node` split right after `.hyp`, so page names may
+  contain slashes. Without an extension, the split is at the first
+  separator, or the last when the file's ST-Guide flag allows folders in
+  links. `FILE.HYP/Main` means the default page when there is no page
+  called `Main` (that is what HCP writes for links to a whole file).
+- **Pages** match exactly first, then ignoring case, then as an alias or
+  label. A bare name is looked up in the open hypertext first, then
+  everywhere; other places with the same name are reported too.
+- **Help requests** (`VA_START`, `AC_HELP`, command line) accept
+  ST-Guide's forms: `'C:\AES.HYP appl_init'`, `'*:\AES.HYP'`,
+  `'C:\AES.REF appl_init'` and a bare `appl_init`, with AV-protocol
+  quoting.
+- **Nothing found:** the viewer gets "did you mean" suggestions instead of
+  a dead end. Matching is ST-Guide style ("similar"): case, umlauts
+  written as ae/oe/ue, blanks, `_` and `-` are ignored, a typed prefix
+  counts, and one to three typos are tolerated depending on length.
+
 ## Testing
 
 - `make test`: unit tests plus golden tests on the host.
@@ -111,6 +166,10 @@ Rules for `src/core`:
 - `make m68k-test`: the same suite compiled as big-endian 68020 code and run
   under QEMU, to catch byte-order and alignment mistakes before they reach
   real hardware.
+- `tests/test_index.c` builds a real folder tree for the scanner and
+  resolver tests: mixed-case names, a folder with spaces, a duplicate, a
+  damaged file, a symbolic link loop, a REF beside a file and an ALL.REF
+  naming a missing guide.
 - Fixtures are generated from our own sources (`tests/tools/mkfixtures.py`)
   and compiled by HypView's `hcp`, used only as an external tool.
 - `hcp -v` also provides an **independent** text rendering that our output
@@ -119,8 +178,8 @@ Rules for `src/core`:
 ## Roadmap
 
 1. ~~Core library: HYP, LH5, pages, REF, INF, with tests~~ ✔
-2. Folder scanner and index cache. Resolving `file.hyp/node` links and
-   bare node names without `ALL.REF`.
+2. ~~Folder scanner and index cache. Resolving `file.hyp/node` links and
+   bare node names without `ALL.REF`.~~ ✔
 3. First GEM version: one window, page display with attributes and
    graphics, links, back/forward, answering `VA_START` and `AC_HELP`.
    Tested in Hatari/ARAnyM and on the Falcon.

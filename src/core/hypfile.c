@@ -13,6 +13,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include "charset.h"
 #include "hypfile.h"
 #include "lh5.h"
 
@@ -324,21 +325,6 @@ void hyp_close(hyp_doc *doc)
 	free(doc);
 }
 
-static int lower(int c)
-{
-	return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
-}
-
-static int namecasecmp(const char *a, const char *b)
-{
-	while (*a != '\0' && lower((unsigned char) *a) == lower((unsigned char) *b))
-	{
-		a++;
-		b++;
-	}
-	return lower((unsigned char) *a) - lower((unsigned char) *b);
-}
-
 unsigned short hyp_find_node(const hyp_doc *doc, const char *name)
 {
 	unsigned short i;
@@ -349,7 +335,7 @@ unsigned short hyp_find_node(const hyp_doc *doc, const char *name)
 		if (HYP_IS_TEXT(doc->entries[i].type) && strcmp(doc->entries[i].name, name) == 0)
 			return i;
 	for (i = 0; i < doc->num_entries; i++)
-		if (HYP_IS_TEXT(doc->entries[i].type) && namecasecmp(doc->entries[i].name, name) == 0)
+		if (HYP_IS_TEXT(doc->entries[i].type) && atari_casecmp(doc->entries[i].name, name) == 0)
 			return i;
 	return HYP_NO_NODE;
 }

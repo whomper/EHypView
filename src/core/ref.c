@@ -11,27 +11,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "charset.h"
 #include "ref.h"
 
 static unsigned long be32(const unsigned char *p)
 {
 	return ((unsigned long) p[0] << 24) | ((unsigned long) p[1] << 16) |
 		((unsigned long) p[2] << 8) | (unsigned long) p[3];
-}
-
-static int lower(int c)
-{
-	return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
-}
-
-static int casecmp(const char *a, const char *b)
-{
-	while (*a != '\0' && lower((unsigned char) *a) == lower((unsigned char) *b))
-	{
-		a++;
-		b++;
-	}
-	return lower((unsigned char) *a) - lower((unsigned char) *b);
 }
 
 static unsigned char *read_file(const char *path, unsigned long *size, int *err)
@@ -245,7 +231,7 @@ unsigned long ref_find(const ref_db *db, const char *name, unsigned long *hits, 
 		for (i = 0; i < db->nsyms; i++)
 		{
 			int match = pass == 0 ? strcmp(db->syms[i].name, name) == 0
-				: casecmp(db->syms[i].name, name) == 0;
+				: atari_casecmp(db->syms[i].name, name) == 0;
 
 			if (match)
 			{

@@ -72,3 +72,46 @@ size_t atari_to_utf8(unsigned char c, char *out)
 	out[3] = (char) (0x80 | (u & 0x3F));
 	return 4;
 }
+
+/* capital -> small pairs in the Atari character set (besides ASCII) */
+static const unsigned char upper_lower[][2] = {
+	{ 0x80, 0x87 }, /* C cedilla */   { 0x8E, 0x84 }, /* A umlaut */
+	{ 0x8F, 0x86 }, /* A ring */      { 0x90, 0x82 }, /* E acute */
+	{ 0x92, 0x91 }, /* AE */          { 0x99, 0x94 }, /* O umlaut */
+	{ 0x9A, 0x81 }, /* U umlaut */    { 0xA5, 0xA4 }, /* N tilde */
+	{ 0xB2, 0xB3 }, /* O slash */     { 0xB5, 0xB4 }, /* OE */
+	{ 0xB6, 0x85 }, /* A grave */     { 0xB7, 0xB0 }, /* A tilde */
+	{ 0xB8, 0xB1 }, /* O tilde */     { 0xC1, 0xC0 }  /* IJ */
+};
+
+unsigned char atari_tolower(unsigned char c)
+{
+	unsigned int i;
+
+	if (c >= 'A' && c <= 'Z')
+		return (unsigned char) (c + ('a' - 'A'));
+	if (c < 0x80)
+		return c;
+	for (i = 0; i < sizeof(upper_lower) / sizeof(upper_lower[0]); i++)
+		if (upper_lower[i][0] == c)
+			return upper_lower[i][1];
+	return c;
+}
+
+int atari_ncasecmp(const char *a, const char *b, unsigned long n)
+{
+	for (; n > 0; n--, a++, b++)
+	{
+		int ca = atari_tolower((unsigned char) *a);
+		int cb = atari_tolower((unsigned char) *b);
+
+		if (ca != cb || ca == 0)
+			return ca - cb;
+	}
+	return 0;
+}
+
+int atari_casecmp(const char *a, const char *b)
+{
+	return atari_ncasecmp(a, b, (unsigned long) -1);
+}
