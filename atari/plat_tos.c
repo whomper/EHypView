@@ -38,15 +38,7 @@ typedef struct {
 	long reserved3[2];
 } XATTR;
 
-static inline long trap13_w(short fn)
-{
-	register long r __asm__("d0");
-	__asm__ volatile("move.w %1,-(%%sp)\n\ttrap #13\n\taddq.l #2,%%sp"
-		: "=r"(r) : "r"(fn) : TRAP_CLOBBER);
-	return r;
-}
-
-#define Drvmap()              trap13_w(10)
+/* Drvmap() is in tos.h */
 #define Dopendir(n, f)        trap1_wlw(0x128, (long)(n), (f))
 #define Dreaddir(l, h, b)     trap1_wwll(0x129, (l), (long)(h), (long)(b))
 #define Dclosedir(h)          trap1_wl(0x12a, (long)(h))

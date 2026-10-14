@@ -74,10 +74,11 @@ interface**.
 - An accessory build is kept for single-tasking TOS, where an accessory is
   the only way to stay available inside other programs.
 - Toolchain: Ubuntu's stock `gcc-m68k-linux-gnu`, as for ECal. There is
-  no MiNTLib: `atari/` is a small freestanding runtime (start-up code for
-  both program and accessory, libc, GEMDOS, AES/VDI bindings) shared with
-  ECal, EMail and Claude ST, and `tools/elf2tos.py` writes the TOS
-  program file.
+  no MiNTLib: `common/atari/` is a small freestanding runtime (start-up
+  code for both program and accessory, libc, GEMDOS, AES/VDI bindings)
+  shared with ECal, EMail, EContact, EFTP and ClaudeST through
+  [AERA-Atari](https://github.com/whomper/AERA-Atari), and
+  `common/tools/elf2tos.py` writes the TOS program file.
 
 ## Architecture
 
@@ -97,9 +98,11 @@ src/core/      portable C, no GEM: builds on the Atari and on the host
   plat.h       the platform layer: every disk access goes through it
   plat.c       whole-file load/save on top of it
   plat_posix.c the platform layer on POSIX (host tools and tests)
-atari/         the TOS runtime (from ECal) and plat_tos.c: the platform
-               layer on GEMDOS (Dopendir/Fxattr on MiNT and MagiC,
-               Fsfirst/Fsnext on TOS and EmuTOS)
+atari/         plat_tos.c: the platform layer on GEMDOS (Dopendir/Fxattr
+               on MiNT and MagiC, Fsfirst/Fsnext on TOS and EmuTOS)
+common/        the AERA programs' shared code (git subtree of AERA-Atari):
+               atari/ is the TOS runtime, tools/elf2tos.py the linker's
+               last step; tools/sync-common.sh brings it up to date
   (next) image.c   planar image -> VDI raster for any screen depth
   search.c     step-wise full-text search through every hypertext
 src/view/      without GEM, tested on the host:
@@ -120,7 +123,7 @@ tests/         unit tests, golden tests, fixture generators
 
 Rules for `src/core`:
 - C99 subset. No GEM, and no file access except through `plat.h`.
-  Only what the freestanding libc in `atari/` offers (no stdio
+  Only what the freestanding libc in `common/atari/` offers (no stdio
   streams, no `sscanf`). No globals except the LH5 scratch state.
 - Text stays in the file's character set. GEM fonts use the Atari set, so
   the viewer never converts.

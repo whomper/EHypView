@@ -81,9 +81,12 @@ build/host/hypdump resolve -c guides.idx name appl_init
 ## Building for the Atari
 
 The Atari programs are built the same way as ECal: with Ubuntu's stock m68k
-compiler and no MiNTLib. `atari/` holds a small freestanding runtime
-(start-up code, libc, GEMDOS file access, AES/VDI bindings), and
-`tools/elf2tos.py` writes the TOS program file.
+compiler and no MiNTLib. `common/atari/` holds a small freestanding
+runtime (start-up code, libc, GEMDOS file access, AES/VDI bindings), and
+`common/tools/elf2tos.py` writes the TOS program file. `common/` is the
+AERA programs' shared code, a copy of
+[AERA-Atari](https://github.com/whomper/AERA-Atari)'s `common/` folder:
+change it there and bring the copy up to date with `tools/sync-common.sh`.
 
 ```sh
 sudo apt install gcc-m68k-linux-gnu      # Debian/Ubuntu

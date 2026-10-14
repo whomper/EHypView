@@ -16,3 +16,7 @@
   alike.
 - GUI events for the tests go out through NatFeats as "EHV ..." lines
   (log_event); tests/run_gui.py waits for them.
+- `common/` is the AERA programs' shared code (start-up, C library, TOS,
+  AES/VDI, elf2tos.py), a git subtree of github.com/whomper/AERA-Atari.
+  Change it there, never here, then `tools/sync-common.sh`. Only
+  `atari/plat_tos.c` is EHypView's own.

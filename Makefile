@@ -65,8 +65,8 @@ $(HOST)/test_fonts: tests/test_fonts.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
 
 # the menu tree is plain data: built and checked on the host too
-$(HOST)/test_menu: tests/test_menu.c src/gem/menu.c src/gem/menu.h atari/gem.h | $(HOST)
-	$(CC) -Isrc/gem -Iatari $(WARN) $(CFLAGS) -o $@ tests/test_menu.c src/gem/menu.c
+$(HOST)/test_menu: tests/test_menu.c src/gem/menu.c src/gem/menu.h common/atari/gem.h | $(HOST)
+	$(CC) -Isrc/gem -Icommon/atari $(WARN) $(CFLAGS) -o $@ tests/test_menu.c src/gem/menu.c
 
 $(HOST):
 	mkdir -p $@
@@ -94,7 +94,7 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c tests/test_menu.c
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_index tests/test_index.c $(CORE_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_view tests/test_view.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_library tests/test_library.c $(CORE_SRC) $(VIEW_SRC)
-	$(M68K_CC) -Isrc/gem -Iatari $(WARN) -O2 -static -o $(M68K)/test_menu tests/test_menu.c src/gem/menu.c
+	$(M68K_CC) -Isrc/gem -Icommon/atari $(WARN) -O2 -static -o $(M68K)/test_menu tests/test_menu.c src/gem/menu.c
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_fonts tests/test_fonts.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/hypdump tools/hypdump.c $(CORE_SRC)
 	printf '#!/bin/sh\nexec qemu-m68k-static "%s" "$$@"\n' "$(CURDIR)/$(M68K)/hypdump" > $(M68K)/hypdump.sh
@@ -110,8 +110,11 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c tests/test_menu.c
 # --- Atari programs ----------------------------------------------------
 #
 # Built like ECal: a stock m68k ELF compiler (gcc-m68k-linux-gnu), no
-# MiNTLib (atari/ is a small freestanding runtime), and tools/elf2tos.py
-# writes the TOS program header and relocation table.
+# MiNTLib (common/atari/ is a small freestanding runtime, the AERA
+# programs' shared code: a git subtree of github.com/whomper/AERA-Atari,
+# changed there and brought here with tools/sync-common.sh), and
+# common/tools/elf2tos.py writes the TOS program header and relocation table.
+# atari/plat_tos.c is EHypView's own: the platform layer on GEMDOS.
 
 XCC      = m68k-linux-gnu-gcc
 GCCINC  := $(shell $(XCC) -print-file-name=include 2>/dev/null)
@@ -119,8 +122,8 @@ XCPU    ?= -m68020-60
 XFLAGS   = $(XCPU) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin \
            -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-store-merging \
            -fno-asynchronous-unwind-tables -Wall -Wextra -Werror=implicit-function-declaration \
-           -DEHV_TOS -nostdinc -isystem $(GCCINC) -Iatari/include -Iatari -Isrc/core
-XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,atari/link.ld \
+           -DEHV_TOS -nostdinc -isystem $(GCCINC) -Icommon/atari/include -Icommon/atari -Isrc/core
+XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
 ATARI    = build/atari
@@ -128,10 +131,12 @@ HATARI_DIR = build/hatari
 RUNTIME  = crt0 nf libc tos plat_tos gem
 RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
-XHDRS    = $(wildcard src/core/*.h atari/*.h atari/include/*.h)
+XHDRS    = $(wildcard src/core/*.h common/atari/*.h common/atari/include/*.h)
 
-$(ATARI)/%.o: atari/%.S | $(ATARI)
+$(ATARI)/%.o: common/atari/%.S | $(ATARI)
 	$(XCC) $(XCPU) -c -o $@ $<
+$(ATARI)/%.o: common/atari/%.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
 $(ATARI)/%.o: atari/%.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
 $(ATARI)/core_%.o: src/core/%.c $(XHDRS) | $(ATARI)
@@ -149,7 +154,7 @@ $(ATARI)/ehvcheck.o: tests/ehvcheck.c $(XHDRS) | $(ATARI)
 $(ATARI):
 	mkdir -p $@
 
-$(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o atari/link.ld
+$(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/ehypview.o \
@@ -163,15 +168,15 @@ $(ATARI)/version.c: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) src/gem/version.h tools/bu
 $(ATARI)/version.o: $(ATARI)/version.c
 	$(XCC) $(XFLAGS) -std=c99 -c -o $@ $<
 
-$(ATARI)/ehypview.elf: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o atari/link.ld
+$(ATARI)/ehypview.elf: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o -lgcc
 
 # one program, two names: it sees at start-up whether TOS loaded it as
 # an accessory or started it as an application (PRGFLAGS 7: fast load,
 # program and memory in TT/Alt RAM when there is some)
-$(HATARI_DIR)/EHYPVIEW.PRG: $(ATARI)/ehypview.elf tools/elf2tos.py
+$(HATARI_DIR)/EHYPVIEW.PRG: $(ATARI)/ehypview.elf common/tools/elf2tos.py
 	mkdir -p $(HATARI_DIR)
-	PRGFLAGS=7 python3 tools/elf2tos.py $< $@
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 $(HATARI_DIR)/EHYPVIEW.ACC: $(HATARI_DIR)/EHYPVIEW.PRG
 	cp $< $@
 
@@ -187,9 +192,9 @@ define make_fixt
 	printf 'HDOC\0\0\0\100\0\005\003\002garbage' > $(1)/FIXT/BROKEN.HYP
 endef
 
-$(HATARI_DIR)/EHVCHECK.PRG: $(ATARI)/ehvcheck.elf tools/elf2tos.py
+$(HATARI_DIR)/EHVCHECK.PRG: $(ATARI)/ehvcheck.elf common/tools/elf2tos.py
 	mkdir -p $(HATARI_DIR)
-	python3 tools/elf2tos.py $< $@
+	python3 common/tools/elf2tos.py $< $@
 	$(call make_fixt,$(HATARI_DIR))
 
 $(HOST)/ehvcheck: tests/ehvcheck.c $(HOST)/libehv.a
