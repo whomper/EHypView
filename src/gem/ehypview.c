@@ -30,11 +30,11 @@
 #include "gemapp.h"
 #include "menu.h"
 #include "crash.h"
+#include "av.h"
 #include "alert.h"
 #include "version.h"
 
 #define VA_START   0x4711
-#define AV_STARTED 0x4738
 #define AC_HELP    1025
 #define FONT_CHANGED 0x7a18        /* the font protocol */
 #define FONT_ACK     0x7a1a
@@ -1104,6 +1104,19 @@ static void click(short mx, short my, short button)
 	graf_mouse(ARROW, NULL);
 }
 
+/* a hypertext and page asked for (VA_START, AC_HELP): the window, then
+   the page */
+static void show_request(const char *args)
+{
+	open_window();
+	if (args != NULL && args[0] != '\0')
+	{
+		graf_mouse(BUSYBEE, NULL);
+		after(view_request(&view, args));
+		graf_mouse(ARROW, NULL);
+	}
+}
+
 static void message(short *msg)
 {
 	short w, h;
@@ -1187,6 +1200,7 @@ static void message(short *msg)
 	case AC_OPEN:
 		if (msg[4] == menu_id)
 		{
+			av_init("EHYPVIEW|ST-GUIDE");	/* a desktop started since */
 			if (view.page != NULL)
 				open_window();
 			else
@@ -1218,29 +1232,18 @@ static void message(short *msg)
 		}
 		break;
 	case VA_START:
-	case AC_HELP:
 		{
-			const char *args = (const char *) (((unsigned long) (unsigned short) msg[3] << 16) |
-				(unsigned short) msg[4]);
-			short reply[8];
+			/* answered (AV_STARTED) once our own copy is taken:
+			   common/ui/av.c */
+			const char *args;
 
-			open_window();
-			if (args != NULL && args[0] != '\0')
-			{
-				graf_mouse(BUSYBEE, NULL);
-				after(view_request(&view, args));
-				graf_mouse(ARROW, NULL);
-			}
-			if (msg[0] == VA_START)
-			{
-				memset(reply, 0, sizeof(reply));
-				reply[0] = AV_STARTED;
-				reply[1] = ap_id;
-				reply[3] = msg[3];
-				reply[4] = msg[4];
-				appl_write(msg[1], 16, reply);
-			}
+			if (av_message(msg, &args) == AV_START)
+				show_request(args);
 		}
+		break;
+	case AC_HELP:
+		show_request((const char *) (((unsigned long) (unsigned short) msg[3] << 16) |
+			(unsigned short) msg[4]));
 		break;
 	}
 }
@@ -1439,6 +1442,9 @@ int main(void)
 		strcpy(start_dir + 2, "\\");
 	crash_install(start_dir, "EHypView", app_version);	/* the program only */
 	crash_cleanup = crash_quit;
+	/* the desktop's AV server, if one runs yet; the accessory may be
+	   ST-GUIDE.ACC, standing in for ST-Guide */
+	av_init("EHYPVIEW|ST-GUIDE");
 
 	font_init(start_dir);
 	log_font();
@@ -1551,6 +1557,7 @@ int main(void)
 	ehv_index_free(idx);
 	ref_close(allref);
 	crash_remove();
+	av_exit();
 	v_clsvwk(vdi_h);
 	appl_exit();
 	return 0;
