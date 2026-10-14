@@ -169,7 +169,7 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/ehypview.o \
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
-           $(ATARI)/iconify.o
+           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o
 
 # every build counts the version up (VERSION, major.minor as in EMail,
 # ECal and EContact): version.c is written again when anything else in

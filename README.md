@@ -133,6 +133,7 @@ programs asking for ST-Guide find it.
 | Clr/Home, Shift+Clr/Home | top / bottom |
 | Control+L | the library (and back to the viewer) |
 | Control+O | open a hypertext |
+| Control+C | the page, as text, to the clipboard |
 | Control+W or Control+U / Control+Q | close the top window / quit |
 | Shift+Control+F | choose the font |
 | Control+Plus / Control+Minus (keypad, or `=` and `-`) | larger / smaller text |
@@ -150,7 +151,12 @@ or the library when no page is shown.
 
 In the library: type to search, Up/Down to choose, Return or a click to
 open (or to start the full-text search), Esc to clear the search,
-Backspace to delete a letter.
+Backspace to delete a letter. Control+V pastes into the search and
+Control+X cuts it; Control+C copies the hypertext chosen.
+
+Under MultiTOS, MagiC or XaAES a hypertext dragged onto EHypView's
+windows opens; the accessory tells the desktop about its windows, so
+Thing and the like can drop one on them under plain TOS too.
 
 Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the
 viewer and the library have the iconify button: each shrinks to

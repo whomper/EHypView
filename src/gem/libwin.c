@@ -19,6 +19,8 @@
 #include "library.h"
 #include "grect.h"
 #include "iconify.h"
+#include "av.h"
+#include "clip.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
 #define MARGIN 4
@@ -290,6 +292,8 @@ void libwin_open(void)
 		wind_set_str(lib_h, WF_NAME, lib_name);
 		update_info();
 		wind_open(lib_h, x, y, w, h);
+		if (is_acc)                    /* the desktop drops files on it */
+			av_window(lib_h, 1);
 		clamp();
 		set_slider();
 	}
@@ -308,6 +312,8 @@ void libwin_close(void)
 {
 	if (lib_h > 0)
 	{
+		if (is_acc)
+			av_window(lib_h, 0);
 		wind_close(lib_h);
 		wind_delete(lib_h);
 		log_event("closed", "library", NULL);
@@ -320,6 +326,8 @@ void libwin_close(void)
 void libwin_forget(void)
 {
 	/* AC_CLOSE: the AES has taken the window already */
+	if (lib_h > 0)
+		av_window(lib_h, 0);
 	lib_h = -1;
 	lib_icon = 0;
 }
@@ -380,6 +388,40 @@ static void set_query(const char *q)
 	lib_set_query(&lib, q);
 	log_search();
 	redraw_all();
+}
+
+/* ^C ^X ^V: the search line (^C: the hypertext chosen, else the search) */
+void libwin_clip(int what)
+{
+	char t[LIB_QUERY_MAX + 80], q[LIB_QUERY_MAX];
+	size_t n = strlen(lib.query), k;
+	const char *p;
+
+	if (what == CLIP_COPY)
+	{
+		if (lib.sel >= 0)
+		{
+			lib_row_text(&lib, (unsigned long) lib.sel, t, sizeof(t));
+			clip_put(t, (long) strlen(t));
+		} else if (n > 0)
+		{
+			clip_put(lib.query, (long) n);
+		}
+		return;
+	}
+	if (what == CLIP_CUT)
+	{
+		if (n > 0 && clip_put(lib.query, (long) n))
+			set_query("");
+		return;
+	}
+	clip_get(t, sizeof(t));
+	memcpy(q, lib.query, n);
+	for (p = clip_line(t), k = n; *p && k + 1 < sizeof(q); p++)
+		if ((unsigned char) *p >= ' ')
+			q[k++] = *p;
+	q[k] = '\0';
+	set_query(q);
 }
 
 void libwin_key(short kstate, short kreturn)

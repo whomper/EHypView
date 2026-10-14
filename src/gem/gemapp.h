@@ -51,6 +51,7 @@ int libwin_iconified(void);               /* shown as the icon */
 int libwin_message(short *msg);           /* 1 when the message was for it */
 void libwin_key(short kstate, short kreturn);
 void libwin_click(short mx, short my);
+void libwin_clip(int what);               /* ^C ^X ^V: CLIP_COPY, ... (clip.h) */
 int libwin_idle(void);                    /* 1 while the full-text search runs */
 void libwin_index_changed(void);          /* a new index (or progress) */
 void libwin_free(void);

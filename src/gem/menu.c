@@ -26,6 +26,13 @@ static const MBAR_ITEM file_items[] = {
 	{ NULL, NULL, CMD_NONE }
 };
 
+static const MBAR_ITEM edit_items[] = {
+	{ "Cut", "^X", CMD_CUT },
+	{ "Copy", "^C", CMD_COPY },
+	{ "Paste", "^V", CMD_PASTE },
+	{ NULL, NULL, CMD_NONE }
+};
+
 static const MBAR_ITEM nav_items[] = {
 	{ "Back", "Undo", CMD_BACK },
 	{ "-", NULL, CMD_NONE },
@@ -51,6 +58,7 @@ static const MBAR_ITEM view_items[] = {
 static const MBAR_TITLE titles[] = {
 	{ " Desk ", desk_items },
 	{ " File ", file_items },
+	{ " Edit ", edit_items },
 	{ " Navigate ", nav_items },
 	{ " View ", view_items },
 	{ NULL, NULL }
@@ -81,7 +89,7 @@ const char *menu_command_name(int cmd)
 	static const char *const names[CMD_COUNT] = {
 		"none", "about", "open", "library", "close", "quit",
 		"back", "home", "index", "toc", "help", "prev", "next",
-		"font", "larger", "smaller"
+		"font", "larger", "smaller", "cut", "copy", "paste"
 	};
 
 	return cmd > CMD_NONE && cmd < CMD_COUNT ? names[cmd] : "none";

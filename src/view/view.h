@@ -89,6 +89,11 @@ long view_link_at(const ehv_view *v, long line, long col);
 /* line of run `r` */
 long view_run_line(const ehv_view *v, long r);
 
+/* the page's text, a line each ending '\n', its links as their text
+   (^C, the clipboard); at most size - 1 characters and a NUL.  Returns
+   how many were written */
+unsigned long view_page_text(const ehv_view *v, char *buf, unsigned long size);
+
 /* "database - page title" for the window name */
 void view_title(const ehv_view *v, char *buf, unsigned long size);
 

@@ -68,7 +68,7 @@ static void test_tree(short cw, short ch, short sw, short sh)
 
 	CHECK(menu_build(&m, cw, ch, sw, sh) == 0);
 	t = m.tree;
-	CHECK(m.ntitles == 4);
+	CHECK(m.ntitles == 5);
 
 	/* every object reached exactly once from the root */
 	memset(visits, 0, sizeof(visits));

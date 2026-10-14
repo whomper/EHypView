@@ -36,6 +36,8 @@
 #include "aboutbox.h"
 #include "alert.h"
 #include "iconify.h"
+#include "clip.h"
+#include "dd.h"
 #include "version.h"
 
 #define VA_START   0x4711
@@ -704,6 +706,7 @@ static void after(int rc)
 	{
 		if (is_acc)
 		{
+			av_window(win_h, 0);
 			wind_close(win_h);
 			wind_delete(win_h);
 			win_h = -1;
@@ -754,6 +757,8 @@ static void open_window(void)
 	wind_set_str(win_h, WF_NAME, win_name);
 	update_info();
 	wind_open(win_h, x, y, w, h);
+	if (is_acc)                        /* the desktop drops files on it */
+		av_window(win_h, 1);
 	clamp_scroll();
 	set_sliders();
 }
@@ -769,6 +774,8 @@ static void close_window(void)
 {
 	if (win_h > 0)
 	{
+		if (is_acc)
+			av_window(win_h, 0);
 		wind_close(win_h);
 		wind_delete(win_h);
 		log_event("closed", "viewer", NULL);
@@ -907,12 +914,49 @@ static int nav_target(int cmd)
 }
 
 /* a menu item or its shortcut */
+/* ^C ^X ^V: in the library, its search line (^C: the hypertext chosen);
+   in the viewer, ^C copies the page, as text */
+static void clip_command(int cmd)
+{
+	int what = cmd == CMD_COPY ? CLIP_COPY : cmd == CMD_CUT ? CLIP_CUT : CLIP_PASTE;
+	short top = top_window();
+	char *t;
+	unsigned long n;
+
+	if (top > 0 && top == libwin_handle())
+	{
+		libwin_clip(what);
+		return;
+	}
+	if (what != CLIP_COPY || win_h <= 0 || view.page == NULL || (t = malloc(32000)) == NULL)
+		return;
+	n = view_page_text(&view, t, 32000);
+	if (clip_put(t, (long) n))
+	{
+		char lines[16];
+
+		sprintf(lines, "%u", view.page->nlines);
+		log_event("copy", "page", lines);
+		snprintf(view.status, sizeof(view.status), "The page is on the clipboard.");
+	} else
+	{
+		snprintf(view.status, sizeof(view.status), "Couldn't write the clipboard.");
+	}
+	free(t);
+	update_info();
+}
+
 static void command(int cmd)
 {
 	int target = nav_target(cmd), rc;
 
 	switch (cmd)
 	{
+	case CMD_CUT:
+	case CMD_COPY:
+	case CMD_PASTE:
+		clip_command(cmd);
+		return;
 	case CMD_ABOUT:
 		about_box();
 		return;
@@ -969,6 +1013,10 @@ static void update_menu(void)
 
 		if (c == CMD_CLOSE)
 			on = win_h > 0 || libwin_handle() > 0;
+		else if (c == CMD_CUT || c == CMD_PASTE)
+			on = libwin_handle() > 0 && top_window() == libwin_handle();
+		else if (c == CMD_COPY)
+			on = (libwin_handle() > 0 && top_window() == libwin_handle()) || (win_h > 0 && view.page != NULL);
 		else if (target >= 0)
 			on = win_h > 0 && view_can(&view, target);
 		if (menu_on[c] != on)
@@ -1028,6 +1076,9 @@ int app_key(short kstate, short kreturn)
 	case 0x17: command(CMD_CLOSE); return 1;          /* ^W */
 	case 0x0f: command(CMD_OPEN); return 1;           /* ^O */
 	case 0x0c: command(CMD_LIBRARY); return 1;        /* ^L */
+	case 0x03: command(CMD_COPY); return 1;           /* ^C */
+	case 0x18: command(CMD_CUT); return 1;            /* ^X */
+	case 0x16: command(CMD_PASTE); return 1;          /* ^V */
 	}
 	return 0;
 }
@@ -1134,6 +1185,7 @@ static void context_menu(short x, short y)
 		{ "  Index                 ^I", CMD_INDEX },
 		{ "  Help page           Help", CMD_HELP },
 		{ "-", CMD_NONE },
+		{ "  Copy page             ^C", CMD_COPY },
 		{ "  Library and search    ^L", CMD_LIBRARY },
 		{ "  Font...              \x01^F", CMD_FONT },
 		{ "-", CMD_NONE },
@@ -1331,6 +1383,8 @@ static void message(short *msg)
 		if (msg[3] == menu_id)
 		{
 			/* the AES took the windows */
+			if (win_h > 0)
+				av_window(win_h, 0);
 			win_h = -1;
 			win_icon = 0;
 			libwin_forget();
@@ -1366,6 +1420,18 @@ static void message(short *msg)
 	case AC_HELP:
 		show_request((const char *) (((unsigned long) (unsigned short) msg[3] << 16) |
 			(unsigned short) msg[4]));
+		break;
+	default:
+		{
+			/* a hypertext dropped (drag and drop, or the desktop on the
+			   accessory's window): shown, the first if several */
+			DROP d;
+			char path[256];
+
+			if (dd_message(msg, DD_WANT_FILES, &d) == DD_FILES && av_arg(d.data, path, sizeof(path)))
+				viewer_show(path, NULL, 0);
+			dd_done(&d);
+		}
 		break;
 	}
 }

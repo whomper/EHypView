@@ -450,6 +450,35 @@ long view_link_at(const ehv_view *v, long line, long col)
 	return -1;
 }
 
+unsigned long view_page_text(const ehv_view *v, char *buf, unsigned long size)
+{
+	unsigned long n = 0, i, r;
+
+	if (size == 0)
+		return 0;
+	for (i = 0; v->page != NULL && i < v->page->nlines; i++)
+	{
+		const hyp_line *l = &v->page->lines[i];
+
+		for (r = l->first_run; r < l->first_run + l->nruns && r < v->page->nruns; r++)
+		{
+			const hyp_run *run = &v->page->runs[r];
+			unsigned long k = run->len;
+
+			if (run->text == NULL)
+				continue;
+			if (k > size - 1 - n)
+				k = size - 1 - n;
+			memcpy(buf + n, run->text, k);
+			n += k;
+		}
+		if (n < size - 1)
+			buf[n++] = '\n';
+	}
+	buf[n] = '\0';
+	return n;
+}
+
 void view_title(const ehv_view *v, char *buf, unsigned long size)
 {
 	const char *db, *pt;

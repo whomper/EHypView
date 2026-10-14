@@ -179,6 +179,17 @@ static void test_selection(void)
 	CHECK(view_link_at(&v, 2, 16) == -1);
 	CHECK(view_link_at(&v, 0, 0) == -1 && view_link_at(&v, 99, 0) == -1);
 	CHECK(view_run_line(&v, first) == 2);
+	{
+		/* the page as text (^C): a line each, the link as its text */
+		char text[2000], small[6];
+		unsigned long n = view_page_text(&v, text, sizeof(text)), lines = 0, i;
+
+		for (i = 0; i < n; i++)
+			lines += text[i] == '\n';
+		CHECK(n == strlen(text) && lines == v.page->nlines);
+		CHECK(strstr(text, "Links: to Second") != NULL);
+		CHECK(view_page_text(&v, small, sizeof(small)) == 5 && strlen(small) == 5);
+	}
 	view_free(&v);
 }
 
