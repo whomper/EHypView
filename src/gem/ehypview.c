@@ -1424,6 +1424,8 @@ int main(void)
 	vdi_h = v_opnvwk_(vdi_h, work_out);
 	screen_w = (short) (work_out[0] + 1);
 	screen_h = (short) (work_out[1] + 1);
+	ehv_ui_scr_w = screen_w;
+	ehv_ui_scr_h = screen_h;
 	ncolors = work_out[13];
 	vq_extnd(vdi_h, 1, work_out);
 	planes = work_out[4];

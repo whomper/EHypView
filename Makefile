@@ -143,7 +143,7 @@ $(ATARI)/crash.o: common/atari/crash.c $(XHDRS) | $(ATARI)
 $(ATARI)/%.o: common/atari/%.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
 $(ATARI)/%.o: common/ui/%.c $(XHDRS) | $(ATARI)
-	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
+	$(XCC) $(XFLAGS) -Isrc/gem -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
 $(ATARI)/bidi.o: common/src/bidi.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
 $(ATARI)/%.o: atari/%.c $(XHDRS) | $(ATARI)
@@ -167,7 +167,8 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/ehypview.o \
-           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o
+           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o \
+           $(ATARI)/aboutbox.o $(ATARI)/gemui.o
 
 # every build counts the version up (VERSION, major.minor as in EMail,
 # ECal and EContact): version.c is written again when anything else in

@@ -65,4 +65,7 @@ void font_sys_pop(void);                  /* back to the text font */
 /* about.c */
 void about_box(void);
 
+/* gemui.c: the drawing the shared GEM building blocks take from EHypView */
+extern short ehv_ui_scr_w, ehv_ui_scr_h;
+
 #endif
