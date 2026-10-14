@@ -15,16 +15,7 @@ TOP=$(cd "$(dirname "$0")/.." && pwd)
 OUT=$TOP/build/hatari-out
 mkdir -p "$OUT"
 
-if [ -z "$EMUTOS" ]; then
-	EMUTOS=$TOP/build/emutos/etos512us.img
-	if [ ! -f "$EMUTOS" ]; then
-		mkdir -p "$TOP/build/emutos"
-		curl -sSL -o "$TOP/build/emutos/emutos.zip" \
-			https://downloads.sourceforge.net/project/emutos/emutos/1.3/emutos-512k-1.3.zip
-		python3 -I -c 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); open(sys.argv[2],"wb").write(z.read("emutos-512k-1.3/etos512us.img"))' \
-			"$TOP/build/emutos/emutos.zip" "$EMUTOS"
-	fi
-fi
+EMUTOS=${EMUTOS:-$(sh "$TOP/tests/emutos.sh")}
 
 "$HOSTCHECK" "$HOSTFIXT" > "$OUT/host.txt"
 

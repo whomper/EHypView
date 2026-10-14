@@ -35,7 +35,13 @@ jobs:
           sudo apt-get install -y gcc-m68k-linux-gnu hatari
       - name: Build the Atari programs and run them in Hatari (Falcon, EmuTOS)
         run: make hatari-test
+      - name: Drive the viewer in Hatari with the keyboard
+        run: make gui-test
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: atari-programs
-          path: build/hatari/
+          path: |
+            build/hatari/*.PRG
+            build/hatari/*.ACC
+            build/gui/*.png

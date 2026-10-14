@@ -85,6 +85,9 @@ typedef struct {
 #define DNARROW 0x0080
 #define VSLIDE  0x0100
 #define INFO    0x0010
+#define LFARROW 0x0200
+#define RTARROW 0x0400
+#define HSLIDE  0x0800
 
 /* wind_get / wind_set */
 #define WF_NAME       2
@@ -98,6 +101,27 @@ typedef struct {
 #define WF_FIRSTXYWH  11
 #define WF_NEXTXYWH   12
 #define WF_VSLSIZE    16
+#define WF_HSLIDE     8
+#define WF_HSLSIZE    15
+
+/* WM_ARROWED actions */
+#define WA_UPPAGE 0
+#define WA_DNPAGE 1
+#define WA_UPLINE 2
+#define WA_DNLINE 3
+#define WA_LFPAGE 4
+#define WA_RTPAGE 5
+#define WA_LFLINE 6
+#define WA_RTLINE 7
+
+/* VDI writing modes and fill styles */
+#define MD_REPLACE  1
+#define MD_TRANS    2
+#define MD_XOR      3
+#define FIS_HOLLOW  0
+#define FIS_SOLID   1
+#define FIS_PATTERN 2
+#define FIS_HATCH   3
 
 #define WC_BORDER 0
 #define WC_WORK   1
@@ -208,6 +232,15 @@ long  vqt_char_index(short h, unsigned short c, short from, short to);
 short vst_map_mode(short h, short mode);
 void  v_gtext_w(short h, short x, short y, const unsigned short *s, short n);
 short vqt_font_format(short h, short index);	/* 1 bitmap, 2 Speedo, 4 TrueType, 8 Type 1, 0 unknown */
+
+/* EHypView additions */
+void v_bar(short h, const short *pxy);
+void v_rbox(short h, const short *pxy);
+void v_rfbox(short h, const short *pxy);
+void vsl_ends(short h, short beg, short end);	/* 0 square, 1 arrow, 2 round */
+void vr_trnfm(short h, MFDB *src, MFDB *dst);
+short appl_find(const char *name);
+short appl_write(short id, short len, void *buf);
 short vst_font(short h, short id);
 short vst_point(short h, short point, short *cw, short *ch);
 short vqt_width(short h, short c);	/* cell width of character c */
