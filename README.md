@@ -1,5 +1,7 @@
 # EHypView
 
+<img src="docs/icon16.png" width="96" align="right" alt="EHypView icon: an Atari SM124-style monitor showing a page whose link points to another page">
+
 A new, modern viewer for **ST-Guide hypertexts** (`.HYP`) on the Atari
 (Falcon, TT, FireBee). It is meant to replace `ST-GUIDE.ACC`:
 - it finds every guide without `ALL.REF` maintenance
@@ -87,9 +89,23 @@ compiler and no MiNTLib. `atari/` holds a small freestanding runtime
 sudo apt install gcc-m68k-linux-gnu      # Debian/Ubuntu
 make atari          # build/hatari/: EHYPVIEW.PRG, EHYPVIEW.ACC, EHVCHECK.PRG
 make hatari-test    # run EHVCHECK.PRG in Hatari as a Falcon with EmuTOS
-make gui-test       # drive EHYPVIEW.PRG in Hatari with the keyboard
-                    # (apt install hatari; screenshots in build/gui)
+make gui-test       # drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
+                    # (apt install hatari xvfb xdotool; screenshots in build/gui)
+make icons          # draw the icon again (tools/icon/)
 ```
+
+Every build of the program counts the version up (`VERSION`, major.minor,
+shown in the About box), as in EMail, ECal and EContact, and copies the
+programs to `binary/`. Commit `VERSION` together with `binary/`.
+
+`binary/` holds the programs as released, and `binary/icons/` holds the desktop icon:
+`EHYPVIEW.RSC`, a resource with the icon in monochrome (G_ICON) and 16
+colours (G_CICON), each with its mask. Copy them into `DESKICON.RSC` /
+`DESKCICN.RSC` with a resource editor (Interface, ORCS, RSM...).
+`EHYPVIEW.ICN` and `EHYPVWMK.ICN` are the image and its mask in ICN text
+format. The icon is the same SM124-style monitor as EMail's, ECal's and
+EContact's, here showing a hypertext: a page whose link points to another
+page.
 
 ### Using the viewer
 
@@ -117,7 +133,8 @@ programs asking for ST-Guide find it.
 | Shift+Control+F | choose the font |
 | Control+Plus / Control+Minus (keypad, or `=` and `-`) | larger / smaller text |
 
-The accessory has no menu bar. Its entry in the Desk menu opens the viewer,
+Desk > About EHypView shows the version, the number of hypertexts found
+and the font in use. The accessory has no menu bar. Its entry in the Desk menu opens the viewer,
 or the library when no page is shown.
 
 In the library: type to search, Up/Down to choose, Return or a click to

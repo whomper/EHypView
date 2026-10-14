@@ -8,8 +8,14 @@ scenario gets its own drive C: under OUT_DIR with an ST-GUIDE.INF.  Keys go in t
 reports what it does through NatFeats ("EHV page ...", "EHV select ...")
 and each step waits for the event it expects.  A screenshot of every
 step is saved in OUT_DIR for people to look at.
+
+The mouse scenario runs Hatari in a window on an X display (Xvfb) and
+moves the mouse with xdotool, as EContact's test rig does: links, the
+right button, the menus and the About box.  Without Xvfb and xdotool it
+is skipped (CI installs them).
 """
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -69,18 +75,69 @@ LIBRARY_START = [
 ]
 
 
-def start_hatari(hdir, auto, fifo, log_path):
+DISPLAY = ":99"
+
+
+def start_hatari(hdir, auto, fifo, log_path, windowed=False):
     for name in (fifo, os.path.join(hdir, "EHYPVIEW.IDX")):
         if os.path.exists(name):
             os.remove(name)
-    env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
+    if windowed:
+        env = dict(os.environ, DISPLAY=DISPLAY, SDL_AUDIODRIVER="dummy")
+    else:
+        env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
     args = ["hatari", "--tos", EMUTOS, "--machine", "falcon", "--monitor", "vga", "--memsize", "14",
-            "--natfeats", "yes", "--fast-forward", "yes", "--sound", "off", "--confirm-quit", "no",
+            "--natfeats", "yes", "--sound", "off", "--confirm-quit", "no",
             "--statusbar", "no", "--log-level", "fatal", "--harddrive", hdir, "--gemdos-drive", "C",
             "--cmd-fifo", fifo]
+    # in a window, one screen pixel is one window pixel for the mouse;
+    # fast-forward would outrun the mouse moves
+    args += ["-w", "--borders", "no", "--zoom", "1"] if windowed else ["--fast-forward", "yes"]
     if auto:
         args += ["--auto", auto]
     return subprocess.Popen(args, env=env, stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
+
+
+class Mouse:
+    """xdotool on the Xvfb display, in Atari screen coordinates"""
+
+    def __init__(self):
+        self.env = dict(os.environ, DISPLAY=DISPLAY)
+        self.origin = None
+
+    def xdo(self, *args):
+        return subprocess.run(["xdotool", *args], env=self.env, capture_output=True, text=True).stdout
+
+    def window(self):
+        for _ in range(100):
+            if self.origin:
+                return self.origin
+            found = (self.xdo("search", "--name", "Hatari") or self.xdo("search", "--class", "hatari")).split()
+            if found:
+                geo = dict(l.split("=") for l in self.xdo("getwindowgeometry", "--shell", found[0]).split())
+                self.origin = (int(geo["X"]), int(geo["Y"]))
+            else:
+                time.sleep(0.2)
+        raise RuntimeError("no Hatari window")
+
+    def move(self, x, y):
+        """glide there, as the AES only sees the mouse when it moves"""
+        wx, wy = self.window()
+        loc = dict(l.split("=") for l in self.xdo("getmouselocation", "--shell").split())
+        x0, y0 = int(loc["X"]), int(loc["Y"])
+        for i in range(1, 13):
+            self.xdo("mousemove", str(x0 + (wx + x - x0) * i // 12), str(y0 + (wy + y - y0) * i // 12))
+            time.sleep(0.03)
+        time.sleep(0.4)
+
+    def click(self, x, y, button="1"):
+        self.move(x, y)
+        self.xdo("click", button)
+        time.sleep(0.4)
+
+
+def have_display():
+    return shutil.which("Xvfb") and shutil.which("xdotool")
 
 
 def accessory_smoke():
@@ -122,10 +179,11 @@ def matches(ev, expected):
     return ev == expected
 
 
-def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG"):
+def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False):
     fifo = os.path.join(OUT, name + ".fifo")
     log_path = os.path.join(OUT, name + ".log")
-    hatari = start_hatari(hdir, auto, fifo, log_path)
+    hatari = start_hatari(hdir, auto, fifo, log_path, windowed)
+    mouse = Mouse() if windowed else None
     for _ in range(100):
         if os.path.exists(fifo):
             break
@@ -158,7 +216,12 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG"):
     try:
         for n, (keys, expect) in enumerate(steps):
             for k in keys:
-                if isinstance(k, tuple):
+                if isinstance(k, tuple) and k[0] in ("click", "rclick"):
+                    mouse.click(k[1], k[2], "1" if k[0] == "click" else "3")
+                elif isinstance(k, tuple) and k[0] == "menu":
+                    mouse.click(k[1], k[2])                # the title drops the menu down
+                    mouse.click(k[3], k[4])                # the item
+                elif isinstance(k, tuple):
                     mods = [CTRL] + ([SHIFT] if k[0] == "ctrl+shift" else [])
                     for m in mods:
                         send("hatari-event keydown 0x%x" % m)
@@ -169,6 +232,8 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG"):
                     send("hatari-event keypress %s" % k)
                 else:
                     send("hatari-event keypress 0x%x" % k)
+            if not expect:
+                time.sleep(1.0)
             for e in expect:
                 if not wait_for(e):
                     print("FAIL  %s step %d: no '%s'" % (name, n, e))
@@ -179,7 +244,7 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG"):
                 os.path.join(OUT, "%s-%02d.png" % (name, n))))
             if not ok:
                 break
-            print("ok    %s step %d: %s" % (name, n, expect[-1]))
+            print("ok    %s step %d: %s" % (name, n, expect[-1] if expect else "(done)"))
     finally:
         send("hatari-debug quit")
         try:
@@ -205,6 +270,31 @@ def copy_dir(name, inf, settings=None):
     return d
 
 
+# with the mouse (8x16 system font, Falcon VGA): a link, the right
+# button, and each menu (title x, y, then the item's x, y)
+DESK, FILE, NAV, VIEW = (40, 9), (88, 9), (152, 9), (216, 9)
+
+
+def item(title, n):
+    """the n-th item (from 0) of the menu under title"""
+    return ("menu", title[0], title[1], title[0] + 24, 19 + 16 * n + 8)
+
+
+MOUSE_STEPS = [
+    ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
+    ([("click", 120, 118)], ["page %s Second" % BASIC]),    # "to Second"
+    ([("rclick", 300, 300)], ["page %s Main" % BASIC]),     # right button: back
+    ([item(DESK, 0)], ["menu about", "dialog about *"]),    # the About box
+    ([("click", 320, 300)], []),                            # a click closes it
+    ([item(VIEW, 0)], ["menu font", "dialog font"]),        # the font selector
+    ([ESC], []),
+    ([item(NAV, 5)], ["menu help", "page %s Help" % BASIC]),
+    ([item(NAV, 0)], ["menu back", "page %s Main" % BASIC]),
+    ([item(FILE, 1)], ["menu library", "library 4"]),
+    ([item(FILE, 5)], ["menu quit", "quit"]),
+]
+
+
 def check_file(path, expected):
     try:
         with open(path, newline="") as f:
@@ -226,6 +316,18 @@ def main():
         d = copy_dir("libstart", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n",
                      "FONT=System font\nPOINT=8\n")
         ok = run_scenario("libstart", d, LIBRARY_START)
+    if ok:
+        if have_display():
+            d = copy_dir("mouse", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
+            xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(1)
+            try:
+                ok = run_scenario("mouse", d, MOUSE_STEPS, windowed=True)
+            finally:
+                xvfb.terminate()
+        else:
+            print("skip  mouse: needs Xvfb and xdotool")
     if ok:
         ok = accessory_smoke()
     return 0 if ok else 1

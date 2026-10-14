@@ -59,5 +59,10 @@ int font_step(int dir);                   /* the next size up or down: 1 when ch
 int font_protocol(short id, short point); /* FONT_CHANGED: 1 when taken */
 const char *font_name(void);
 short font_point(void);
+void font_sys_push(void);                 /* the system font, for a dialog */
+void font_sys_pop(void);                  /* back to the text font */
+
+/* about.c */
+void about_box(void);
 
 #endif

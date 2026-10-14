@@ -111,7 +111,10 @@ src/gem/       the GEM program
   libwin.c     library window
   menu.c       the menu bar, built in code (no resource file)
   fontsel.c    the text font: selector dialog (from ECal), sizes, font protocol
+  about.c      the About box (as EMail's, ECal's and EContact's), icon*.h
 tools/hypdump  host command-line inspector, used by the tests
+tools/icon     the icon (make_icon.py) and the desktop icon RSC (make_rsc.py)
+tools/bump.py  counts VERSION up on every build
 tests/         unit tests, golden tests, fixture generators
 ```
 
@@ -203,10 +206,12 @@ Rules for `src/core`:
   its page changes, searches and selections through NatFeats, and each
   step waits for the expected event. A second run boots with
   `EHYPVIEW.ACC` and checks that the accessory registers and indexes.
-  Screenshots of every step are kept as a CI artifact. Mouse clicks and
-  the drop-down menus are not covered, since Hatari's FIFO has no mouse
-  movement; `tests/test_menu.c` checks the menu tree (links, positions on
-  320- to 1280-pixel screens, commands) on the host instead.
+  Screenshots of every step are kept as a CI artifact. A mouse run puts
+  Hatari in a window on Xvfb and moves the mouse with xdotool (as
+  EContact's rig does): clicking a link, the right button for back, the
+  About box from the Desk menu, the font selector, Navigate and File
+  items. `tests/test_menu.c` also checks the menu tree (links, positions
+  on 320- to 1280-pixel screens, commands) on the host.
 - `tests/test_index.c` builds a real folder tree for the scanner and
   resolver tests: mixed-case names, a folder with spaces, a duplicate, a
   damaged file, a symbolic link loop, a REF beside a file and an ALL.REF
