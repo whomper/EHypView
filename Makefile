@@ -128,13 +128,17 @@ XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
 
 ATARI    = build/atari
 HATARI_DIR = build/hatari
-RUNTIME  = crt0 nf libc tos plat_tos gem
+RUNTIME  = crt0 nf libc tos plat_tos gem crash crash_s
 RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
 XHDRS    = $(wildcard src/core/*.h common/atari/*.h common/atari/include/*.h)
 
 $(ATARI)/%.o: common/atari/%.S | $(ATARI)
 	$(XCC) $(XCPU) -c -o $@ $<
+$(ATARI)/crash_s.o: common/atari/crash.S | $(ATARI)
+	$(XCC) $(XCPU) -c -o $@ $<
+$(ATARI)/crash.o: common/atari/crash.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
 $(ATARI)/%.o: common/atari/%.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
 $(ATARI)/%.o: atari/%.c $(XHDRS) | $(ATARI)

@@ -29,6 +29,8 @@
 #include "view.h"
 #include "gemapp.h"
 #include "menu.h"
+#include "crash.h"
+#include "version.h"
 
 #define VA_START   0x4711
 #define AV_STARTED 0x4738
@@ -68,7 +70,9 @@ void log_event(const char *what, const char *a, const char *b)
 {
 	char line[300];
 
-	snprintf(line, sizeof(line), "EHV %s %s%s%s\n", what, a ? a : "", b ? " " : "", b ? b : "");
+	snprintf(line, sizeof(line), "EHV %s %s%s%s", what, a ? a : "", b ? " " : "", b ? b : "");
+	crash_note(line + 4);             /* the last one goes in CRASH.LOG */
+	strcat(line, "\n");
 	nf_debug(line);
 }
 
@@ -1367,6 +1371,35 @@ static void acc_heap(void)
 		heap_add(p, (size_t) want);
 }
 
+/*
+ * EHypView (the program) crashed and CRASH.LOG is written
+ * (common/atari/crash.c): say so and leave GEM tidy.  Only the AES and
+ * VDI: the heap may be what went wrong.
+ */
+static void crash_quit(const char *what)
+{
+	char a[200];
+
+	log_event("crashed", what, NULL);
+	graf_mouse(ARROW, NULL);
+	snprintf(a, sizeof(a), "[3][EHypView has crashed|(%s).|What happened is in|CRASH.LOG, next to EHYPVIEW.PRG.][ Quit ]", what);
+	form_alert(1, a);
+	if (win_h > 0)
+	{
+		wind_close(win_h);
+		wind_delete(win_h);
+	}
+	if (libwin_handle() > 0)
+	{
+		wind_close(libwin_handle());
+		wind_delete(libwin_handle());
+	}
+	if (has_menu)
+		menu_bar(menu.tree, 0);
+	v_clsvwk(vdi_h);
+	appl_exit();
+}
+
 int main(void)
 {
 	short work_out[57], msg[8], d, screen_w, screen_h;
@@ -1401,6 +1434,8 @@ int main(void)
 	Dgetpath(start_dir + 2, 0);
 	if (start_dir[2] == '\0')
 		strcpy(start_dir + 2, "\\");
+	crash_install(start_dir, "EHypView", app_version);	/* the program only */
+	crash_cleanup = crash_quit;
 
 	font_init(start_dir);
 	log_font();
@@ -1443,6 +1478,13 @@ int main(void)
 		app_window_closed();
 	}
 	inf_free(inf);
+	if (crash_previous())
+	{
+		char a[200];
+
+		snprintf(a, sizeof(a), "[1][EHypView crashed last time|(%s).|What happened is in|CRASH.LOG, next to EHYPVIEW.PRG.][ OK ]", crash_previous());
+		form_alert(1, a);
+	}
 
 	while (!quit_now)
 	{
@@ -1456,7 +1498,9 @@ int main(void)
 		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, busy ? 0 : 1000, msg, &ev);
 		if ((which & MU_MESAG) && !libwin_message(msg))
 			message(msg);
-		if (which & MU_KEYBD)
+		if ((which & MU_KEYBD) && crash_test(KEY_SCAN(ev.kreturn)))
+			;                         /* test builds only: F1-F4 crash */
+		else if (which & MU_KEYBD)
 		{
 			short top = top_window();
 
@@ -1508,6 +1552,7 @@ int main(void)
 	ehv_scan_abort(scanner);
 	ehv_index_free(idx);
 	ref_close(allref);
+	crash_remove();
 	v_clsvwk(vdi_h);
 	appl_exit();
 	return 0;
