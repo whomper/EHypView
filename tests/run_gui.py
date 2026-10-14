@@ -271,7 +271,7 @@ def copy_dir(name, inf, settings=None):
 
 
 # with the mouse (8x16 system font, Falcon VGA): a link, the right
-# button, and each menu (title x, y, then the item's x, y)
+# button's menu, and each menu (title x, y, then the item's x, y)
 DESK, FILE, NAV, VIEW = (40, 9), (88, 9), (152, 9), (216, 9)
 
 
@@ -283,7 +283,11 @@ def item(title, n):
 MOUSE_STEPS = [
     ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
     ([("click", 120, 118)], ["page %s Second" % BASIC]),    # "to Second"
-    ([("rclick", 300, 300)], ["page %s Main" % BASIC]),     # right button: back
+    ([("rclick", 300, 150)], ["menu popup"]),               # right button: the menu,
+    ([("click", 330, 161)], ["menu back", "page %s Main" % BASIC]),     # Back first
+    ([("rclick", 300, 150)], ["menu popup"]),               # and About last (rows of 18)
+    ([("click", 330, 341)], ["menu about", "dialog about *"]),
+    ([("click", 320, 300)], []),                            # a click closes it
     ([item(DESK, 0)], ["menu about", "dialog about *"]),    # the About box
     ([("click", 320, 300)], []),                            # a click closes it
     ([item(VIEW, 0)], ["menu font", "dialog font"]),        # the font selector

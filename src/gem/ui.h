@@ -10,9 +10,7 @@
 #ifndef EHV_UI_H
 #define EHV_UI_H
 
-typedef struct {
-	short x, y, w, h;
-} GRECT;
+#include "grect.h"
 
 #define TX_BOLD    1
 #define TX_INVERSE 2

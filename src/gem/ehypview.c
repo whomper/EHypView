@@ -31,6 +31,9 @@
 #include "menu.h"
 #include "crash.h"
 #include "av.h"
+#include "grect.h"
+#include "popup.h"
+#include "aboutbox.h"
 #include "alert.h"
 #include "version.h"
 
@@ -997,6 +1000,8 @@ int app_key(short kstate, short kreturn)
 	return 0;
 }
 
+static void context_menu(short x, short y);
+
 static void key(short kstate, short kreturn)
 {
 	short scan = KEY_SCAN(kreturn), ascii = KEY_ASCII(kreturn);
@@ -1006,6 +1011,14 @@ static void key(short kstate, short kreturn)
 
 	if (ctrl && ascii != 0x09 && app_key(kstate, kreturn))
 		return;
+	if (scan == 0x52)                  /* Insert: the right button's menu */
+	{
+		short x, y, w, h;
+
+		work_area(&x, &y, &w, &h);
+		context_menu(x + 2 * cw, y + ch);
+		return;
+	}
 	switch (ascii)
 	{
 	case 0x09:                         /* ^I and Tab share 9: Tab has scan 0x0f */
@@ -1070,6 +1083,55 @@ static void key(short kstate, short kreturn)
 	after(rc);
 }
 
+/*
+ * The right button (or Insert): a menu of what the menu bar has for the
+ * page, Back first (the guidelines, 3.3, for viewers) and About last,
+ * which is where the accessory, without a menu bar, finds it.
+ */
+static void context_menu(short x, short y)
+{
+	static const struct
+	{
+		const char *label;
+		int cmd;
+	} items[] = {
+		{ "  Back                Undo", CMD_BACK },
+		{ "-", CMD_NONE },
+		{ "  Main page          ^Home", CMD_HOME },
+		{ "  Contents              ^T", CMD_TOC },
+		{ "  Index                 ^I", CMD_INDEX },
+		{ "  Help page           Help", CMD_HELP },
+		{ "-", CMD_NONE },
+		{ "  Library and search    ^L", CMD_LIBRARY },
+		{ "  Font...              \x01^F", CMD_FONT },
+		{ "-", CMD_NONE },
+		{ "  About EHypView...", CMD_ABOUT }
+	};
+	enum { N = sizeof(items) / sizeof(items[0]) };
+	static char off[N][40];
+	const char *lab[N];
+	short i, r;
+
+	for (i = 0; i < N; i++)
+	{
+		int target = nav_target(items[i].cmd);
+
+		lab[i] = items[i].label;
+		if (target >= 0 && !view_can(&view, target))
+		{
+			off[i][0] = '~';           /* greyed: popup.h */
+			strcpy(off[i] + 1, items[i].label);
+			lab[i] = off[i];
+		}
+	}
+	log_event("menu", "popup", NULL);
+	r = popup(x, y, lab, N);
+	if (r < 0 || items[r].cmd == CMD_NONE)
+		return;
+	log_event("menu", menu_command_name(items[r].cmd), NULL);
+	command(items[r].cmd);
+}
+
 static void click(short mx, short my, short button)
 {
 	short x, y, w, h;
@@ -1077,7 +1139,7 @@ static void click(short mx, short my, short button)
 
 	if (button & 2)
 	{
-		after(view_back(&view));
+		context_menu(mx, my);
 		return;
 	}
 	if (view.page == NULL || line_y == NULL)
@@ -1141,6 +1203,9 @@ static void message(short *msg)
 		if (msg[3] == win_h)
 			wind_set(win_h, WF_TOP, win_h, 0, 0, 0);
 		break;
+	case WM_BOTTOMED:
+		wind_set(msg[3], WF_BOTTOM, 0, 0, 0, 0);
+		break;
 	case WM_CLOSED:
 		if (msg[3] == win_h)
 			close_window();
@@ -1198,7 +1263,7 @@ static void message(short *msg)
 			scroll_to(view.top, max_left() * msg[4] / 1000);
 		break;
 	case AC_OPEN:
-		if (msg[4] == menu_id)
+		if (msg[4] == menu_id && screen_check("EHypView", ehv_ui_scr_w))	/* not in ST low */
 		{
 			av_init("EHYPVIEW|ST-GUIDE");	/* a desktop started since */
 			if (view.page != NULL)
@@ -1216,7 +1281,8 @@ static void message(short *msg)
 		}
 		break;
 	case AP_TERM:
-		quit_now = 1;
+		if (!is_acc)                   /* an accessory never ends */
+			quit_now = 1;
 		break;
 	case FONT_CHANGED:
 		/* a font selector dropped a font on one of our windows */
@@ -1418,7 +1484,7 @@ int main(void)
 	if (is_acc)
 	{
 		acc_heap();
-		menu_id = menu_register(ap_id, "  Hypertext");
+		menu_id = menu_register(ap_id, "  EHypView");
 		log_event("acc", menu_id >= 0 ? "registered" : "no menu entry", NULL);
 	}
 	vdi_h = graf_handle(&sys_cw, &sys_ch, &d, &d);
@@ -1434,6 +1500,12 @@ int main(void)
 	planes = work_out[4];
 	vst_alignment(vdi_h, 0, 5);
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
+	if (!is_acc && !screen_check("EHypView", screen_w))	/* not in ST low */
+	{
+		v_clsvwk(vdi_h);
+		appl_exit();
+		return 1;
+	}
 
 	start_dir[0] = (char) ('A' + Dgetdrv());
 	start_dir[1] = ':';
@@ -1487,8 +1559,7 @@ int main(void)
 		app_window_closed();
 	}
 	inf_free(inf);
-	if (crash_previous())
-		alert(1, "[1][EHypView crashed last time|(%s).|What happened is in|CRASH.LOG, next to EHYPVIEW.PRG.][ OK ]", crash_previous());
+	crash_offer("EHypView", "next to EHYPVIEW.PRG");
 
 	while (!quit_now)
 	{

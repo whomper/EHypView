@@ -123,7 +123,8 @@ programs asking for ST-Guide find it.
 | Keys | Action |
 |---|---|
 | click a link, or Tab / Shift+Tab then Return | follow a link |
-| Backspace, Undo, right mouse button | back |
+| Backspace, Undo | back |
+| right mouse button, Insert | a menu: Back first, the pages, Library, Font, About last |
 | Help | the hypertext's help page |
 | Control+I / Control+T | index / table of contents |
 | Control+Left / Control+Right | previous / next page |
@@ -144,7 +145,7 @@ jinnee, Gemini) can hand it a hypertext and a page the same way, with the
 AV protocol's VA_START. If the program itself crashes
 (what would be 2 to 8 bombs), it says so, writes what happened to
 `CRASH.LOG` next to `EHYPVIEW.PRG` and quits, leaving the Atari running;
-under MiNT or MagiC, and in the accessory, there is no `CRASH.LOG`. The accessory has no menu bar. Its entry in the Desk menu opens the viewer,
+under MiNT or MagiC, and in the accessory, there is no `CRASH.LOG`. The accessory has no menu bar: About is in the right button's menu. Its entry in the Desk menu (EHypView) opens the viewer,
 or the library when no page is shown.
 
 In the library: type to search, Up/Down to choose, Return or a click to
