@@ -108,6 +108,7 @@ src/view/      without GEM, tested on the host:
 src/gem/       the GEM program
   ehypview.c   viewer window, VDI drawing, events, AV protocol, startup
   libwin.c     library window
+  menu.c       the menu bar, built in code (no resource file)
 tools/hypdump  host command-line inspector, used by the tests
 tests/         unit tests, golden tests, fixture generators
 ```
@@ -191,13 +192,17 @@ Rules for `src/core`:
   FIFO with the keyboard: following links (also into a hypertext three
   folders down, found by the background index), back, help, next page and
   quit; then the library: opening it, searching names as you type,
-  opening a hit, the full-text search and opening its hit. Another run
+  opening a hit, the full-text search and opening its hit; closing both
+  windows (the program, with its menu bar, stays) and reopening the
+  library. Another run
   starts without `DEFHYP` and must open the library. The viewer reports
   its page changes, searches and selections through NatFeats, and each
   step waits for the expected event. A second run boots with
   `EHYPVIEW.ACC` and checks that the accessory registers and indexes.
-  Screenshots of every step are kept as a CI artifact. Mouse clicks are
-  not covered, since Hatari's FIFO has no mouse movement.
+  Screenshots of every step are kept as a CI artifact. Mouse clicks and
+  the drop-down menus are not covered, since Hatari's FIFO has no mouse
+  movement; `tests/test_menu.c` checks the menu tree (links, positions on
+  320- to 1280-pixel screens, commands) on the host instead.
 - `tests/test_index.c` builds a real folder tree for the scanner and
   resolver tests: mixed-case names, a folder with spaces, a duplicate, a
   damaged file, a symbolic link loop, a REF beside a file and an ALL.REF
@@ -217,7 +222,7 @@ Rules for `src/core`:
    graphics, links, back/forward, answering `VA_START` and `AC_HELP`.
    Tested in Hatari/ARAnyM and on the Falcon.~~ ✔ (in Hatari; the Falcon
    and MiNT/MagiC are still to try)
-4. ~~Library window and search.~~ ✔
+4. ~~Library window and search.~~ ✔ ~~Menu bar.~~ ✔
 5. Multiple windows, tabs, bookmarks, settings dialog, font selection,
    colour images.
 6. Accessory build, FireBee build, release packaging.

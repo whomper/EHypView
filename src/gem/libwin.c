@@ -276,6 +276,7 @@ void libwin_close(void)
 	{
 		wind_close(lib_h);
 		wind_delete(lib_h);
+		log_event("closed", "library", NULL);
 	}
 	lib_h = -1;
 	app_window_closed();
@@ -350,22 +351,12 @@ void libwin_key(short kstate, short kreturn)
 
 	if (ctrl)
 	{
-		switch (ascii)
+		if (ascii == 0x0c && viewer_handle() > 0)
 		{
-		case 0x11:                         /* ^Q */
-			if (is_acc)
-				libwin_close();
-			else
-				quit_now = 1;
-			return;
-		case 0x15:                         /* ^U */
-		case 0x17:                         /* ^W */
-			libwin_close();
-			return;
-		case 0x0c:                         /* ^L: back to the viewer */
-			viewer_top();
+			viewer_top();                  /* ^L: back to the viewer */
 			return;
 		}
+		app_key(kstate, kreturn);          /* ^O, ^W, ^Q */
 		return;
 	}
 	switch (scan)

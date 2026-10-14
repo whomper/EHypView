@@ -319,34 +319,35 @@ int view_back(ehv_view *v)
 	return rc;
 }
 
-int view_relative(ehv_view *v, int which)
+/* the entry `which` leads to, or HYP_NO_NODE (with *msg saying why) */
+static unsigned short relative_entry(const ehv_view *v, int which, const char **msg)
 {
 	unsigned short entry = HYP_NO_NODE;
-	const char *msg = NULL;
 
+	*msg = NULL;
 	if (v->page == NULL)
-		return VIEW_ERROR;
+		return HYP_NO_NODE;
 	switch (which)
 	{
 	case VIEW_NEXT:
 		entry = v->doc->entries[v->page->num].next;
-		msg = "This is the last page";
+		*msg = "This is the last page";
 		break;
 	case VIEW_PREV:
 		entry = v->doc->entries[v->page->num].prev;
-		msg = "This is the first page";
+		*msg = "This is the first page";
 		break;
 	case VIEW_TOC:
 		entry = v->doc->entries[v->page->num].toc;
-		msg = "No table of contents";
+		*msg = "No table of contents";
 		break;
 	case VIEW_INDEX:
 		entry = hyp_find_node(v->doc, "Index");
-		msg = "This hypertext has no index";
+		*msg = "This hypertext has no index";
 		break;
 	case VIEW_HELP:
 		entry = hyp_find_node(v->doc, v->doc->help_node);
-		msg = "This hypertext has no help page";
+		*msg = "This hypertext has no help page";
 		break;
 	case VIEW_HOME:
 		entry = hyp_default_node(v->doc);
@@ -355,11 +356,33 @@ int view_relative(ehv_view *v, int which)
 	if (entry == v->page->num && which != VIEW_HOME)
 		entry = HYP_NO_NODE;
 	if (entry == HYP_NO_NODE || entry >= v->doc->num_entries || !HYP_IS_TEXT(v->doc->entries[entry].type))
+		return HYP_NO_NODE;
+	return entry;
+}
+
+int view_relative(ehv_view *v, int which)
+{
+	const char *msg;
+	unsigned short entry;
+
+	if (v->page == NULL)
+		return VIEW_ERROR;
+	entry = relative_entry(v, which, &msg);
+	if (entry == HYP_NO_NODE)
 	{
 		set_status(v, msg, NULL, NULL);
 		return VIEW_ERROR;
 	}
 	return view_goto(v, entry, 0);
+}
+
+int view_can(const ehv_view *v, int which)
+{
+	const char *msg;
+
+	if (which == VIEW_BACK)
+		return v->nhist > 0;
+	return relative_entry(v, which, &msg) != HYP_NO_NODE;
 }
 
 long view_run_line(const ehv_view *v, long r)

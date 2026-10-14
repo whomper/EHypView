@@ -115,15 +115,19 @@ static void test_relative(void)
 	ehv_view v;
 
 	view_init(&v, NULL);
+	CHECK(!view_can(&v, VIEW_NEXT) && !view_can(&v, VIEW_HOME) && !view_can(&v, VIEW_BACK));
 	CHECK(view_open(&v, fx("other.hyp"), NULL, 0) == VIEW_OK);
 	CHECK(strcmp(page_name(&v), "Start") == 0);               /* @default */
+	/* what the Navigate menu enables */
+	CHECK(view_can(&v, VIEW_NEXT) && view_can(&v, VIEW_INDEX) && view_can(&v, VIEW_HOME));
+	CHECK(!view_can(&v, VIEW_PREV) && !view_can(&v, VIEW_HELP) && !view_can(&v, VIEW_BACK));
 	CHECK(view_relative(&v, VIEW_NEXT) == VIEW_OK && strcmp(page_name(&v), "Detail") == 0);
 	CHECK(view_relative(&v, VIEW_PREV) == VIEW_OK && strcmp(page_name(&v), "Start") == 0);
 	CHECK(view_relative(&v, VIEW_INDEX) == VIEW_OK && strcmp(page_name(&v), "Index") == 0);
 	CHECK(view_relative(&v, VIEW_HOME) == VIEW_OK && strcmp(page_name(&v), "Start") == 0);
 	CHECK(view_relative(&v, VIEW_HELP) == VIEW_ERROR && v.status[0] != '\0');
 	CHECK(view_relative(&v, VIEW_PREV) == VIEW_ERROR);
-	CHECK(v.nhist == 4);
+	CHECK(v.nhist == 4 && view_can(&v, VIEW_BACK));
 	view_free(&v);
 }
 

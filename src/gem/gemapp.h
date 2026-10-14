@@ -34,6 +34,7 @@ void viewer_show(const char *path, const char *node, unsigned short line);
 void viewer_top(void);                    /* bring the viewer to the front */
 short viewer_handle(void);                /* -1 when closed */
 void app_window_closed(void);             /* quits the program when none is left */
+int app_key(short kstate, short kreturn); /* ^O, ^L, ^W, ^Q: 1 when handled */
 
 /* libwin.c: the library window */
 void libwin_open(void);

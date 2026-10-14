@@ -20,12 +20,12 @@ BASIC = r"C:\FIXT\BASIC.HYP"
 OTHER = r"C:\FIXT\SUB\DEEP\OTHER.HYP"
 
 TAB, RETURN, BACKSPACE, HELP, UNDO, ESC = 15, 28, 14, 0x62, 0x61, 1
-RIGHT, Q, L, CTRL = 0x4D, 0x10, 0x26, 29
+RIGHT, Q, L, W, I, CTRL = 0x4D, 0x10, 0x26, 0x11, 0x17, 29
 IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
 # (keys to send, events expected afterwards, in order)
 STEPS = [
-    ([], ["page %s Main" % BASIC]),                    # DEFHYP from ST-GUIDE.INF
+    ([], ["menu shown", "page %s Main" % BASIC]),      # DEFHYP from ST-GUIDE.INF
     ([], ["index 5 guides"]),                          # background scan done
     ([TAB], ["select 2"]),                             # first link
     ([RETURN], ["page %s Second" % BASIC]),
@@ -44,6 +44,11 @@ STEPS = [
     (list("beside"), ['search "beside" 0']),
     ([RETURN], ['fulltext-start "beside"', 'fulltext "beside" 1']),
     ([RETURN], ["page %s Main" % IMAGES]),             # the full-text hit
+    ([("ctrl", I)], ["page %s Index" % IMAGES]),       # hcp made an index
+    # with the menu bar the program stays when its windows are closed
+    ([("ctrl", W)], ["closed viewer"]),
+    ([("ctrl", W)], ["closed library"]),
+    ([("ctrl", L)], ["library 4"]),
     ([("ctrl", Q)], ["quit"]),
 ]
 

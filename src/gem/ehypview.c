@@ -9,7 +9,9 @@
  *
  * The same program runs as an application (EHYPVIEW.APP/.PRG) and as a
  * desk accessory (EHYPVIEW.ACC; name it ST-GUIDE.ACC so that programs
- * looking for ST-Guide find it).
+ * looking for ST-Guide find it).  The application has a menu bar
+ * (menu.c); every menu item has a keyboard shortcut and both go through
+ * command().
  *
  * Copyright (C) the EHypView authors.  Free software under the GNU
  * General Public License, version 2 or (at your option) any later
@@ -26,6 +28,7 @@
 #include "scan.h"
 #include "view.h"
 #include "gemapp.h"
+#include "menu.h"
 
 #define VA_START   0x4711
 #define AV_STARTED 0x4738
@@ -43,6 +46,9 @@ short desk_x, desk_y, desk_w, desk_h;
 ehv_index *idx;
 static short menu_id = -1;
 static short win_h = -1;
+static ehv_menu menu;
+static short has_menu;
+static signed char menu_on[CMD_COUNT];   /* what menu_ienable last set */
 static char win_name[160], win_info[200];
 
 static ehv_view view;
@@ -713,7 +719,8 @@ static void open_window(void)
 
 void app_window_closed(void)
 {
-	if (!is_acc && win_h <= 0 && libwin_handle() <= 0)
+	/* with a menu bar, the program stays until Quit */
+	if (!is_acc && !has_menu && win_h <= 0 && libwin_handle() <= 0)
 		quit_now = 1;
 }
 
@@ -723,6 +730,7 @@ static void close_window(void)
 	{
 		wind_close(win_h);
 		wind_delete(win_h);
+		log_event("closed", "viewer", NULL);
 	}
 	win_h = -1;
 	app_window_closed();
@@ -826,9 +834,120 @@ static void open_file_selector(void)
 		memcpy(full, path, n);
 		strcpy(full + n, name);
 		graf_mouse(BUSYBEE, NULL);
-		after(view_open(&view, full, NULL, 0));
+		viewer_show(full, NULL, 0);
 		graf_mouse(ARROW, NULL);
 	}
+}
+
+static short top_window(void)
+{
+	short top, d;
+
+	wind_get(0, WF_TOP, &top, &d, &d, &d);
+	return top;
+}
+
+static void about(void)
+{
+	form_alert(1, "[1][EHypView|A hypertext viewer for ST-Guide|"
+		"files.  Free software under the|GNU General Public License.][ OK ]");
+}
+
+/* the VIEW_ target of a navigation command, or -1 */
+static int nav_target(int cmd)
+{
+	switch (cmd)
+	{
+	case CMD_BACK: return VIEW_BACK;
+	case CMD_HOME: return VIEW_HOME;
+	case CMD_INDEX: return VIEW_INDEX;
+	case CMD_TOC: return VIEW_TOC;
+	case CMD_HELP: return VIEW_HELP;
+	case CMD_PREV: return VIEW_PREV;
+	case CMD_NEXT: return VIEW_NEXT;
+	}
+	return -1;
+}
+
+/* a menu item or its shortcut */
+static void command(int cmd)
+{
+	int target = nav_target(cmd), rc;
+
+	switch (cmd)
+	{
+	case CMD_ABOUT:
+		about();
+		return;
+	case CMD_OPEN:
+		open_file_selector();
+		return;
+	case CMD_LIBRARY:
+		libwin_open();
+		return;
+	case CMD_CLOSE:
+		if (libwin_handle() > 0 && (top_window() == libwin_handle() || win_h <= 0))
+			libwin_close();
+		else
+			close_window();
+		return;
+	case CMD_QUIT:
+		if (is_acc)
+		{
+			libwin_close();
+			close_window();
+		} else
+		{
+			quit_now = 1;
+		}
+		return;
+	}
+	if (target < 0 || win_h <= 0)
+		return;
+	viewer_top();
+	graf_mouse(BUSYBEE, NULL);
+	rc = target == VIEW_BACK ? view_back(&view) : view_relative(&view, target);
+	graf_mouse(ARROW, NULL);
+	after(rc);
+}
+
+/* grey out what cannot be done now */
+static void update_menu(void)
+{
+	int c;
+
+	if (!has_menu)
+		return;
+	for (c = CMD_ABOUT; c < CMD_COUNT; c++)
+	{
+		int on = 1, target = nav_target(c);
+
+		if (c == CMD_CLOSE)
+			on = win_h > 0 || libwin_handle() > 0;
+		else if (target >= 0)
+			on = win_h > 0 && view_can(&view, target);
+		if (menu_on[c] != on)
+		{
+			menu_ienable(menu.tree, menu_object(&menu, c), (short) on);
+			menu_on[c] = (signed char) on;
+		}
+	}
+}
+
+/* shortcuts that work whichever window (or none) is on top */
+int app_key(short kstate, short kreturn)
+{
+	if (!(kstate & K_CTRL))
+		return 0;
+	switch (KEY_ASCII(kreturn))
+	{
+	case 0x11: command(CMD_QUIT); return 1;          /* ^Q */
+	case 0x15:                                        /* ^U */
+	case 0x17: command(CMD_CLOSE); return 1;          /* ^W */
+	case 0x0f: command(CMD_OPEN); return 1;           /* ^O */
+	case 0x0c: command(CMD_LIBRARY); return 1;        /* ^L */
+	}
+	return 0;
 }
 
 static void key(short kstate, short kreturn)
@@ -838,34 +957,21 @@ static void key(short kstate, short kreturn)
 	long rows = visible_lines();
 	int rc = -2;
 
+	if (ctrl && ascii != 0x09 && app_key(kstate, kreturn))
+		return;
 	switch (ascii)
 	{
-	case 0x11:                         /* ^Q */
-		quit_now = !is_acc;
-		if (is_acc)
-			close_window();
-		return;
-	case 0x15:                         /* ^U */
-	case 0x17:                         /* ^W */
-		close_window();
-		return;
-	case 0x0f:                         /* ^O */
-		open_file_selector();
-		return;
-	case 0x0c:                         /* ^L: the library */
-		libwin_open();
-		return;
 	case 0x09:                         /* ^I and Tab share 9: Tab has scan 0x0f */
 		if (scan != 0x0f)
 		{
-			rc = view_relative(&view, VIEW_INDEX);
-			break;
+			command(CMD_INDEX);
+			return;
 		}
 		select_link(shift ? -1 : 1);
 		return;
 	case 0x14:                         /* ^T */
-		rc = view_relative(&view, VIEW_TOC);
-		break;
+		command(CMD_TOC);
+		return;
 	case 0x0d:                         /* Return */
 		rc = view_follow_selected(&view);
 		break;
@@ -878,20 +984,20 @@ static void key(short kstate, short kreturn)
 		switch (scan)
 		{
 		case 0x61:                     /* Undo */
-			rc = view_back(&view);
-			break;
+			command(CMD_BACK);
+			return;
 		case 0x62:                     /* Help */
-			rc = view_relative(&view, VIEW_HELP);
-			break;
+			command(CMD_HELP);
+			return;
 		case 0x72:                     /* Enter */
 			rc = view_follow_selected(&view);
 			break;
 		case 0x73:                     /* ^Left */
-			rc = view_relative(&view, VIEW_PREV);
-			break;
+			command(CMD_PREV);
+			return;
 		case 0x74:                     /* ^Right */
-			rc = view_relative(&view, VIEW_NEXT);
-			break;
+			command(CMD_NEXT);
+			return;
 		case 0x48:                     /* Up */
 			scroll_to(shift ? view.top - rows : view.top - 1, view.left);
 			return;
@@ -906,13 +1012,10 @@ static void key(short kstate, short kreturn)
 			return;
 		case 0x47:                     /* Clr/Home */
 			if (ctrl)
-				rc = view_relative(&view, VIEW_HOME);
+				command(CMD_HOME);
 			else
-			{
 				scroll_to(shift ? max_top() : 0, 0);
-				return;
-			}
-			break;
+			return;
 		default:
 			return;
 		}
@@ -960,6 +1063,16 @@ static void message(short *msg)
 
 	switch (msg[0])
 	{
+	case MN_SELECTED:
+		if (has_menu)
+		{
+			int cmd = menu_command(&menu, msg[4]);
+
+			menu_tnormal(menu.tree, msg[3], 1);
+			log_event("menu", menu_command_name(cmd), NULL);
+			command(cmd);
+		}
+		break;
 	case WM_REDRAW:
 		if (msg[3] == win_h)
 			redraw(msg[4], msg[5], msg[6], msg[7]);
@@ -1201,7 +1314,7 @@ static void acc_heap(void)
 
 int main(void)
 {
-	short work_out[57], msg[8], d;
+	short work_out[57], msg[8], d, screen_w, screen_h;
 	AEVENT ev;
 	inf_file *inf;
 	int fts_busy = 0;
@@ -1218,6 +1331,8 @@ int main(void)
 	}
 	vdi_h = graf_handle(&cw, &ch, &d, &d);
 	vdi_h = v_opnvwk_(vdi_h, work_out);
+	screen_w = (short) (work_out[0] + 1);
+	screen_h = (short) (work_out[1] + 1);
 	ncolors = work_out[13];
 	vq_extnd(vdi_h, 1, work_out);
 	planes = work_out[4];
@@ -1234,6 +1349,13 @@ int main(void)
 	inf = read_inf();
 	start_index(inf);
 
+	if (!is_acc && menu_build(&menu, cw, ch, screen_w, screen_h) == 0)
+	{
+		memset(menu_on, -1, sizeof(menu_on));
+		has_menu = menu_bar(menu.tree, 1) != 0;
+		log_event("menu", has_menu ? "shown" : "refused", NULL);
+		update_menu();
+	}
 	if (!is_acc)
 	{
 		const char *args = command_line();
@@ -1259,8 +1381,7 @@ int main(void)
 		{
 			libwin_open();
 		}
-		if (win_h <= 0 && libwin_handle() <= 0)
-			quit_now = 1;
+		app_window_closed();
 	}
 	inf_free(inf);
 
@@ -1269,7 +1390,7 @@ int main(void)
 		short flags = MU_MESAG, which;
 		int busy = scanner != NULL || fts_busy;
 
-		if (win_h > 0 || libwin_handle() > 0)
+		if (win_h > 0 || libwin_handle() > 0 || has_menu)
 			flags |= MU_KEYBD | MU_BUTTON;
 		if (busy)
 			flags |= MU_TIMER;
@@ -1278,13 +1399,14 @@ int main(void)
 			message(msg);
 		if (which & MU_KEYBD)
 		{
-			short top, dd;
+			short top = top_window();
 
-			wind_get(0, WF_TOP, &top, &dd, &dd, &dd);
 			if (top == libwin_handle() && top > 0)
 				libwin_key(ev.kstate, ev.kreturn);
 			else if (win_h > 0)
 				key(ev.kstate, ev.kreturn);
+			else
+				app_key(ev.kstate, ev.kreturn);
 		}
 		if (which & MU_BUTTON)
 		{
@@ -1302,6 +1424,8 @@ int main(void)
 		}
 		else if (fts_busy == 0)
 			fts_busy = libwin_idle();
+		if (which & (MU_MESAG | MU_KEYBD | MU_BUTTON))
+			update_menu();
 	}
 
 	if (win_h > 0)
@@ -1310,6 +1434,9 @@ int main(void)
 		wind_delete(win_h);
 	}
 	log_event("quit", NULL, NULL);
+	if (has_menu)
+		menu_bar(menu.tree, 0);
+	menu_free(&menu);
 	if (libwin_handle() > 0)
 	{
 		wind_close(libwin_handle());
