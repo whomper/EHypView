@@ -137,7 +137,12 @@ programs asking for ST-Guide find it.
 | Control+Plus / Control+Minus (keypad, or `=` and `-`) | larger / smaller text |
 
 Desk > About EHypView shows the version, the number of hypertexts found
-and the font in use. The accessory has no menu bar. Its entry in the Desk menu opens the viewer,
+and the font in use. EMail, EFTP, ECal, EContact and ClaudeST open their
+guides in EHypView with the Help key when it runs (as an accessory, or
+as a program under MultiTOS or MagiC). If the program itself crashes
+(what would be 2 to 8 bombs), it says so, writes what happened to
+`CRASH.LOG` next to `EHYPVIEW.PRG` and quits, leaving the Atari running;
+under MiNT or MagiC, and in the accessory, there is no `CRASH.LOG`. The accessory has no menu bar. Its entry in the Desk menu opens the viewer,
 or the library when no page is shown.
 
 In the library: type to search, Up/Down to choose, Return or a click to
