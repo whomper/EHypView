@@ -1,20 +1,11 @@
 /*
- * EHypView - file system helpers.
- *
- * Uses POSIX dirent/stat, which mintlib provides on the Atari both with
- * and without MiNT.
+ * EHypView - path helpers.  The disk itself is reached through plat.h.
  */
-#define _POSIX_C_SOURCE 200809L
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#ifdef __MINT__
-#include <osbind.h>
-#endif
 #include "charset.h"
 #include "fsys.h"
+#include "plat.h"
 
 static char *dupstr(const char *s)
 {
@@ -24,65 +15,6 @@ static char *dupstr(const char *s)
 	if (d != NULL)
 		memcpy(d, s, n);
 	return d;
-}
-
-int fs_stat(const char *path, fs_info *info)
-{
-	struct stat st;
-
-	if (stat(path, &st) != 0)
-		return -1;
-	info->is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
-	info->size = (unsigned long) st.st_size;
-	info->mtime = (unsigned long) st.st_mtime;
-	info->dev = (unsigned long) st.st_dev;
-	info->ino = (unsigned long) st.st_ino;
-	return 0;
-}
-
-long fs_list_dir(const char *path, char ***names)
-{
-	DIR *dir;
-	struct dirent *de;
-	char **list = NULL;
-	long n = 0, cap = 0;
-
-	*names = NULL;
-	dir = opendir(path);
-	if (dir == NULL)
-		return -1;
-	while ((de = readdir(dir)) != NULL)
-	{
-		if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
-			continue;
-		if (n == cap)
-		{
-			long ncap = cap ? cap * 2 : 32;
-			char **p = realloc(list, (size_t) ncap * sizeof(char *));
-
-			if (p == NULL)
-				break;
-			list = p;
-			cap = ncap;
-		}
-		if ((list[n] = dupstr(de->d_name)) == NULL)
-			break;
-		n++;
-	}
-	closedir(dir);
-	*names = list;
-	return n;
-}
-
-void fs_free_list(char **names, long n)
-{
-	long i;
-
-	if (names == NULL)
-		return;
-	for (i = 0; i < n; i++)
-		free(names[i]);
-	free(names);
 }
 
 int fs_is_sep(char c)
@@ -100,11 +32,7 @@ char fs_sep_for(const char *path)
 	/* "C:" alone is an Atari path */
 	if (path[0] != '\0' && path[1] == ':')
 		return '\\';
-#ifdef __MINT__
-	return '\\';
-#else
-	return '/';
-#endif
+	return pf_drives() != 0 ? '\\' : '/';
 }
 
 const char *fs_basename(const char *path)
@@ -166,16 +94,16 @@ char *fs_find_nocase(const char *dir, const char *name)
 	char **names;
 	long n, i;
 	char *found = NULL;
-	fs_info info;
+	pf_info info;
 
 	/* the exact spelling is the common case: one stat, no listing */
 	found = fs_join(dir, name);
-	if (found != NULL && fs_stat(found, &info) == 0 && !info.is_dir)
+	if (found != NULL && pf_stat(found, &info) == 0 && !info.is_dir)
 		return found;
 	free(found);
 	found = NULL;
 
-	n = fs_list_dir(dir, &names);
+	n = pf_list_dir(dir, &names);
 	for (i = 0; i < n; i++)
 	{
 		if (atari_casecmp(names[i], name) == 0)
@@ -184,7 +112,7 @@ char *fs_find_nocase(const char *dir, const char *name)
 			break;
 		}
 	}
-	fs_free_list(names, n);
+	pf_free_list(names, n);
 	return found;
 }
 
@@ -195,12 +123,13 @@ unsigned int fs_expand_root(const char *pattern, char ***out)
 	*out = NULL;
 	if (pattern[0] == '*' && pattern[1] == ':')
 	{
-#ifdef __MINT__
 		/* every drive from C: on; A: and B: are floppies */
-		unsigned long map = (unsigned long) Drvmap();
+		unsigned long map = pf_drives();
 		unsigned int n = 0;
 		int d;
 
+		if (map == 0)
+			return 0;
 		list = calloc(32, sizeof(char *));
 		if (list == NULL)
 			return 0;
@@ -223,9 +152,6 @@ unsigned int fs_expand_root(const char *pattern, char ***out)
 		}
 		*out = list;
 		return n;
-#else
-		return 0;
-#endif
 	}
 	list = calloc(1, sizeof(char *));
 	if (list == NULL || (list[0] = dupstr(pattern)) == NULL)

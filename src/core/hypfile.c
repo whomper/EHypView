@@ -16,10 +16,12 @@
 #include "charset.h"
 #include "hypfile.h"
 #include "lh5.h"
+#include "plat.h"
 
 #define HEADER_SIZE   12
 #define ENTRY_FIXED   14
 #define MAX_OBJECT    (16UL * 1024UL * 1024UL)   /* sanity limit */
+#define MAX_EXT_HEADERS 65536UL                   /* sanity limit */
 
 #define EXT_EOF       0
 #define EXT_DATABASE  1
@@ -71,43 +73,26 @@ const char *hyp_strerror(int err)
 	return "unknown error";
 }
 
-/* read a counted string from an extended header, always NUL-terminated */
-static char *read_ext_string(FILE *fp, unsigned int len)
-{
-	char *s = malloc(len + 1);
-
-	if (s == NULL)
-		return NULL;
-	if (len > 0 && fread(s, 1, len, fp) != len)
-	{
-		free(s);
-		return NULL;
-	}
-	s[len] = '\0';
-	return s;
-}
-
 /*
- * Extended headers sit between the index and the first object.  Old
- * files have none, so never read past `limit` (the start of the data).
+ * Extended headers sit between the index and the first object; `p` holds
+ * exactly that region.  Old files have none.
  */
-static int read_ext_headers(hyp_doc *doc, FILE *fp, unsigned long pos, unsigned long limit)
+static int parse_ext_headers(hyp_doc *doc, const unsigned char *p, unsigned long size)
 {
-	for (;;)
+	unsigned long pos = 0;
+
+	while (pos + 4 <= size)
 	{
-		unsigned char h[4];
-		unsigned int id, len;
+		unsigned int id = be16(p + pos);
+		unsigned int len = be16(p + pos + 2);
+		const unsigned char *data = p + pos + 4;
 		char **target = NULL;
 
-		if (pos + 4 > limit || fread(h, 1, 4, fp) != 4)
-			return HYP_OK;
-		id = be16(h);
-		len = be16(h + 2);
 		if (id == EXT_EOF)
-			return HYP_OK;
+			break;
 		pos += 4;
-		if (len > limit - pos)
-			return HYP_OK;           /* not a header after all */
+		if (len > size - pos)
+			break;                   /* not a header after all */
 		pos += len;
 
 		switch (id)
@@ -127,17 +112,12 @@ static int read_ext_headers(hyp_doc *doc, FILE *fp, unsigned long pos, unsigned 
 			if (len == 2)
 			{
 				/* HCP only fills the first byte, so read little-endian */
-				unsigned char v[2];
-				unsigned short val;
+				unsigned short val = (unsigned short) (data[0] | (data[1] << 8));
 
-				if (fread(v, 1, 2, fp) != 2)
-					return HYP_ERR_FORMAT;
-				val = (unsigned short) (v[0] | (v[1] << 8));
 				if (id == EXT_FLAGS)
 					doc->stg_flags = val;
 				else
 					doc->width = val;
-				continue;
 			}
 			break;
 		default:
@@ -146,17 +126,17 @@ static int read_ext_headers(hyp_doc *doc, FILE *fp, unsigned long pos, unsigned 
 
 		if (target != NULL)
 		{
-			char *s = read_ext_string(fp, len);
+			char *str = malloc(len + 1);
 
-			if (s == NULL)
-				return HYP_ERR_FORMAT;
+			if (str == NULL)
+				return HYP_ERR_MEMORY;
+			memcpy(str, data, len);
+			str[len] = '\0';
 			free(*target);           /* a repeated header wins */
-			*target = s;
-		} else if (fseek(fp, (long) len, SEEK_CUR) != 0)
-		{
-			return HYP_ERR_FORMAT;
+			*target = str;
 		}
 	}
+	return HYP_OK;
 }
 
 static int parse_index(hyp_doc *doc, unsigned char *tab, unsigned long tabsize,
@@ -227,7 +207,8 @@ static int parse_index(hyp_doc *doc, unsigned char *tab, unsigned long tabsize,
 
 hyp_doc *hyp_open(const char *path, int *err)
 {
-	FILE *fp;
+	int h;
+	pf_info info;
 	hyp_doc *doc;
 	unsigned char head[HEADER_SIZE];
 	unsigned long tabsize;
@@ -236,8 +217,7 @@ hyp_doc *hyp_open(const char *path, int *err)
 
 	if (err != NULL)
 		*err = HYP_OK;
-	fp = fopen(path, "rb");
-	if (fp == NULL)
+	if (pf_stat(path, &info) != 0 || info.is_dir || (h = pf_open(path, PF_READ)) < 0)
 	{
 		if (err != NULL)
 			*err = HYP_ERR_OPEN;
@@ -250,16 +230,9 @@ hyp_doc *hyp_open(const char *path, int *err)
 		rc = HYP_ERR_MEMORY;
 		goto fail;
 	}
+	doc->filesize = info.size;
 
-	if (fseek(fp, 0L, SEEK_END) != 0)
-	{
-		rc = HYP_ERR_OPEN;
-		goto fail;
-	}
-	doc->filesize = (unsigned long) ftell(fp);
-	rewind(fp);
-
-	if (fread(head, 1, HEADER_SIZE, fp) != HEADER_SIZE ||
+	if (doc->filesize < HEADER_SIZE || pf_read_at(h, 0, head, HEADER_SIZE) != 0 ||
 		memcmp(head, "HDOC", 4) != 0)
 		goto fail;
 	tabsize = be32(head + 4);
@@ -275,7 +248,7 @@ hyp_doc *hyp_open(const char *path, int *err)
 		rc = HYP_ERR_MEMORY;
 		goto fail;
 	}
-	if (fread(doc->names, 1, tabsize, fp) != tabsize)
+	if (pf_read_at(h, HEADER_SIZE, doc->names, tabsize) != 0)
 		goto fail;
 	rc = parse_index(doc, (unsigned char *) doc->names, tabsize, count);
 	if (rc != HYP_OK)
@@ -284,21 +257,32 @@ hyp_doc *hyp_open(const char *path, int *err)
 		unsigned long start = HEADER_SIZE + tabsize;
 		unsigned long limit = doc->filesize;
 		unsigned short i;
+		unsigned char *ext;
 
 		/* data begins at the lowest object offset */
 		for (i = 0; i < count; i++)
 			if (doc->entries[i].offset >= start && doc->entries[i].offset < limit)
 				limit = doc->entries[i].offset;
-		rc = read_ext_headers(doc, fp, start, limit);
+		if (limit - start > MAX_EXT_HEADERS)
+			limit = start + MAX_EXT_HEADERS;
+		ext = malloc(limit - start + 1);
+		if (ext == NULL)
+		{
+			rc = HYP_ERR_MEMORY;
+			goto fail;
+		}
+		rc = pf_read_at(h, start, ext, limit - start) != 0 ? HYP_ERR_FORMAT
+			: parse_ext_headers(doc, ext, limit - start);
+		free(ext);
 		if (rc != HYP_OK)
 			goto fail;
 	}
 
-	fclose(fp);
+	pf_close(h);
 	return doc;
 
 fail:
-	fclose(fp);
+	pf_close(h);
 	hyp_close(doc);
 	if (err != NULL)
 		*err = rc;
@@ -359,7 +343,7 @@ unsigned short hyp_default_node(const hyp_doc *doc)
 int hyp_load(hyp_doc *doc, unsigned short num, unsigned char **data, unsigned long *size)
 {
 	const hyp_entry *e;
-	FILE *fp;
+	int h;
 	unsigned char *packed = NULL, *out;
 	int rc = HYP_OK;
 
@@ -375,8 +359,8 @@ int hyp_load(hyp_doc *doc, unsigned short num, unsigned char **data, unsigned lo
 	if (out == NULL)
 		return HYP_ERR_MEMORY;
 
-	fp = fopen(doc->path, "rb");
-	if (fp == NULL)
+	h = pf_open(doc->path, PF_READ);
+	if (h < 0)
 	{
 		free(out);
 		return HYP_ERR_OPEN;
@@ -385,22 +369,20 @@ int hyp_load(hyp_doc *doc, unsigned short num, unsigned char **data, unsigned lo
 	if (e->packed == e->size)
 	{
 		/* stored uncompressed */
-		if (fseek(fp, (long) e->offset, SEEK_SET) != 0 ||
-			fread(out, 1, e->size, fp) != e->size)
+		if (pf_read_at(h, e->offset, out, e->size) != 0)
 			rc = HYP_ERR_OPEN;
 	} else
 	{
 		packed = malloc(e->packed ? e->packed : 1);
 		if (packed == NULL)
 			rc = HYP_ERR_MEMORY;
-		else if (fseek(fp, (long) e->offset, SEEK_SET) != 0 ||
-			fread(packed, 1, e->packed, fp) != e->packed)
+		else if (pf_read_at(h, e->offset, packed, e->packed) != 0)
 			rc = HYP_ERR_OPEN;
 		else if (lh5_decode(packed, e->packed, out, e->size) != 0)
 			rc = HYP_ERR_DECODE;
 		free(packed);
 	}
-	fclose(fp);
+	pf_close(h);
 
 	if (rc != HYP_OK)
 	{

@@ -6,30 +6,10 @@
  * everywhere and new components are joined with the separator the base
  * path already uses.
  *
- * Directories are always read completely and closed again before the
- * caller sees the names: an accessory must not keep directory handles
- * (or a DTA) across AES calls.
+ * The disk itself (stat, folder listings) is reached through plat.h.
  */
 #ifndef EHV_FSYS_H
 #define EHV_FSYS_H
-
-typedef struct {
-	int is_dir;
-	unsigned long size;
-	unsigned long mtime;
-	unsigned long dev, ino;      /* ino is 0 where the OS has no inodes */
-} fs_info;
-
-/* 0 on success, -1 if the path does not exist */
-int fs_stat(const char *path, fs_info *info);
-
-/*
- * Read the names in a directory (without "." and "..").  Returns the
- * number of names and stores a malloc'ed array of malloc'ed strings in
- * *names, or returns -1 if the directory cannot be read.
- */
-long fs_list_dir(const char *path, char ***names);
-void fs_free_list(char **names, long n);
 
 int fs_is_sep(char c);
 
@@ -59,7 +39,8 @@ char *fs_find_nocase(const char *dir, const char *name);
 
 /*
  * Expand a root pattern.  "*:\X" stands for X on every hard disk drive
- * (C: to Z:) on the Atari; on other systems it expands to nothing.
+ * (C: to Z:) on the Atari; on systems without drives it expands to
+ * nothing.
  * Anything else is returned unchanged.  Returns the number of paths in
  * the malloc'ed array *out.
  */

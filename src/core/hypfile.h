@@ -11,8 +11,6 @@
 #ifndef EHV_HYPFILE_H
 #define EHV_HYPFILE_H
 
-#include <stdio.h>
-
 /* index entry types */
 #define HYP_NODE_INTERNAL   0   /* @node                       */
 #define HYP_NODE_POPUP      1   /* @pnode                      */

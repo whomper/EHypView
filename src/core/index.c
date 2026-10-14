@@ -7,6 +7,7 @@
 #include "charset.h"
 #include "fsys.h"
 #include "index.h"
+#include "plat.h"
 
 ehv_index *ehv_index_new(void)
 {
@@ -658,25 +659,61 @@ unsigned long ehv_index_suggest_guides(const ehv_index *idx, const char *file,
 
 #define CACHE_MAGIC "EHYPVIEW-INDEX"
 
-static void put_field(FILE *fp, const char *s)
+/* the cache text is built in memory and written in one go */
+typedef struct {
+	char *data;
+	unsigned long len, cap;
+	int failed;
+} outbuf;
+
+static void out_bytes(outbuf *o, const char *s, unsigned long n)
 {
-	putc('\t', fp);
+	if (o->failed)
+		return;
+	if (o->len + n + 1 > o->cap)
+	{
+		unsigned long ncap = o->cap ? o->cap : 16384;
+		char *p;
+
+		while (ncap < o->len + n + 1)
+			ncap *= 2;
+		p = realloc(o->data, ncap);
+		if (p == NULL)
+		{
+			o->failed = 1;
+			return;
+		}
+		o->data = p;
+		o->cap = ncap;
+	}
+	memcpy(o->data + o->len, s, n);
+	o->len += n;
+}
+
+static void out_str(outbuf *o, const char *s)
+{
+	out_bytes(o, s, strlen(s));
+}
+
+static void put_field(outbuf *o, const char *s)
+{
+	out_bytes(o, "\t", 1);
 	if (s == NULL)
 		return;
 	for (; *s != '\0'; s++)
 	{
 		switch (*s)
 		{
-		case '\\': fputs("\\\\", fp); break;
-		case '\t': fputs("\\t", fp); break;
-		case '\n': fputs("\\n", fp); break;
-		case '\r': fputs("\\r", fp); break;
-		default:   putc(*s, fp); break;
+		case '\\': out_bytes(o, "\\\\", 2); break;
+		case '\t': out_bytes(o, "\\t", 2); break;
+		case '\n': out_bytes(o, "\\n", 2); break;
+		case '\r': out_bytes(o, "\\r", 2); break;
+		default:   out_bytes(o, s, 1); break;
 		}
 	}
 }
 
-static void put_meta(FILE *fp, char code, const char *value)
+static void put_meta(outbuf *o, char code, const char *value)
 {
 	char c[2];
 
@@ -684,106 +721,76 @@ static void put_meta(FILE *fp, char code, const char *value)
 		return;
 	c[0] = code;
 	c[1] = '\0';
-	fputs("M", fp);
-	put_field(fp, c);
-	put_field(fp, value);
-	putc('\n', fp);
+	out_str(o, "M");
+	put_field(o, c);
+	put_field(o, value);
+	out_str(o, "\n");
 }
 
 int ehv_index_save(const ehv_index *idx, const char *path)
 {
-	char *tmp = malloc(strlen(path) + 5);
-	FILE *fp;
+	outbuf o;
+	char num[128];
 	unsigned long g, i, nsyms = 0;
-	int ok;
+	int rc;
 
-	if (tmp == NULL)
-		return -1;
-	strcpy(tmp, path);
-	strcat(tmp, ".tmp");
-	fp = fopen(tmp, "wb");
-	if (fp == NULL)
-	{
-		free(tmp);
-		return -1;
-	}
-	fprintf(fp, "%s %d\n", CACHE_MAGIC, EHV_CACHE_VERSION);
+	memset(&o, 0, sizeof(o));
+	sprintf(num, "%s %d\n", CACHE_MAGIC, EHV_CACHE_VERSION);
+	out_str(&o, num);
 	for (g = 0; g < idx->nguides; g++)
 	{
 		const ehv_guide *gd = &idx->guides[g];
 
-		fprintf(fp, "G\t%lu\t%lu\t%u\t%d\t%u\t%u\t%u\t%lu\t%lu",
+		sprintf(num, "G\t%lu\t%lu\t%u\t%d\t%u\t%u\t%u\t%lu\t%lu",
 			gd->size, gd->mtime, gd->root, gd->error, gd->os, gd->width, gd->stg_flags,
 			gd->ref_size, gd->ref_mtime);
-		put_field(fp, gd->path);
-		put_field(fp, gd->ref_path ? gd->ref_path : "");
-		putc('\n', fp);
-		put_meta(fp, 'D', gd->database);
-		put_meta(fp, 'S', gd->subject);
-		put_meta(fp, 'A', gd->author);
-		put_meta(fp, 'V', gd->version);
-		put_meta(fp, 'H', gd->hostname);
-		put_meta(fp, 'F', gd->default_node);
-		put_meta(fp, 'P', gd->help_node);
-		put_meta(fp, 'C', gd->charset);
-		put_meta(fp, 'L', gd->language);
+		out_str(&o, num);
+		put_field(&o, gd->path);
+		put_field(&o, gd->ref_path ? gd->ref_path : "");
+		out_str(&o, "\n");
+		put_meta(&o, 'D', gd->database);
+		put_meta(&o, 'S', gd->subject);
+		put_meta(&o, 'A', gd->author);
+		put_meta(&o, 'V', gd->version);
+		put_meta(&o, 'H', gd->hostname);
+		put_meta(&o, 'F', gd->default_node);
+		put_meta(&o, 'P', gd->help_node);
+		put_meta(&o, 'C', gd->charset);
+		put_meta(&o, 'L', gd->language);
 		for (i = gd->first_sym; i < gd->first_sym + gd->nsyms; i++)
 		{
-			const ehv_sym *s = &idx->syms[i];
+			const ehv_sym *sy = &idx->syms[i];
 
-			if (s->from_ref == 2)
+			if (sy->from_ref == 2)
 				continue;
-			fprintf(fp, "N\t%u\t%u\t%u", s->kind, s->line, s->from_ref);
-			put_field(fp, s->name);
-			put_field(fp, s->node == s->name ? "" : s->node);
-			putc('\n', fp);
+			sprintf(num, "N\t%u\t%u\t%u", sy->kind, sy->line, sy->from_ref);
+			out_str(&o, num);
+			put_field(&o, sy->name);
+			put_field(&o, sy->node == sy->name ? "" : sy->node);
+			out_str(&o, "\n");
 			nsyms++;
 		}
 	}
-	fprintf(fp, "END\t%lu\t%lu\n", idx->nguides, nsyms);
-	ok = !ferror(fp);
-	if (fclose(fp) != 0)
-		ok = 0;
-	if (ok)
-	{
-		/* TOS cannot rename over an existing file */
-		remove(path);
-		ok = rename(tmp, path) == 0;
-	}
-	if (!ok)
-		remove(tmp);
-	free(tmp);
-	return ok ? 0 : -1;
+	sprintf(num, "END\t%lu\t%lu\n", idx->nguides, nsyms);
+	out_str(&o, num);
+	rc = o.failed ? -1 : pf_save(path, o.data, o.len);
+	free(o.data);
+	return rc;
 }
 
-/* read one line into a growing buffer; NULL at end of file */
-static char *read_line(FILE *fp, char **buf, size_t *cap)
+/* next line of a loaded file, terminated in place; NULL at the end */
+static char *next_line(char **pos, char *end)
 {
-	size_t n = 0;
-	int c;
+	char *line = *pos, *nl;
 
-	while ((c = getc(fp)) != EOF && c != '\n')
-	{
-		if (n + 1 >= *cap)
-		{
-			size_t ncap = *cap ? *cap * 2 : 256;
-			char *p = realloc(*buf, ncap);
-
-			if (p == NULL)
-				return NULL;
-			*buf = p;
-			*cap = ncap;
-		}
-		(*buf)[n++] = (char) c;
-	}
-	if (c == EOF && n == 0)
+	if (line >= end)
 		return NULL;
-	if (*buf == NULL && (*buf = malloc(1)) != NULL)
-		*cap = 1;
-	if (*buf == NULL)
-		return NULL;
-	(*buf)[n] = '\0';
-	return *buf;
+	nl = memchr(line, '\n', (size_t) (end - line));
+	if (nl == NULL)
+		nl = end;
+	*nl = '\0';
+	*pos = nl + 1;
+	return line;
 }
 
 /* split a line at tabs in place and unescape; returns field count */
@@ -822,29 +829,30 @@ static int split_fields(char *line, char **fields, int max)
 
 ehv_index *ehv_index_load(const char *path)
 {
-	FILE *fp = fopen(path, "rb");
+	unsigned long size;
+	char *buf = pf_load(path, &size), *pos, *end, *line;
 	ehv_index *idx;
-	char *buf = NULL, *line;
-	size_t cap = 0;
 	char *f[16];
 	long cur = -1;
-	int done = 0, version = 0;
+	int done = 0;
 	char magic[32];
 
-	if (fp == NULL)
+	if (buf == NULL)
 		return NULL;
 	idx = ehv_index_new();
 	if (idx == NULL)
 	{
-		fclose(fp);
+		free(buf);
 		return NULL;
 	}
-	line = read_line(fp, &buf, &cap);
-	if (line == NULL || sscanf(line, "%31s %d", magic, &version) != 2 ||
-		strcmp(magic, CACHE_MAGIC) != 0 || version != EHV_CACHE_VERSION)
+	pos = buf;
+	end = buf + size;
+	line = next_line(&pos, end);
+	sprintf(magic, "%s %d", CACHE_MAGIC, EHV_CACHE_VERSION);
+	if (line == NULL || strcmp(line, magic) != 0)
 		goto fail;
 
-	while (!done && (line = read_line(fp, &buf, &cap)) != NULL)
+	while (!done && (line = next_line(&pos, end)) != NULL)
 	{
 		int n = split_fields(line, f, 16);
 
@@ -910,12 +918,10 @@ ehv_index *ehv_index_load(const char *path)
 	if (!done || ehv_index_finish(idx) < 0)
 		goto fail;
 	free(buf);
-	fclose(fp);
 	return idx;
 
 fail:
 	free(buf);
-	fclose(fp);
 	ehv_index_free(idx);
 	return NULL;
 }

@@ -24,3 +24,18 @@ jobs:
           sudo apt-get install -y gcc-m68k-linux-gnu qemu-user-static
       - name: Big-endian 68020 tests under QEMU
         run: make m68k-test
+
+  atari:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install m68k cross compiler and Hatari
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu hatari
+      - name: Build the Atari programs and run them in Hatari (Falcon, EmuTOS)
+        run: make hatari-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atari-programs
+          path: build/hatari/
