@@ -26,6 +26,7 @@
 #define VIEW_INDEX   3           /* the page called "Index"      */
 #define VIEW_HELP    4           /* @help page                   */
 #define VIEW_HOME    5           /* default page                 */
+#define VIEW_BACK    6           /* view_can() only: the history */
 
 typedef struct {
 	char *path;
@@ -70,6 +71,9 @@ int view_back(ehv_view *v);
 
 /* VIEW_NEXT, VIEW_PREV, ... */
 int view_relative(ehv_view *v, int which);
+
+/* nonzero when view_relative(which), or view_back for VIEW_BACK, would work */
+int view_can(const ehv_view *v, int which);
 
 /*
  * Select the next (dir > 0) or previous link.  The search starts at the

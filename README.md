@@ -24,6 +24,10 @@ A new, modern viewer for **ST-Guide hypertexts** (`.HYP`) on the Atari
 - history, help requests (`VA_START`, `AC_HELP`)
 - it opens `DEFHYP` from an existing `ST-GUIDE.INF`
 - a background index scan with cache
+- a menu bar (Desk, File, Navigate) in the application; every item has a
+  keyboard shortcut, and items that can't be used right now are greyed out.
+  With the menu bar the program keeps running when its windows are closed,
+  until you choose Quit.
 
 **The library window** (Control+L, and what you see when no page was
 asked for) lists every hypertext found, grouped by subject, with one search
@@ -33,7 +37,7 @@ box:
 - Return on "Search the full text" searches every page of every hypertext
   in the background; ST-Guide needed the separate HypFind tool for that.
 
-Still to come: a menu bar, several viewer windows and tabs, font choice,
+Still to come: several viewer windows and tabs, font choice,
 and pop-ups as small windows (for now they open as pages). See [docs/DESIGN.md](docs/DESIGN.md) for the
 assessment of ST-Guide, the goals and the roadmap, and
 [docs/FORMAT.md](docs/FORMAT.md) for the file formats.
@@ -101,7 +105,10 @@ programs asking for ST-Guide find it.
 | Clr/Home, Shift+Clr/Home | top / bottom |
 | Control+L | the library (and back to the viewer) |
 | Control+O | open a hypertext |
-| Control+W or Control+U / Control+Q | close / quit |
+| Control+W or Control+U / Control+Q | close the top window / quit |
+
+The accessory has no menu bar. Its entry in the Desk menu opens the viewer,
+or the library when no page is shown.
 
 In the library: type to search, Up/Down to choose, Return or a click to
 open (or to start the full-text search), Esc to clear the search,
