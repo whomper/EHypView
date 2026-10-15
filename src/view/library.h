@@ -8,13 +8,16 @@
  * page names, aliases and keywords that match (exact, then starting
  * with, then containing, then similar), the hypertexts whose title
  * matches, and an action to search the full text, whose hits follow
- * as the search runs.  No GEM here; src/gem/libwin.c draws it.
+ * as the search runs.  Bookmarks come first, all of them with an empty
+ * search, the ones whose title or page matches while typing.  No GEM
+ * here; src/gem/libwin.c draws it.
  */
 #ifndef EHV_LIBRARY_H
 #define EHV_LIBRARY_H
 
 #include "index.h"
 #include "search.h"
+#include "bookmark.h"
 
 /* row kinds */
 #define LIB_GROUP   0     /* heading: subject, "Pages", ...    */
@@ -23,17 +26,19 @@
 #define LIB_ACTION  3     /* "Search the full text for ..."     */
 #define LIB_TEXT    4     /* a full-text hit                    */
 #define LIB_NOTE    5     /* a message                          */
+#define LIB_BOOKMARK 6    /* a bookmark                         */
 
 #define LIB_QUERY_MAX 48
 
 typedef struct {
 	unsigned char kind;
-	unsigned long ref;    /* GUIDE: guide; PAGE: symbol; TEXT: hit */
+	unsigned long ref;    /* GUIDE: guide; PAGE: symbol; TEXT: hit; BOOKMARK: its index */
 	const char *text;     /* GROUP: heading (static or index string) */
 } lib_row;
 
 typedef struct {
 	const ehv_index *idx;
+	const ehv_bookmarks *bm;    /* may be NULL; not owned       */
 	char query[LIB_QUERY_MAX];
 	lib_row *rows;
 	unsigned long nrows, cap;
@@ -49,6 +54,12 @@ void lib_free(ehv_library *lib);
 
 /* a new index (after a scan): rebuilds, stops a full-text search */
 int lib_set_index(ehv_library *lib, const ehv_index *idx);
+
+/* new bookmarks (added or removed): rebuilds */
+int lib_set_bookmarks(ehv_library *lib, const ehv_bookmarks *bm);
+
+/* the bookmark the selected row is, or -1 */
+int lib_selected_bookmark(const ehv_library *lib);
 
 /* change the search text; rebuilds the list */
 int lib_set_query(ehv_library *lib, const char *query);

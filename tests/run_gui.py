@@ -30,6 +30,7 @@ OTHER = r"C:\FIXT\SUB\DEEP\OTHER.HYP"
 TAB, RETURN, BACKSPACE, HELP, UNDO, ESC = 15, 28, 14, 0x62, 0x61, 1
 RIGHT, LEFT, Q, L, W, I, F, CTRL, SHIFT = 0x4D, 0x4B, 0x10, 0x26, 0x11, 0x17, 0x21, 29, 0x2A
 MINUS, EQUALS = 0x0C, 0x0D
+N, D, DELETE = 0x31, 0x20, 0x53
 IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
 # (keys to send, events expected afterwards, in order)
@@ -63,19 +64,32 @@ STEPS = [
     ([RETURN], ['fulltext-start "beside"', 'fulltext "beside" 1']),
     ([RETURN], ["page %s Main" % IMAGES]),             # the full-text hit
     ([("ctrl", I)], ["page %s Index" % IMAGES]),       # hcp made an index
+    # several windows: the page in a new one; a bookmark of it
+    ([("ctrl", N)], ["window new 2", "page %s Index" % IMAGES]),
+    ([("ctrl", D)], ["bookmark added *"]),
+    ([("ctrl", D)], ["status This page is bookmarked already."]),
+    ([("ctrl", W)], ["closed viewer"]),                # the first window stays
     # with the menu bar the program stays when its windows are closed
     ([("ctrl", W)], ["closed viewer"]),
     ([("ctrl", W)], ["closed library"]),
     ([("ctrl", L)], ["library 4"]),
+    ([ESC], ['search "" 4']),                          # the search typed before, cleared:
+    ([RETURN], ["page %s Index" % IMAGES]),            # the bookmark, first in the library
+    ([("ctrl", L)], ["library 4"]),
+    ([DELETE], ["bookmark removed *"]),                # Delete removes it
     ([("ctrl", Q)], ["quit"]),
 ]
 
 # started without DEFHYP: the library opens, fills when the index is done
 # (and with the 8 x 8 font kept in EHYPVIEW.INF)
+# (and with the 8 x 8 font and a bookmark kept in EHYPVIEW.INF)
 LIBRARY_START = [
     ([], ["font System font 8", "library 0", "index 5 guides"]),
     (list("zweite"), ['search "zweite" 1']),
     ([RETURN], ["page %s Second" % BASIC]),
+    ([("ctrl", L)], ["library 4"]),
+    ([ESC], ['search "" 4']),
+    ([RETURN], ["page %s Detail" % OTHER]),            # the bookmark, first in the library
     ([("ctrl", Q)], ["quit"]),
 ]
 
@@ -223,6 +237,10 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False):
             for k in keys:
                 if isinstance(k, tuple) and k[0] in ("click", "rclick"):
                     mouse.click(k[1], k[2], "1" if k[0] == "click" else "3")
+                elif isinstance(k, tuple) and k[0] == "sclick":       # with Shift held
+                    send("hatari-event keydown 0x%x" % SHIFT)
+                    mouse.click(k[1], k[2])
+                    send("hatari-event keyup 0x%x" % SHIFT)
                 elif isinstance(k, tuple) and k[0] == "dclick":
                     mouse.move(k[1], k[2])
                     mouse.xdo("click", "--repeat", "2", "--delay", "80", "1")
@@ -233,7 +251,7 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False):
                     mouse.click(k[1], k[2])                # the title drops the menu down
                     mouse.click(k[3], k[4])                # the item
                 elif isinstance(k, tuple):
-                    mods = [CTRL] + ([SHIFT] if k[0] == "ctrl+shift" else [])
+                    mods = [SHIFT] if k[0] == "shift" else [CTRL] + ([SHIFT] if k[0] == "ctrl+shift" else [])
                     for m in mods:
                         send("hatari-event keydown 0x%x" % m)
                     send("hatari-event keypress 0x%x" % k[1])
@@ -283,7 +301,7 @@ def copy_dir(name, inf, settings=None):
 
 # with the mouse (8x16 system font, Falcon VGA): a link, the right
 # button's menu, and each menu (title x, y, then the item's x, y)
-DESK, FILE, EDIT, NAV, VIEW = (40, 9), (88, 9), (136, 9), (200, 9), (264, 9)
+DESK, FILE, EDIT, VIEW, NAV, BOOK = (40, 9), (88, 9), (136, 9), (184, 9), (248, 9), (332, 9)
 
 
 def item(title, n):
@@ -302,17 +320,31 @@ MOUSE_STEPS = [
     ([("click", 200, 175)], ["popup-link Pop", "page %s Second" % BASIC]),  # goes there
     ([BACKSPACE], ["page %s Main" % BASIC]),
     ([("rclick", 300, 150)], ["menu popup"]),               # and About last (rows of 18)
-    ([("click", 330, 359)], ["menu about", "dialog about *"]),
+    ([("click", 330, 395)], ["menu about", "dialog about *"]),
     ([("click", 320, 300)], []),                            # a click closes it
     ([item(DESK, 0)], ["menu about", "dialog about *"]),    # the About box
     ([("click", 320, 300)], []),                            # a click closes it
+    # several windows: Shift+click opens the link in a new one
+    ([("sclick", 120, 118)], ["window new 2", "page %s Second" % BASIC]),
+    ([item(BOOK, 0)], ["menu bookmark-add", "bookmark added *"]),
+    ([("ctrl", W)], ["closed viewer"]),
+    ([item(BOOK, 3)], ["menu bookmark", "page %s Second" % BASIC]),   # in the first window
+    ([item(BOOK, 1)], ["menu bookmark-remove", "bookmark removed *"]),
+    ([BACKSPACE], ["page %s Main" % BASIC]),
+    ([("rclick", 120, 118)], ["menu popup"]),               # on a link, the menu has
+    ([("click", 150, 147)], ["menu link-window", "window new 2", "page %s Second" % BASIC]),
+    ([("ctrl", W)], ["closed viewer"]),
     ([item(VIEW, 0)], ["menu font", "dialog font"]),        # the font selector
     ([ESC], []),
     ([item(EDIT, 1)], ["menu copy", "copy page *"]),       # the page to the clipboard
-    ([item(NAV, 5)], ["menu help", "page %s Help" % BASIC]),
+    ([item(NAV, 6)], ["menu help", "page %s Help" % BASIC]),
     ([item(NAV, 0)], ["menu back", "page %s Main" % BASIC]),
-    ([item(FILE, 1)], ["menu library", "library 4"]),
-    ([item(FILE, 5)], ["menu quit", "quit"]),
+    ([item(FILE, 2)], ["menu library", "library 4"]),
+    # a "quit" link with two windows open closes just its own
+    ([("ctrl", N)], ["window new 2", "page %s Main" % BASIC]),
+    ([HELP], ["page %s Help" % BASIC]),
+    ([TAB, RETURN], ["select *", "closed viewer"]),
+    ([item(FILE, 6)], ["menu quit", "quit"]),
 ]
 
 
@@ -375,10 +407,12 @@ def main():
     d = copy_dir("viewer", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
     ok = run_scenario("viewer", d, STEPS)
     if ok:
-        ok = check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FONT=System font", "POINT=8", "FOLDER=C:\\"])
+        ok = check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FONT=System font", "POINT=8", "FOLDER=C:\\",
+                                                          "BOOKMARK1="])   # added, then removed
     if ok:
         d = copy_dir("libstart", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n",
-                     "FONT=System font\nPOINT=8\n")
+                     "FONT=System font\nPOINT=8\n"
+                     "BOOKMARK1=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail\n")
         ok = run_scenario("libstart", d, LIBRARY_START)
     if ok:
         if have_display():

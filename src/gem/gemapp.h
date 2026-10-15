@@ -8,6 +8,7 @@
 #define EHV_GEMAPP_H
 
 #include "index.h"
+#include "bookmark.h"
 
 #define KEY_SCAN(k)  (((unsigned short) (k)) >> 8)
 #define KEY_ASCII(k) ((k) & 0xff)
@@ -54,6 +55,8 @@ int libwin_idle(void);                    /* 1 while the full-text search runs *
 void libwin_index_changed(void);          /* a new index (or progress) */
 void libwin_free(void);
 void libwin_font_changed(void);
+void libwin_bookmarks(const ehv_bookmarks *bm);  /* added or removed: shown again */
+void app_bookmark_remove(int i);         /* Delete in the library, the menu */
 
 /* ehypview.c: EHYPVIEW.INF, in the boot drive's root (the AERA
    guidelines, 6.1): key=value set, the rest of the file kept; note is the

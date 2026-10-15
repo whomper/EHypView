@@ -18,6 +18,8 @@ accessory, made to replace `ST-GUIDE.ACC`.
 - **In ST-Guide's place:** installed as `ST-GUIDE.ACC`, it answers programs that ask ST-Guide for help
   (`VA_START`, `AC_HELP`), and it reads your `ST-GUIDE.INF`.
 - **Pages as they were written:** styled text, links, lines, boxes and images, with unlimited history.
+- **Several windows and bookmarks:** open a link in a new window (⇧-click) or the page in another
+  (^N), up to six; keep pages to come back to (^D), in the Bookmarks menu and the library.
 - **Your choice of font:** the system font, or any monospaced GDOS font with NVDI or SpeedoGDOS, in any
   size, changed at any time.
 - **Modern but Atari:** a program with a menu bar or a desk accessory, a shortcut for every menu item,
@@ -62,14 +64,17 @@ another GDOS is optional, for more fonts.
 
 Click a link, or move to it with Tab and press Return. Links lead into any hypertext in the index, and
 when one leads nowhere, the window's info line says so and suggests the closest names. In the program,
-every menu item (**Desk**, **File**, **Edit**, **Navigate**, **View**) has a keyboard shortcut, and
-items you can't use right now are greyed out. The right mouse button, or Insert, opens a menu with
-**Back** first, then the pages, **Copy page**, **Library and search**, **Font...**, and **About
-EHypView...** last.
+every menu item (**Desk**, **File**, **Edit**, **View**, **Navigate**, **Bookmarks**) has a keyboard
+shortcut, and items you can't use right now are greyed out. The right mouse button, or Insert, opens a
+menu with **Back** first (and, on a link, **Link in new window**), then the pages, **New window**,
+**Add bookmark**, **Copy page**, **Library and search**, **Font...**, and **About EHypView...** last.
 
 | Keys | What they do |
 |---|---|
 | click a link, or Tab / ⇧Tab then Return | follow a link |
+| ⇧-click a link, or ⇧Return | follow it in a new window |
+| ^N | a new window, with the same page |
+| ^D | bookmark the page |
 | Backspace, Undo | back |
 | right mouse button, Insert | the right-click menu |
 | Help | the hypertext's help page |
@@ -89,8 +94,20 @@ EHypView...** last.
 
 **Pop-ups** (links to a `@pnode`) open as a small framed box just below the link, over the page, as
 in ST-Guide. A click on a link in the box follows it; any other click, or any key, closes the box and
-leaves the page where it was. Several viewer windows and tabs are still to come: [docs/DESIGN.md](docs/DESIGN.md) has the assessment of ST-Guide, the goals and the
-[roadmap](docs/DESIGN.md#roadmap).
+leaves the page where it was.
+
+**Several windows.** Each viewer window has its own page, history and scroll position; up to six are
+open at once, each a little below and right of the last. The menu commands act on the one in front.
+A hypertext's "quit" link closes its own window (the program quits with its last one).
+
+**Bookmarks.** **Bookmarks > Add bookmark** (^D) keeps the page shown; the Bookmarks menu lists them
+(up to ten) and opens one in the window in front, and **Remove bookmark** forgets the page shown. They
+are first in the library too, where the accessory, which has no menu bar, finds them: Return opens
+one, Delete removes it. They are kept in `EHYPVIEW.INF` (`BOOKMARK1` to `BOOKMARK10`), which the
+program and the accessory share.
+
+Tabs are still to come: [docs/DESIGN.md](docs/DESIGN.md) has the assessment of ST-Guide, the goals and
+the [roadmap](docs/DESIGN.md#roadmap).
 
 ### The library
 
@@ -102,8 +119,10 @@ box. It is also what you see when no page was asked for.
   titles.
 - **Search the full text.** Return on **Search the full text for "…"** searches every page of every
   hypertext in the background.
+- **Bookmarks** come first: all of them with an empty search, the ones whose title or page matches
+  while typing.
 - **Keys:** Up/Down to choose, Return or a click to open (or to start the full-text search), Esc to
-  clear the search, Backspace to delete a letter. ^V pastes into the search and ^X cuts it; ^C copies
+  clear the search, Backspace to delete a letter, Delete to remove the bookmark chosen. ^V pastes into the search and ^X cuts it; ^C copies
   the hypertext chosen.
 
 ### Fonts

@@ -124,6 +124,63 @@ static void test_all(const ehv_index *idx)
 	lib_free(&lib);
 }
 
+static void test_bookmarks(const ehv_index *idx)
+{
+	ehv_library lib;
+	ehv_bookmarks bm;
+	char t[120];
+	const char *path, *node;
+	unsigned short line;
+
+	bm_init(&bm);
+	bm_add(&bm, "C:\\GUIDES\\BASIC.HYP", "Second", "Basic test - Second page");
+	bm_add(&bm, "C:\\GUIDES\\OTHER.HYP", "Detail", "Other test - Details");
+
+	/* with no index yet, the bookmarks already show */
+	lib_init(&lib, NULL);
+	CHECK(lib_set_bookmarks(&lib, &bm) == 0);
+	CHECK(lib.nrows == 4 && lib.rows[0].kind == LIB_GROUP && strcmp(lib.rows[0].text, "Bookmarks") == 0);
+	CHECK(lib.rows[1].kind == LIB_BOOKMARK && lib.rows[3].kind == LIB_NOTE);
+	CHECK(lib.sel == 1 && lib_selected_bookmark(&lib) == 0);
+	CHECK(lib_activate(&lib, &path, &node, &line) == LIB_OPEN);
+	CHECK(strcmp(path, "C:\\GUIDES\\BASIC.HYP") == 0 && strcmp(node, "Second") == 0 && line == 0);
+
+	/* first in the full list, the hypertexts after them */
+	CHECK(lib_set_index(&lib, idx) == 0);
+	CHECK(lib.nrows == 3 + 6 && lib.nguides == 4);
+	row(&lib, 1, t);
+	CHECK(strcmp(t, "  Basic test - Second page") == 0);
+	lib_row_detail(&lib, 2, t, sizeof(t));
+	CHECK(strcmp(t, "OTHER.HYP") == 0);
+	CHECK(lib.rows[3].kind == LIB_GROUP && strcmp(lib.rows[3].text, "Test/EHypView") == 0);
+	CHECK(lib_move(&lib, 1) == 2 && lib_selected_bookmark(&lib) == 1);
+	CHECK(lib_move(&lib, 1) == 4 && lib_selected_bookmark(&lib) == -1);   /* over the heading */
+
+	/* typing: the ones whose title or page has the text, in any case */
+	CHECK(lib_set_query(&lib, "detail") == 0);
+	CHECK(lib.rows[0].kind == LIB_GROUP && strcmp(lib.rows[0].text, "Bookmarks") == 0);
+	CHECK(lib.rows[1].kind == LIB_BOOKMARK && lib.rows[1].ref == 1);
+	CHECK(lib.nrows > 2 && lib.rows[2].kind == LIB_GROUP && strcmp(lib.rows[2].text, "Pages") == 0);
+	CHECK(lib_set_query(&lib, "SECOND PAGE") == 0);
+	CHECK(lib.rows[0].kind == LIB_GROUP && lib.rows[1].kind == LIB_BOOKMARK && lib.rows[1].ref == 0);
+	CHECK(lib_set_query(&lib, "zweite") == 0);              /* none match: no heading */
+	CHECK(lib.rows[0].kind != LIB_BOOKMARK && strcmp(lib.rows[0].text ? lib.rows[0].text : "", "Bookmarks") != 0);
+
+	/* one removed: the list follows */
+	CHECK(lib_set_query(&lib, "") == 0);
+	bm_remove(&bm, 0);
+	CHECK(lib_set_bookmarks(&lib, &bm) == 0 && lib.nrows == 2 + 6);
+	row(&lib, 1, t);
+	CHECK(strcmp(t, "  Other test - Details") == 0);
+	/* and all of them: no heading left */
+	bm_remove(&bm, 0);
+	CHECK(lib_set_bookmarks(&lib, &bm) == 0 && lib.nrows == 6);
+	CHECK(lib_selected_bookmark(&lib) == -1);
+	CHECK(lib_set_bookmarks(&lib, NULL) == 0 && lib.nrows == 6);
+	lib_free(&lib);
+	bm_free(&bm);
+}
+
 static void test_names(const ehv_index *idx)
 {
 	ehv_library lib;
@@ -274,6 +331,7 @@ int main(int argc, char **argv)
 	if (idx != NULL)
 	{
 		test_all(idx);
+		test_bookmarks(idx);
 		test_names(idx);
 		test_fulltext(idx);
 	}
