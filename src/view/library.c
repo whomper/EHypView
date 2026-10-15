@@ -8,6 +8,7 @@
 #include <string.h>
 #include "charset.h"
 #include "hypfile.h"
+#include "fsys.h"
 #include "library.h"
 
 #define MAX_PAGE_ROWS 100
@@ -57,7 +58,40 @@ static int add_row(ehv_library *lib, unsigned char kind, unsigned long ref, cons
 
 static int selectable(unsigned char kind)
 {
-	return kind == LIB_GUIDE || kind == LIB_PAGE || kind == LIB_ACTION || kind == LIB_TEXT;
+	return kind == LIB_GUIDE || kind == LIB_PAGE || kind == LIB_ACTION || kind == LIB_TEXT ||
+		kind == LIB_BOOKMARK;
+}
+
+/* s holds q, in any case (q as typed) */
+static int has_text(const char *s, const char *q)
+{
+	size_t n = strlen(q);
+
+	for (; *s != '\0'; s++)
+		if (atari_ncasecmp(s, q, n) == 0)
+			return 1;
+	return n == 0;
+}
+
+/* the bookmarks: all of them, or those whose title or page has the query */
+static int build_bookmarks(ehv_library *lib)
+{
+	unsigned int i;
+	int heading = 0;
+
+	for (i = 0; lib->bm != NULL && i < lib->bm->n; i++)
+	{
+		const ehv_bookmark *b = &lib->bm->b[i];
+
+		if (!has_text(b->title, lib->query) && !has_text(b->node, lib->query))
+			continue;
+		if (!heading && add_row(lib, LIB_GROUP, 0, "Bookmarks") < 0)
+			return -1;
+		heading = 1;
+		if (add_row(lib, LIB_BOOKMARK, i, NULL) < 0)
+			return -1;
+	}
+	return 0;
 }
 
 /* ---------------------------------------------------------------- */
@@ -333,10 +367,15 @@ static int rebuild(ehv_library *lib, int keep_selection, int want_text)
 	lib->npages = lib->nguides = 0;
 	lib->note[0] = '\0';
 	lib->sel = -1;
+	if (build_bookmarks(lib) < 0)
+		return -1;
 	if (lib->idx == NULL)
 	{
 		snprintf(lib->note, sizeof(lib->note), "Looking for hypertexts...");
-		return add_row(lib, LIB_NOTE, 0, NULL);
+		if (add_row(lib, LIB_NOTE, 0, NULL) < 0)
+			return -1;
+		lib->sel = first_selectable(lib, 0, -1);
+		return 0;
 	}
 	rc = lib->query[0] == '\0' ? build_all(lib) : build_query(lib);
 	if (rc < 0)
@@ -370,6 +409,19 @@ int lib_set_index(ehv_library *lib, const ehv_index *idx)
 	lib->fts = NULL;
 	lib->idx = idx;
 	return rebuild(lib, 0, 0);
+}
+
+int lib_set_bookmarks(ehv_library *lib, const ehv_bookmarks *bm)
+{
+	lib->bm = bm;
+	return rebuild(lib, 1, 0);
+}
+
+int lib_selected_bookmark(const ehv_library *lib)
+{
+	if (lib->sel < 0 || (unsigned long) lib->sel >= lib->nrows || lib->rows[lib->sel].kind != LIB_BOOKMARK)
+		return -1;
+	return (int) lib->rows[lib->sel].ref;
 }
 
 int lib_set_query(ehv_library *lib, const char *query)
@@ -417,9 +469,19 @@ int lib_activate(ehv_library *lib, const char **path, const char **node, unsigne
 
 	*path = *node = NULL;
 	*line = 0;
-	if (lib->idx == NULL || lib->sel < 0 || (unsigned long) lib->sel >= lib->nrows)
+	if (lib->sel < 0 || (unsigned long) lib->sel >= lib->nrows)
 		return LIB_NOTHING;
 	r = &lib->rows[lib->sel];
+	if (r->kind == LIB_BOOKMARK)
+	{
+		if (lib->bm == NULL || r->ref >= lib->bm->n)
+			return LIB_NOTHING;
+		*path = lib->bm->b[r->ref].path;
+		*node = lib->bm->b[r->ref].node;
+		return LIB_OPEN;
+	}
+	if (lib->idx == NULL)
+		return LIB_NOTHING;
 	switch (r->kind)
 	{
 	case LIB_GUIDE:
@@ -532,6 +594,10 @@ void lib_row_text(const ehv_library *lib, unsigned long row, char *buf, unsigned
 	case LIB_NOTE:
 		snprintf(buf, size, "  %s", lib->note);
 		break;
+	case LIB_BOOKMARK:
+		if (lib->bm != NULL && r->ref < lib->bm->n)
+			snprintf(buf, size, "  %s", lib->bm->b[r->ref].title);
+		break;
 	}
 }
 
@@ -561,6 +627,10 @@ void lib_row_detail(const ehv_library *lib, unsigned long row, char *buf, unsign
 			if (r->ref < n)
 				snprintf(buf, size, "%s", guide_title(&lib->idx->guides[h[r->ref].guide]));
 		}
+		break;
+	case LIB_BOOKMARK:
+		if (lib->bm != NULL && r->ref < lib->bm->n)
+			snprintf(buf, size, "%s", fs_basename(lib->bm->b[r->ref].path));
 		break;
 	}
 }

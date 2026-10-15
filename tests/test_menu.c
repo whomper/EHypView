@@ -61,6 +61,15 @@ static int ends_with(const char *s, const char *end)
 	return n >= m && strcmp(s + n - m, end) == 0;
 }
 
+/* two bookmarks, the second with a title too long for the menu */
+static ehv_bookmarks two = {
+	{
+		{ "C:\\A.HYP", "Main", "A - Main" },
+		{ "C:\\B.HYP", "Start", "A title much longer than the menu shows it" }
+	},
+	2
+};
+
 static void test_tree(short cw, short ch, short sw, short sh)
 {
 	ehv_menu m;
@@ -68,9 +77,9 @@ static void test_tree(short cw, short ch, short sw, short sh)
 	short i, screen, title, drop;
 	int lastobs = 0;
 
-	CHECK(menu_build(&m, cw, ch, sw, sh) == 0);
+	CHECK(menu_build(&m, &two, cw, ch, sw, sh) == 0);
 	t = m.tree;
-	CHECK(m.ntitles == 5);
+	CHECK(m.ntitles == 6);
 
 	/* every object reached exactly once from the root */
 	memset(visits, 0, sizeof(visits));
@@ -119,13 +128,32 @@ static void test_tree(short cw, short ch, short sw, short sh)
 	CHECK(title == 2 && drop == screen);
 	CHECK(strcmp(text(&t[t[2].ob_head]), " Desk ") == 0);
 
-	/* commands */
+	/* commands: every one, a bookmark's only while there is one */
 	for (i = CMD_ABOUT; i < CMD_COUNT; i++)
 	{
 		short o = menu_object(&m, i);
 
+		if (i >= CMD_BM0 + (short) two.n)
+		{
+			CHECK(o == -1);
+			continue;
+		}
 		CHECK(o > 0 && menu_command(&m, o) == i && t[o].ob_type == G_STRING);
 		CHECK(!(t[o].ob_state & DISABLED));
+	}
+	CHECK(strncmp(text(&t[menu_object(&m, CMD_BM0)]), "  A - Main", 10) == 0);
+	CHECK(strstr(text(&t[menu_object(&m, CMD_BM0 + 1)]), "A title much longer than the ...") != NULL);
+	CHECK(ends_with(text(&t[menu_object(&m, CMD_NEWWIN)]), "^N "));
+	CHECK(ends_with(text(&t[menu_object(&m, CMD_BM_ADD)]), "^D "));
+	CHECK(strcmp(menu_command_name(CMD_BM0 + 1), "bookmark") == 0);
+	CHECK(strcmp(menu_command_name(CMD_LINKWIN), "link-window") == 0);
+	/* the titles in the guidelines' order */
+	{
+		short ti = t[2].ob_head;
+		static const char *const want[] = { " Desk ", " File ", " Edit ", " View ", " Navigate ", " Bookmarks " };
+
+		for (i = 0; i < 6; i++, ti = t[ti].ob_next)
+			CHECK(strcmp(text(&t[ti]), want[i]) == 0);
 	}
 	CHECK(menu_object(&m, CMD_NONE) == -1);
 	CHECK(strcmp(menu_command_name(CMD_OPEN), "open") == 0 && strcmp(menu_command_name(CMD_NEXT), "next") == 0);
@@ -140,6 +168,12 @@ static void test_tree(short cw, short ch, short sw, short sh)
 	CHECK(strncmp(text(&t[menu_object(&m, CMD_ABOUT)]), "  About EHypView", 16) == 0);
 	menu_free(&m);
 	CHECK(m.tree == NULL);
+
+	/* no bookmarks: the menu has just its two commands */
+	CHECK(menu_build(&m, NULL, cw, ch, sw, sh) == 0);
+	CHECK(menu_object(&m, CMD_BM_ADD) > 0 && menu_object(&m, CMD_BM_REMOVE) > 0);
+	CHECK(menu_object(&m, CMD_BM0) == -1);
+	menu_free(&m);
 }
 
 int main(void)

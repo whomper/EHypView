@@ -12,6 +12,7 @@
 
 #include "gem.h"
 #include "mbar.h"
+#include "bookmark.h"
 
 /* commands */
 enum {
@@ -34,7 +35,12 @@ enum {
 	CMD_CUT,
 	CMD_COPY,
 	CMD_PASTE,
-	CMD_COUNT
+	CMD_NEWWIN,                    /* a new viewer window, same page */
+	CMD_LINKWIN,                   /* the selected link in a new window */
+	CMD_BM_ADD,
+	CMD_BM_REMOVE,
+	CMD_BM0,                       /* open bookmark 0 ... */
+	CMD_COUNT = CMD_BM0 + BM_MAX
 };
 
 /* the menu bar itself is the shared builder's (common/ui/mbar.c) */
@@ -42,9 +48,11 @@ typedef MBAR ehv_menu;
 
 /*
  * Build the menu tree for character cells cw x ch on a screen of
- * screen_w x screen_h pixels.  Returns 0, or -1 when out of memory.
+ * screen_w x screen_h pixels, with the bookmarks bm (may be NULL) in
+ * the Bookmarks menu.  Returns 0, or -1 when out of memory.  Built
+ * again whenever the bookmarks change.
  */
-int menu_build(ehv_menu *m, short cw, short ch, short screen_w, short screen_h);
+int menu_build(ehv_menu *m, const ehv_bookmarks *bm, short cw, short ch, short screen_w, short screen_h);
 void menu_free(ehv_menu *m);
 
 /* the object of a command, or -1 */
