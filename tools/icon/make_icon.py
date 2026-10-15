@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Copyright (C) 2026 Erez Yaary
+# Copyright (C) 2026 AERA | Erez Yaary
 """EHypView's icon, drawn as 32x32 1-bit pixel art: the same SM124-style
 monochrome monitor as EMail's, ECal's and Claude ST's icons, whose dark
 screen shows a hypertext: a page of text with an underlined link, and an
