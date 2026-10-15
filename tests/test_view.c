@@ -86,11 +86,6 @@ static void test_open_and_links(void)
 	CHECK(strcmp(page_name(&v), "Second") == 0 && v.top == 2);
 	view_back(&v);
 
-	/* popups show as pages for now */
-	r = run_named(&v, "popup here");
-	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_OK && strcmp(page_name(&v), "Pop") == 0);
-	view_back(&v);
-
 	/* an external link: other.hyp is found next to basic.hyp */
 	r = run_named(&v, "other file");
 	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_OK);
@@ -110,6 +105,84 @@ static void test_open_and_links(void)
 	/* non-links are not followed */
 	CHECK(view_follow(&v, NULL) == VIEW_ERROR);
 	view_free(&v);
+}
+
+/* a run of the pop-up whose text starts with `text`, or -1 */
+static long popup_run(const ehv_view *v, const char *text)
+{
+	unsigned long i;
+
+	for (i = 0; v->popup != NULL && i < v->popup->nruns; i++)
+		if (v->popup->runs[i].kind == HYP_RUN_LINK && strncmp(v->popup->runs[i].text, text, strlen(text)) == 0)
+			return (long) i;
+	return -1;
+}
+
+static void test_popup(void)
+{
+	ehv_view v;
+	long r, top;
+
+	view_init(&v, NULL);
+	CHECK(view_open(&v, fx("basic.hyp"), NULL, 0) == VIEW_OK);
+	CHECK(v.popup == NULL && view_popup_cols(&v) == 0 && view_popup_link_at(&v, 0, 0) == -1);
+	CHECK(view_popup_follow(&v, 0) == VIEW_ERROR);
+	view_popup_close(&v);                                   /* none open: nothing happens */
+
+	/* a link to a @pnode opens it over the page, which stays */
+	r = run_named(&v, "popup here");
+	v.top = top = 1;
+	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_POPUP);
+	CHECK(v.popup != NULL && strcmp(v.doc->entries[v.popup_node].name, "Pop") == 0);
+	CHECK(strcmp(page_name(&v), "Main") == 0 && v.nhist == 0 && v.top == top);
+	CHECK(v.popup->nlines >= 2);
+	CHECK(view_popup_cols(&v) == (long) strlen("It links to Second."));
+
+	/* its links: "Second" is at column 12 of its second line */
+	CHECK(view_popup_link_at(&v, 0, 0) == -1);               /* plain text */
+	CHECK(view_popup_link_at(&v, 1, 11) == -1);
+	r = view_popup_link_at(&v, 1, 12);
+	CHECK(r >= 0 && r == popup_run(&v, "Second"));
+	CHECK(view_popup_link_at(&v, 1, 18) == -1);              /* the full stop */
+	CHECK(view_popup_link_at(&v, 9, 0) == -1 && view_popup_link_at(&v, 1, -1) == -1);
+	CHECK(view_popup_follow(&v, 999) == VIEW_ERROR && v.popup != NULL);
+
+	/* following one closes the pop-up and goes there */
+	CHECK(view_popup_follow(&v, r) == VIEW_OK);
+	CHECK(v.popup == NULL && strcmp(page_name(&v), "Second") == 0 && v.nhist == 1);
+	CHECK(view_back(&v) == VIEW_OK && strcmp(page_name(&v), "Main") == 0);
+
+	/* closing it leaves the page as it was */
+	r = run_named(&v, "popup here");
+	CHECK(view_follow(&v, &v.page->runs[r]) == VIEW_POPUP);
+	view_popup_close(&v);
+	CHECK(v.popup == NULL && strcmp(page_name(&v), "Main") == 0);
+
+	/* any page change closes it: following, back, next, another file */
+	CHECK(view_follow(&v, &v.page->runs[r]) == VIEW_POPUP);
+	CHECK(view_follow(&v, &v.page->runs[run_named(&v, "to Second")]) == VIEW_OK && v.popup == NULL);
+	view_back(&v);
+	r = run_named(&v, "popup here");
+	CHECK(view_follow(&v, &v.page->runs[r]) == VIEW_POPUP);
+	CHECK(v.nhist == 0 && view_back(&v) == VIEW_ERROR && v.popup != NULL);  /* no page change */
+	CHECK(view_open(&v, fx("basic.hyp"), NULL, 0) == VIEW_OK && v.popup == NULL && v.nhist == 1);
+	r = run_named(&v, "popup here");
+	CHECK(view_follow(&v, &v.page->runs[r]) == VIEW_POPUP);
+	CHECK(view_back(&v) == VIEW_OK && v.popup == NULL);
+	r = run_named(&v, "popup here");
+	CHECK(view_follow(&v, &v.page->runs[r]) == VIEW_POPUP);
+	CHECK(view_relative(&v, VIEW_HELP) == VIEW_OK && v.popup == NULL);
+	view_back(&v);
+	r = run_named(&v, "popup here");
+	CHECK(view_follow(&v, &v.page->runs[r]) == VIEW_POPUP);
+	CHECK(view_open(&v, fx("other.hyp"), NULL, 0) == VIEW_OK && v.popup == NULL);
+
+	/* and view_free lets an open one go (ASan checks) */
+	view_back(&v);
+	r = run_named(&v, "popup here");
+	CHECK(view_follow(&v, &v.page->runs[r]) == VIEW_POPUP);
+	view_free(&v);
+	CHECK(v.popup == NULL);
 }
 
 static void test_relative(void)
@@ -221,6 +294,7 @@ int main(int argc, char **argv)
 {
 	fixdir = argc > 1 ? argv[1] : "tests/fixtures";
 	test_open_and_links();
+	test_popup();
 	test_relative();
 	test_open_errors();
 	test_selection();

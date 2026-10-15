@@ -172,7 +172,7 @@ $(ATARI):
 $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
-GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/ehypview.o \
+GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o
@@ -215,7 +215,10 @@ define make_fixt
 	printf 'HDOC\0\0\0\100\0\005\003\002garbage' > $(1)/FIXT/BROKEN.HYP
 endef
 
-$(HATARI_DIR)/EHVCHECK.PRG: $(ATARI)/ehvcheck.elf common/tools/elf2tos.py
+# (made again when a fixture changes, not only when the program does)
+FIXT_SRC = $(wildcard tests/fixtures/*.hyp tests/fixtures/*.ref)
+
+$(HATARI_DIR)/EHVCHECK.PRG: $(ATARI)/ehvcheck.elf common/tools/elf2tos.py $(FIXT_SRC)
 	mkdir -p $(HATARI_DIR)
 	python3 common/tools/elf2tos.py $< $@
 	$(call make_fixt,$(HATARI_DIR))

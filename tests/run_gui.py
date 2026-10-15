@@ -45,7 +45,10 @@ STEPS = [
     ([TAB], ["select 2"]),                             # first link
     ([RETURN], ["page %s Second" % BASIC]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
-    ([TAB] * 4, ["select 2", "select 2", "select 3", "select 4"]),
+    ([TAB] * 3, ["select 2", "select 2", "select 3"]),
+    ([RETURN], ["popup Pop"]),                         # a @pnode: a pop-up over the page
+    ([ESC], ["popup-closed Pop"]),                     # a key closes it, the page stays
+    ([TAB], ["select 4"]),                             # and so does the selection
     ([RETURN], ["page %s Start" % OTHER]),             # external link, three folders down
     ([HELP], ["status This hypertext has no help page"]),
     ([("ctrl", RIGHT)], ["page %s Detail" % OTHER]),   # next page
@@ -293,6 +296,11 @@ MOUSE_STEPS = [
     ([("click", 120, 118)], ["page %s Second" % BASIC]),    # "to Second"
     ([("rclick", 300, 150)], ["menu popup"]),               # right button: the menu,
     ([("click", 330, 161)], ["menu back", "page %s Main" % BASIC]),     # Back first
+    ([("click", 120, 134)], ["popup Pop"]),                 # "popup here": the pop-up,
+    ([("click", 500, 400)], ["popup-closed Pop"]),          # a click outside closes it
+    ([("click", 120, 134)], ["popup Pop"]),                 # and its own link
+    ([("click", 200, 175)], ["popup-link Pop", "page %s Second" % BASIC]),  # goes there
+    ([BACKSPACE], ["page %s Main" % BASIC]),
     ([("rclick", 300, 150)], ["menu popup"]),               # and About last (rows of 18)
     ([("click", 330, 359)], ["menu about", "dialog about *"]),
     ([("click", 320, 300)], []),                            # a click closes it

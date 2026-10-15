@@ -27,6 +27,7 @@
 #include "scan.h"
 #include "view.h"
 #include "gemapp.h"
+#include "pagedraw.h"
 #include "menu.h"
 #include "crash.h"
 #include "av.h"
@@ -88,203 +89,18 @@ void log_event(const char *what, const char *a, const char *b)
 }
 
 /* ---------------------------------------------------------------- */
-/* page layout: pixel positions of lines and the converted images     */
+/* page layout (pagedraw.c): the viewer's page                       */
 
-typedef struct {
-	short w, h, planes;
-	MFDB form;                    /* device format, or 1 plane mono */
-	int mono;                     /* draw with vrt_cpyfm            */
-} gimage;
-
-static long *line_y;              /* top of text line l, page pixels */
-static long *gfx_y;               /* top of the graphics of line l   */
-static long page_h;
-static gimage *images;            /* one per page->gfx entry         */
-static unsigned short nimages;
+static playout lay;
 
 static void free_layout(void)
 {
-	unsigned short i;
-
-	for (i = 0; images != NULL && i < nimages; i++)
-		free(images[i].form.fd_addr);
-	free(images);
-	nimages = 0;
-	free(line_y);
-	free(gfx_y);
-	images = NULL;
-	line_y = gfx_y = NULL;
-	page_h = 0;
-}
-
-/*
- * Convert a HYP image (planar, standard format) for the screen.  Images
- * with as many planes as the screen are shown in colour; anything else
- * becomes black and white through the dither mask (bit n set: pixel
- * value n is black; without a mask, everything but 0 is black).
- */
-static void load_image(const hyp_gfx *g, gimage *im)
-{
-	unsigned char *data;
-	unsigned long size, plane, wdw, p;
-	unsigned short w, h, np, present, onoff;
-	unsigned char *std;
-	MFDB src;
-	int i;
-
-	memset(im, 0, sizeof(*im));
-	if (hyp_load(view.doc, g->image, &data, &size) != HYP_OK)
-		return;
-	if (size < 8)
-	{
-		free(data);
-		return;
-	}
-	w = (unsigned short) ((data[0] << 8) | data[1]);
-	h = (unsigned short) ((data[2] << 8) | data[3]);
-	np = data[4];
-	present = data[5];
-	onoff = data[6];
-	wdw = (w + 15UL) / 16;
-	plane = wdw * 2 * h;
-	if (w == 0 || h == 0 || np == 0 || np > 8)
-	{
-		free(data);
-		return;
-	}
-	im->w = (short) w;
-	im->h = (short) h;
-	im->planes = (short) np;
-
-	/* all planes, filling in the ones that are not stored */
-	std = malloc(plane * np);
-	if (std == NULL)
-	{
-		free(data);
-		return;
-	}
-	p = 8;
-	for (i = 0; i < np; i++)
-	{
-		unsigned char *dst = std + plane * (unsigned long) i;
-
-		if (present & (1 << i))
-		{
-			if (p + plane > size)
-			{
-				free(std);
-				free(data);
-				return;
-			}
-			memcpy(dst, data + p, plane);
-			p += plane;
-		} else
-		{
-			memset(dst, (onoff & (1 << i)) ? 0xff : 0x00, plane);
-		}
-	}
-	free(data);
-
-	if (np != planes)
-	{
-		/* black and white */
-		unsigned short mask = g->has_dither ? g->dithermask : 0xfffe;
-		unsigned char *mono = calloc(1, plane);
-		unsigned long b;
-
-		if (mono == NULL)
-		{
-			free(std);
-			return;
-		}
-		for (b = 0; b < plane; b++)
-		{
-			int bit;
-
-			for (bit = 0; bit < 8; bit++)
-			{
-				unsigned short v = 0;
-
-				for (i = 0; i < np; i++)
-					if (std[plane * (unsigned long) i + b] & (0x80 >> bit))
-						v |= (unsigned short) (1 << i);
-				if (mask & (1U << (v & 15)))
-					mono[b] |= (unsigned char) (0x80 >> bit);
-			}
-		}
-		free(std);
-		std = mono;
-		np = 1;
-		im->mono = 1;
-	} else if (np == 1)
-	{
-		im->mono = 1;
-	}
-
-	src.fd_addr = std;
-	src.fd_w = (short) (wdw * 16);
-	src.fd_h = (short) h;
-	src.fd_wdwidth = (short) wdw;
-	src.fd_stand = 1;
-	src.fd_nplanes = (short) np;
-	src.fd_r1 = src.fd_r2 = src.fd_r3 = 0;
-	im->form = src;
-	im->form.fd_stand = 0;
-	im->form.fd_addr = malloc(plane * np);
-	if (im->form.fd_addr == NULL)
-	{
-		free(std);
-		im->w = 0;
-		return;
-	}
-	vr_trnfm(vdi_h, &src, &im->form);
-	free(std);
+	layout_free(&lay);
 }
 
 static void make_layout(void)
 {
-	const hyp_page *pg = view.page;
-	unsigned short i;
-	long y = 0;
-	long l, n;
-
-	free_layout();
-	if (pg == NULL)
-		return;
-	n = pg->nlines + 1;
-	line_y = malloc((size_t) n * sizeof(long));
-	gfx_y = malloc((size_t) n * sizeof(long));
-	images = calloc(pg->ngfx ? pg->ngfx : 1, sizeof(gimage));
-	if (line_y == NULL || gfx_y == NULL || images == NULL)
-	{
-		free_layout();
-		return;
-	}
-	nimages = pg->ngfx;
-	for (i = 0; i < pg->ngfx; i++)
-		if (pg->gfx[i].type == HYP_GFX_IMAGE)
-			load_image(&pg->gfx[i], &images[i]);
-
-	/* an @limage pushes the text of its line down (as ST-Guide does) */
-	for (l = 0; l < n; l++)
-	{
-		gfx_y[l] = y;
-		for (i = 0; i < pg->ngfx; i++)
-		{
-			const hyp_gfx *g = &pg->gfx[i];
-
-			if (g->type == HYP_GFX_IMAGE && g->limage && (g->y == l || (l == n - 1 && g->y >= l)) &&
-				images[i].h > 0)
-			{
-				y += ((images[i].h + ch - 1) / ch) * ch;
-				if (images[i].h % ch == 0)
-					y += ch;
-			}
-		}
-		line_y[l] = y;
-		y += ch;
-	}
-	page_h = line_y[n - 1];
+	layout_make(&lay, view.doc, view.page);
 }
 
 /* ---------------------------------------------------------------- */
@@ -398,106 +214,6 @@ void text_at(short x, short y, const char *s, long n)
 	}
 }
 
-/* draw one graphic; oy is the page origin, top/bottom the redrawn rows */
-static void draw_gfx(const hyp_gfx *g, const gimage *im, short ox, long oy, long top, long bottom)
-{
-	short pxy[8];
-	long x = ox + (long) (g->x > 0 ? g->x - 1 : 0) * cw;
-	long y = oy + gfx_y[g->y < view.page->nlines ? g->y : view.page->nlines];
-	long h = g->type == HYP_GFX_IMAGE ? (im ? im->h : 0) : (long) g->h * ch;
-
-	/* pages can be taller than screen coordinates reach: skip what is
-	   not in the redrawn rows before converting to short (heights are
-	   never negative; only a line's width can be) */
-	if (y > bottom || y + h < top)
-		return;
-
-	vswr_mode(vdi_h, MD_TRANS);
-	vsl_color(vdi_h, 1);
-	vsf_color(vdi_h, 1);
-	switch (g->type)
-	{
-	case HYP_GFX_IMAGE:
-		if (im == NULL || im->w <= 0)
-			return;
-		if (g->x == 0)
-		{
-			/* centred on the page */
-			long tx = (page_cols() * cw - im->w) / 2;
-
-			x = ox + (tx > 0 ? tx : 0);
-		}
-		{
-			MFDB screen;
-
-			memset(&screen, 0, sizeof(screen));
-			pxy[0] = 0;
-			pxy[1] = 0;
-			pxy[2] = (short) (im->w - 1);
-			pxy[3] = (short) (im->h - 1);
-			pxy[4] = (short) x;
-			pxy[5] = (short) y;
-			pxy[6] = (short) (x + im->w - 1);
-			pxy[7] = (short) (y + im->h - 1);
-			if (im->mono)
-			{
-				short colors[2];
-
-				colors[0] = 1;
-				colors[1] = 0;
-				vrt_cpyfm(vdi_h, MD_REPLACE, pxy, (MFDB *) &im->form, &screen, colors);
-			} else
-			{
-				vro_cpyfm(vdi_h, 3, pxy, (MFDB *) &im->form, &screen);
-			}
-		}
-		break;
-	case HYP_GFX_LINE:
-		{
-			long w = (long) g->w * cw, h = (long) g->h * ch;
-
-			pxy[0] = (short) x;
-			pxy[1] = (short) y;
-			pxy[2] = (short) (x + w + (w < 0 ? 1 : w > 0 ? -1 : 0));
-			pxy[3] = (short) (y + h - (h ? 1 : 0));
-			vsl_type(vdi_h, g->style);
-			vsl_ends(vdi_h, (g->arrows & HYP_ARROW_START) ? 1 : 0, (g->arrows & HYP_ARROW_END) ? 1 : 0);
-			v_pline(vdi_h, 2, pxy);
-			vsl_ends(vdi_h, 0, 0);
-			vsl_type(vdi_h, 1);
-		}
-		break;
-	case HYP_GFX_BOX:
-	case HYP_GFX_RBOX:
-		pxy[0] = (short) x;
-		pxy[1] = (short) y;
-		pxy[2] = (short) (x + (long) g->w * cw - 1);
-		pxy[3] = (short) (y + (long) g->h * ch - 1);
-		if (g->pattern == 0)
-			vsf_interior(vdi_h, FIS_HOLLOW);
-		else if (g->pattern > 36)
-			vsf_interior(vdi_h, FIS_SOLID);
-		else if (g->pattern > 24)
-		{
-			vsf_interior(vdi_h, FIS_HATCH);
-			vsf_style(vdi_h, (short) (g->pattern - 24));
-		} else
-		{
-			vsf_interior(vdi_h, FIS_PATTERN);
-			vsf_style(vdi_h, g->pattern);
-		}
-		vsf_perimeter(vdi_h, 1);
-		if (g->type == HYP_GFX_BOX)
-			v_bar(vdi_h, pxy);
-		else if (g->pattern != 0)
-			v_rfbox(vdi_h, pxy);
-		else
-			v_rbox(vdi_h, pxy);
-		vsf_perimeter(vdi_h, 0);
-		break;
-	}
-}
-
 static void draw_message(short x, short y, const char *const *lines)
 {
 	vst_color(vdi_h, 1);
@@ -513,7 +229,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	short wx, wy, ww, wh;
 	short clip[4];
 	const hyp_page *pg = view.page;
-	long oy, l;
+	long oy;
 	short ox;
 
 	work_area(&wx, &wy, &ww, &wh);
@@ -524,7 +240,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	vs_clip(vdi_h, 1, clip);
 	fill(0, clip[0], clip[1], clip[2], clip[3]);
 
-	if (pg == NULL || line_y == NULL)
+	if (pg == NULL || lay.line_y == NULL)
 	{
 		static const char *const help[] = {
 			"No hypertext is open.",
@@ -540,58 +256,8 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	}
 
 	ox = (short) (wx + MARGIN - view.left * cw);
-	oy = wy - gfx_y[view.top];
-
-	/* graphics first, text on top (all drawn transparently) */
-	{
-		unsigned short i;
-
-		for (i = 0; i < pg->ngfx; i++)
-			draw_gfx(&pg->gfx[i], &images[i], ox, oy, cy, (long) cy + ch_);
-	}
-
-	vswr_mode(vdi_h, MD_TRANS);
-	for (l = view.top; l < pg->nlines; l++)
-	{
-		const hyp_line *ln = &pg->lines[l];
-		long y = oy + line_y[l];
-		long x = ox;
-		unsigned short r;
-
-		if (y >= cy + ch_)
-			break;
-		if (y + ch <= cy)
-			continue;
-		for (r = 0; r < ln->nruns; r++)
-		{
-			const hyp_run *run = &pg->runs[ln->first_run + r];
-			long w = (long) run->len * cw;
-			short fx = run->attr & 0x3f;
-
-			if (x + w > cx && x < cx + cw_)
-			{
-				if ((long) (ln->first_run + r) == view.sel)
-				{
-					/* the selected link: reverse video */
-					fill(link_color(), (short) x, (short) y, (short) (x + w - 1), (short) (y + ch - 1));
-					vswr_mode(vdi_h, MD_TRANS);
-					vst_color(vdi_h, 0);
-				} else if (run->kind == HYP_RUN_LINK)
-				{
-					vst_color(vdi_h, link_color());
-					fx |= 8 | (ncolors >= 16 ? 0 : 1);   /* underlined (and bold in mono) */
-				} else
-				{
-					vst_color(vdi_h, 1);
-				}
-				vst_effects(vdi_h, fx);
-				text_at((short) x, (short) y, run->text, run->len);
-			}
-			x += w;
-		}
-	}
-	vst_effects(vdi_h, 0);
-	vst_color(vdi_h, 1);
+	oy = wy - lay.gfx_y[view.top];
+	layout_draw(&lay, ox, oy, view.top, cx, cy, cw_, ch_, view.sel, page_cols());
 	vs_clip(vdi_h, 0, clip);
 }
 
@@ -701,6 +367,154 @@ static void page_changed(void)
 	}
 }
 
+/* ---------------------------------------------------------------- */
+/* pop-ups: a @pnode in a framed box over the page, as ST-Guide shows */
+
+#define POP_PAD 4                  /* pixels between the frame and the text */
+
+static void after(int rc);
+
+/* the screen position of link run r of the page (its top left) */
+static void link_pos(long r, short *x, short *y)
+{
+	short wx, wy, ww, wh;
+	long line = view_run_line(&view, r), col = 0;
+	unsigned short i;
+
+	work_area(&wx, &wy, &ww, &wh);
+	if (line < 0 || lay.line_y == NULL)
+	{
+		*x = (short) (wx + ww / 4);       /* no link to go by: the window's middle */
+		*y = (short) (wy + wh / 4);
+		return;
+	}
+	for (i = 0; i < view.page->lines[line].nruns; i++)
+	{
+		unsigned long k = view.page->lines[line].first_run + i;
+
+		if ((long) k == r)
+			break;
+		col += view.page->runs[k].len;
+	}
+	*x = (short) (wx + MARGIN + (col - view.left) * cw);
+	*y = (short) (wy + lay.line_y[line] - lay.gfx_y[view.top]);
+}
+
+static void pop_wait_up(void)
+{
+	short mx, my, mb, ks;
+
+	do
+	{
+		graf_mkstate(&mx, &my, &mb, &ks);
+		if (mb & 3)
+			evnt_timer_(10);
+	} while (mb & 3);
+}
+
+/*
+ * Show view.popup next to link run `r` (below it, or above it when there
+ * is no room) until a key or a click.  A click on one of its links
+ * follows that link; anything else closes it, and the page stays.
+ */
+static void popup_box(long r)
+{
+	playout pl;
+	short ax, ay, bx, by, bw, bh, clip[4], m[8], done = 0;
+	long cols = view_popup_cols(&view), follow = -1;
+	const char *name = view.doc->entries[view.popup_node].name;
+	AEVENT e;
+
+	memset(&pl, 0, sizeof(pl));
+	layout_make(&pl, view.doc, view.popup);
+	if (pl.pg == NULL)
+	{
+		view_popup_close(&view);
+		return;
+	}
+	bw = (short) (layout_width(&pl, cols) + 2 * POP_PAD + 2);
+	bh = (short) (layout_height(&pl) + 2 * POP_PAD + 2);
+	if (bw > desk_w - 8)
+		bw = (short) (desk_w - 8);
+	if (bh > desk_h - 8)
+		bh = (short) (desk_h - 8);
+	if (r >= 0)
+		link_pos(r, &ax, &ay);
+	else
+		link_pos(-1, &ax, &ay);
+	bx = (short) (ax - POP_PAD - 1);
+	by = (short) (ay + ch + 2);
+	if (by + bh + 3 > desk_y + desk_h)
+		by = (short) (ay - bh - 2);           /* no room below the link: above it */
+	if (by < desk_y)
+		by = desk_y;
+	if (bx + bw + 3 > desk_x + desk_w)
+		bx = (short) (desk_x + desk_w - bw - 3);
+	if (bx < desk_x)
+		bx = desk_x;
+
+	wind_update(BEG_UPDATE);
+	wind_update(3);                            /* BEG_MCTRL: the mouse is ours */
+	form_dial(FMD_START, bx, by, (short) (bw + 3), (short) (bh + 3));
+	graf_mouse(M_OFF, NULL);
+	clip[0] = bx;
+	clip[1] = by;
+	clip[2] = (short) (bx + bw + 2);
+	clip[3] = (short) (by + bh + 2);
+	vs_clip(vdi_h, 1, clip);
+	fill(1, (short) (bx + 3), (short) (by + 3), (short) (bx + bw + 2), (short) (by + bh + 2));  /* shadow */
+	fill(1, bx, by, (short) (bx + bw - 1), (short) (by + bh - 1));                          /* frame */
+	fill(0, (short) (bx + 1), (short) (by + 1), (short) (bx + bw - 2), (short) (by + bh - 2));
+	clip[0] = (short) (bx + 1);
+	clip[1] = (short) (by + 1);
+	clip[2] = (short) (bx + bw - 2);
+	clip[3] = (short) (by + bh - 2);
+	vs_clip(vdi_h, 1, clip);
+	layout_draw(&pl, (short) (bx + 1 + POP_PAD), by + 1 + POP_PAD, 0,
+		clip[0], clip[1], (short) (bw - 2), (short) (bh - 2), -1, cols);
+	vs_clip(vdi_h, 0, clip);
+	graf_mouse(M_ON, NULL);
+	graf_mouse(ARROW, NULL);                   /* a link click left the busy bee */
+	log_event("popup", name, NULL);
+	pop_wait_up();
+
+	while (!done)
+	{
+		evnt_multi_(MU_KEYBD | MU_BUTTON, 0x101, 3, 0, 0, m, &e);
+		if (e.which & MU_KEYBD)
+			done = 1;
+		if (e.which & MU_BUTTON)
+		{
+			/* (not by e.mbutton: after a quick click it is 0 again) */
+			if (e.mx > bx && e.my > by && e.mx < bx + bw - 1 && e.my < by + bh - 1)
+			{
+				long line = layout_line_at(&pl, e.my - (by + 1 + POP_PAD), 0);
+				long x = e.mx - (bx + 1 + POP_PAD);
+
+				if (line >= 0 && x >= 0)
+					follow = view_popup_link_at(&view, line, x / cw);
+			}
+			pop_wait_up();
+			done = 1;
+		}
+	}
+	form_dial(FMD_FINISH, bx, by, (short) (bw + 3), (short) (bh + 3));
+	wind_update(2);                            /* END_MCTRL */
+	wind_update(END_UPDATE);
+	layout_free(&pl);
+	if (follow >= 0)
+	{
+		log_event("popup-link", name, NULL);
+		graf_mouse(BUSYBEE, NULL);
+		after(view_popup_follow(&view, follow));
+		graf_mouse(ARROW, NULL);
+	} else
+	{
+		log_event("popup-closed", name, NULL);
+		view_popup_close(&view);
+	}
+}
+
 /* show a navigation result */
 static void after(int rc)
 {
@@ -721,6 +535,8 @@ static void after(int rc)
 	}
 	if (rc == VIEW_OK)
 		page_changed();
+	else if (rc == VIEW_POPUP)
+		popup_box(view.sel);
 	else
 	{
 		log_event("status", view.status, NULL);
@@ -1228,16 +1044,14 @@ static void click(short mx, short my, short button)
 		context_menu(mx, my);
 		return;
 	}
-	if (view.page == NULL || line_y == NULL)
+	if (view.page == NULL || lay.line_y == NULL)
 		return;
 	work_area(&x, &y, &w, &h);
 	if (mx < x || my < y || mx >= x + w || my >= y + h)
 		return;
-	py = my - y + gfx_y[view.top];
-	for (line = view.top; line < view.page->nlines; line++)
-		if (py >= line_y[line] && py < line_y[line] + ch)
-			break;
-	if (line >= view.page->nlines)
+	py = my - y + lay.gfx_y[view.top];
+	line = layout_line_at(&lay, py, view.top);
+	if (line < 0)
 		return;
 	if (mx - x - MARGIN < 0)
 		return;

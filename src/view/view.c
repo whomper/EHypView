@@ -30,6 +30,7 @@ void view_free(ehv_view *v)
 {
 	unsigned long i;
 
+	hyp_page_free(v->popup);
 	hyp_page_free(v->page);
 	hyp_close(v->doc);
 	for (i = 0; i < v->nhist; i++)
@@ -85,6 +86,7 @@ static int show_entry(ehv_view *v, unsigned short entry, long top)
 		set_status(v, "Cannot show the page: ", hyp_strerror(err), NULL);
 		return VIEW_ERROR;
 	}
+	view_popup_close(v);
 	hyp_page_free(v->page);
 	v->page = pg;
 	v->left = 0;
@@ -136,6 +138,7 @@ static int show(ehv_view *v, const char *path, const char *node, long top, int p
 	}
 	if (doc != v->doc)
 	{
+		view_popup_close(v);
 		hyp_page_free(v->page);
 		v->page = NULL;
 		hyp_close(v->doc);
@@ -253,8 +256,22 @@ int view_follow(ehv_view *v, const hyp_run *run)
 	switch (e->type)
 	{
 	case HYP_NODE_INTERNAL:
-	case HYP_NODE_POPUP:
 		return view_goto(v, run->target, run->target_line);
+	case HYP_NODE_POPUP:
+		{
+			int err;
+			hyp_page *pg = hyp_page_load(v->doc, run->target, &err);
+
+			if (pg == NULL)
+			{
+				set_status(v, "Cannot show the pop-up: ", hyp_strerror(err), NULL);
+				return VIEW_ERROR;
+			}
+			view_popup_close(v);
+			v->popup = pg;
+			v->popup_node = run->target;
+			return VIEW_POPUP;
+		}
 	case HYP_NODE_EXTERNAL:
 		context(v, &ctx);
 		if (ehv_resolve_xref(&ctx, e->name, &t) < 0)
@@ -288,6 +305,7 @@ int view_back(ehv_view *v)
 		set_status(v, "This is the first page", NULL, NULL);
 		return VIEW_ERROR;
 	}
+	view_popup_close(v);
 	h = v->hist[v->nhist - 1];
 	v->nhist--;
 	if (v->doc != NULL && strcmp(v->doc->path, h.path) == 0)
@@ -428,24 +446,89 @@ long view_select_link(ehv_view *v, int dir, long first, long last)
 	return -1;
 }
 
-long view_link_at(const ehv_view *v, long line, long col)
+static long page_link_at(const hyp_page *pg, long line, long col)
 {
 	const hyp_line *ln;
 	long c = 0;
 	unsigned short i;
 
-	if (v->page == NULL || line < 0 || line >= v->page->nlines || col < 0)
+	if (pg == NULL || line < 0 || line >= pg->nlines || col < 0)
 		return -1;
-	ln = &v->page->lines[line];
+	ln = &pg->lines[line];
 	for (i = 0; i < ln->nruns; i++)
 	{
-		const hyp_run *run = &v->page->runs[ln->first_run + i];
+		const hyp_run *run = &pg->runs[ln->first_run + i];
 
 		if (col >= c && col < c + run->len)
 			return run->kind == HYP_RUN_LINK ? (long) (ln->first_run + i) : -1;
 		c += run->len;
 	}
 	return -1;
+}
+
+long view_link_at(const ehv_view *v, long line, long col)
+{
+	return page_link_at(v->page, line, col);
+}
+
+void view_popup_close(ehv_view *v)
+{
+	hyp_page_free(v->popup);
+	v->popup = NULL;
+}
+
+long view_popup_link_at(const ehv_view *v, long line, long col)
+{
+	return page_link_at(v->popup, line, col);
+}
+
+int view_popup_follow(ehv_view *v, long r)
+{
+	hyp_run run;
+
+	if (v->popup == NULL || r < 0 || (unsigned long) r >= v->popup->nruns)
+		return VIEW_ERROR;
+	run = v->popup->runs[r];             /* the pop-up goes, its run is kept */
+	run.text = NULL;
+	view_popup_close(v);
+	return view_follow(v, &run);
+}
+
+long view_popup_cols(const ehv_view *v)
+{
+	const hyp_page *pg = v->popup;
+	long cols = 0;
+	unsigned short l, i;
+
+	if (pg == NULL)
+		return 0;
+	for (l = 0; l < pg->nlines; l++)
+	{
+		const hyp_line *ln = &pg->lines[l];
+		long c = 0, end = 0;
+
+		for (i = 0; i < ln->nruns; i++)
+		{
+			const hyp_run *run = &pg->runs[ln->first_run + i];
+			long k;
+
+			for (k = 0; k < run->len; k++)
+				if (run->text[k] != ' ')
+					end = c + k + 1;
+			c += run->len;
+		}
+		if (end > cols)
+			cols = end;
+	}
+	for (i = 0; i < pg->ngfx; i++)
+	{
+		const hyp_gfx *g = &pg->gfx[i];
+		long right = (g->x > 0 ? g->x - 1 : 0) + (g->w > 0 ? g->w : -g->w);
+
+		if (g->type != HYP_GFX_IMAGE && right > cols)
+			cols = right;
+	}
+	return cols;
 }
 
 unsigned long view_page_text(const ehv_view *v, char *buf, unsigned long size)

@@ -2,8 +2,9 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - what a viewer window shows and how it moves: the open
- * hypertext and page, the scroll position, the selected link and the
- * history.  No GEM here, so it is tested on the host; src/gem draws it.
+ * hypertext and page, the scroll position, the selected link, the
+ * history and an open pop-up.  No GEM here, so it is tested on the host;
+ * src/gem draws it.
  */
 #ifndef EHV_VIEW_H
 #define EHV_VIEW_H
@@ -15,6 +16,7 @@
 /* results */
 #define VIEW_OK      0
 #define VIEW_CLOSE   1           /* a "quit" link: close the window */
+#define VIEW_POPUP   2           /* a pop-up opened: see view->popup */
 #define VIEW_ERROR  -1           /* nothing changed; see view->status */
 
 /* view_relative() */
@@ -41,6 +43,13 @@ typedef struct {
 	view_hist *hist;
 	unsigned long nhist, cap_hist;
 	char status[200];            /* message for the info line    */
+	/*
+	 * A link to a @pnode opens it as a pop-up, as ST-Guide does: a small
+	 * box over the page, which stays as it is (nothing goes onto the
+	 * history).  Any page change closes it.
+	 */
+	hyp_page *popup;             /* NULL when none is open       */
+	unsigned short popup_node;   /* its index entry              */
 } ehv_view;
 
 void view_init(ehv_view *v, const ehv_index *idx);
@@ -63,6 +72,19 @@ int view_follow(ehv_view *v, const hyp_run *run);
 
 /* follow the selected link */
 int view_follow_selected(ehv_view *v);
+
+/* close the pop-up (when one is open) */
+void view_popup_close(ehv_view *v);
+
+/* the pop-up's link at (line, column), or -1 */
+long view_popup_link_at(const ehv_view *v, long line, long col);
+
+/* follow link run `r` of the pop-up: the pop-up closes first */
+int view_popup_follow(ehv_view *v, long r);
+
+/* the pop-up's width in columns: its text without trailing blanks, and
+   its lines and boxes (images are measured by the GEM side) */
+long view_popup_cols(const ehv_view *v);
 
 /* back to the previous page; VIEW_ERROR when there is none */
 int view_back(ehv_view *v);

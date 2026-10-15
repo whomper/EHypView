@@ -117,6 +117,7 @@ Back to @{"Main" link "Main"}
 
 @pnode "Pop"
 I am a popup.
+It links to @{"Second" link "Second"}.
 @endnode
 
 @node "Help"

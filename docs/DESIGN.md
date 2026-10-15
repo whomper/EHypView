@@ -110,7 +110,8 @@ src/view/      without GEM, tested on the host:
   library.c    the library: grouped list, name search, full-text hits
   fontpref.c   the font setting, size steps
 src/gem/       the GEM program
-  ehypview.c   viewer window, VDI drawing, events, AV protocol, startup
+  ehypview.c   viewer window, events, pop-up boxes, AV protocol, startup
+  pagedraw.c   a page laid out and drawn (the viewer's and a pop-up's)
   libwin.c     library window
   menu.c       the menu bar, built in code (no resource file)
   fontsel.c    the text font: selector dialog (from ECal), sizes, font protocol
@@ -241,6 +242,7 @@ Rules for `src/core`:
    and MiNT/MagiC are still to try)
 4. ~~Library window and search.~~ ✔ ~~Menu bar.~~ ✔ ~~Font choice.~~ ✔
    (GDOS fonts are untested: EmuTOS in Hatari has no GDOS)
-5. Multiple windows, tabs, bookmarks, settings dialog,
-   colour images.
+5. ~~Pop-ups in a box over the page.~~ ✔ (modal, as ST-Guide's: the next
+   click or key closes them) Multiple windows, tabs, bookmarks, settings
+   dialog, colour images.
 6. Accessory build, FireBee build, release packaging.
