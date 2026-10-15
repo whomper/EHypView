@@ -88,7 +88,7 @@ src/core/      portable C, no GEM: builds on the Atari and on the host
   hypfile.c    .HYP header, index, extended headers, object loading
   page.c       page byte stream -> lines of runs, graphics, xrefs
   ref.c        .REF / ALL.REF reader
-  inf.c        ST-GUIDE.INF reader
+  inf.c        ST-GUIDE.INF reader; EHYPVIEW.INF written back (inf_put)
   charset.c    Atari character set: Unicode, case folding
   pool.c       string pool for the index
   fsys.c       directories, paths, case-insensitive file lookup
@@ -108,7 +108,7 @@ common/        the AERA programs' shared code (git subtree of AERA-Atari):
 src/view/      without GEM, tested on the host:
   view.c       the viewer model: open, links, history, link selection
   library.c    the library: grouped list, name search, full-text hits
-  fontpref.c   the font setting in EHYPVIEW.INF, size steps
+  fontpref.c   the font setting, size steps
 src/gem/       the GEM program
   ehypview.c   viewer window, VDI drawing, events, AV protocol, startup
   libwin.c     library window
@@ -213,8 +213,13 @@ Rules for `src/core`:
   Hatari in a window on Xvfb and moves the mouse with xdotool (as
   EContact's rig does): clicking a link, the right button for back, the
   About box from the Desk menu, the font selector, Navigate and File
-  items. `tests/test_menu.c` also checks the menu tree (links, positions
-  on 320- to 1280-pixel screens, commands) on the host.
+  items. A last run has the accessory in the root and the program in
+  `C:\EHV`: the program, started from the desktop, writes `FOLDER=` and
+  its index there; the accessory, chosen meanwhile, hands it to the
+  program; the font the program chose is the accessory's when it next
+  opens (the AERA guidelines, 2.3 and 6.1). `tests/test_menu.c` also checks
+  the menu tree (links, positions on 320- to 1280-pixel screens, commands)
+  on the host.
 - `tests/test_index.c` builds a real folder tree for the scanner and
   resolver tests: mixed-case names, a folder with spaces, a duplicate, a
   damaged file, a symbolic link loop, a REF beside a file and an ALL.REF

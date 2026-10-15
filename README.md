@@ -37,7 +37,7 @@ A new, modern viewer for **ST-Guide hypertexts** (`.HYP`) on the Atari
   cells, so proportional fonts are shown but can't be picked. Control+Plus
   and Control+Minus change the size. A font dropped on a window from a
   font selector (the font protocol) is used too. The choice is kept in
-  `EHYPVIEW.INF` next to the program, and the list of which fonts are
+  `EHYPVIEW.INF` (see below), and the list of which fonts are
   monospaced in `EHYPVIEW.FNT`.
 
 **The library window** (Control+L, and what you see when no page was
@@ -115,10 +115,25 @@ page.
 `EHYPVIEW.PRG` opens the hypertext given on its command line, else `DEFHYP`
 (or `HYPTOP`) from `ST-GUIDE.INF` in the boot drive's root. It looks for
 hypertexts in the `PATHS` from that file, the folder of `REF`, `\GUIDES` and
-`\GEMSYS\GUIDES`, including all subfolders. The index is kept in
-`EHYPVIEW.IDX` next to the program. To replace the ST-Guide accessory,
-copy `EHYPVIEW.ACC` to the boot drive's root as `ST-GUIDE.ACC`, so that
-programs asking for ST-Guide find it.
+`\GEMSYS\GUIDES`, including all subfolders. To replace the ST-Guide
+accessory, copy `EHYPVIEW.ACC` to the boot drive's root as `ST-GUIDE.ACC`,
+so that programs asking for ST-Guide find it.
+
+**Where its files are.** The settings are in `EHYPVIEW.INF` in the root of
+the boot drive, where the accessory always finds them; `FOLDER=` in it
+names EHypView's folder, which holds the index of the hypertexts
+(`EHYPVIEW.IDX`) and `EHYPVIEW.FNT`. `EHYPVIEW.PRG` uses the folder it was
+started from and writes it into `FOLDER=`; the accessory uses `FOLDER=`,
+or the root while there is none. `EHYPVIEW.INF` has a note above each
+setting, and EHypView keeps the notes and anything it doesn't know when it
+writes the file. An `EHYPVIEW.INF` next to the program, from an older
+EHypView, is copied to the root the first time.
+
+**Program and accessory.** With both installed, they never work at once:
+while `EHYPVIEW.PRG` runs, EHypView in the Desk menu brings the program's
+window to the front, and a font chosen in the program is the accessory's
+too the next time it opens. Under MagiC or MiNT, where the accessory runs
+beside the programs, starting `EHYPVIEW.PRG` opens the accessory instead.
 
 | Keys | Action |
 |---|---|

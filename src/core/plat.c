@@ -39,6 +39,37 @@ int pf_read_at(int h, unsigned long off, void *buf, unsigned long n)
 	return read_full(h, buf, n);
 }
 
+/* where pf_save writes first: the last letter of the extension '$'
+   (EHYPVIEW.IN$; '~' when it is '$' already), NAME.$$$ without one. An
+   8.3 name, as TOS's FAT wants: there EHYPVIEW.INF.tmp is EHYPVIEW.INF
+   itself, so the old file went and the new one with it */
+static char *tmp_name(const char *path)
+{
+	const char *base = path, *dot = NULL, *p;
+	size_t n = strlen(path);
+	char *out = malloc(n + 5);
+
+	if (out == NULL)
+		return NULL;
+	for (p = path; *p != '\0'; p++)
+	{
+		if (*p == '\\' || *p == '/' || *p == ':')
+		{
+			base = p + 1;
+			dot = NULL;
+		} else if (*p == '.' && p > base)
+			dot = p;
+	}
+	strcpy(out, path);
+	if (dot == NULL)
+		strcat(out, ".$$$");
+	else if (strlen(dot + 1) < 3)
+		strcat(out, "$");
+	else
+		out[n - 1] = out[n - 1] == '$' ? '~' : '$';
+	return out;
+}
+
 char *pf_load(const char *path, unsigned long *len)
 {
 	pf_info info;
@@ -47,7 +78,17 @@ char *pf_load(const char *path, unsigned long *len)
 
 	if (len != NULL)
 		*len = 0;
-	if (pf_stat(path, &info) != 0 || info.is_dir)
+	if (pf_stat(path, &info) != 0)
+	{
+		/* a save cut short after the old file went: the new one is whole */
+		char *tmp = tmp_name(path);
+		int ok = tmp != NULL && pf_stat(tmp, &info) == 0 && pf_rename(tmp, path) == 0;
+
+		free(tmp);
+		if (!ok || pf_stat(path, &info) != 0)
+			return NULL;
+	}
+	if (info.is_dir)
 		return NULL;
 	h = pf_open(path, PF_READ);
 	if (h < 0)
@@ -68,15 +109,13 @@ char *pf_load(const char *path, unsigned long *len)
 
 int pf_save(const char *path, const void *data, unsigned long len)
 {
-	char *tmp = malloc(strlen(path) + 5);
+	char *tmp = tmp_name(path);
 	const unsigned char *p = data;
 	unsigned long left = len;
 	int h, ok = 1;
 
 	if (tmp == NULL)
 		return -1;
-	strcpy(tmp, path);
-	strcat(tmp, ".tmp");
 	h = pf_open(tmp, PF_WRITE);
 	if (h < 0)
 	{

@@ -15,6 +15,7 @@
 #include "ref.h"
 #include "inf.h"
 #include "charset.h"
+#include "plat.h"
 
 static int failures;
 static int checks;
@@ -459,6 +460,61 @@ static void test_inf(void)
 	inf_free(inf);
 }
 
+static void test_inf_put(void)
+{
+	static const char old[] =
+		"; EHypView's settings\r\n"
+		"\r\n"
+		"; the text font\r\n"
+		"font = Swiss\r\n"
+		"; FONT=not this one\r\n"
+		"MINE=kept\n"
+		"POINT=10";
+	char *t = inf_put(old, "FONT", "SYSTEM", "the text font"), *u;
+
+	CHECK(t != NULL && strcmp(t, "; EHypView's settings\r\n\r\n; the text font\r\nFONT=SYSTEM\r\n"
+				 "; FONT=not this one\r\nMINE=kept\r\nPOINT=10\r\n") == 0);
+	u = inf_put(t, "FOLDER", "C:\\EHYPVIEW", "where its files are");
+	CHECK(u != NULL && strstr(u, "POINT=10\r\n; where its files are\r\nFOLDER=C:\\EHYPVIEW\r\n\r\n") != NULL);
+	free(t);
+	t = inf_put(u, "folder", "D:\\", NULL);
+	CHECK(t != NULL && strstr(t, "folder=D:\\\r\n\r\n") != NULL && strstr(t, "C:\\EHYPVIEW") == NULL);
+	free(t);
+	free(u);
+	t = inf_put(NULL, "POINT", "12", "its size");
+	CHECK(t != NULL && strcmp(t, "; its size\r\nPOINT=12\r\n\r\n") == 0);
+	free(t);
+}
+
+static void test_save(void)
+{
+	unsigned long n;
+	char *t;
+	FILE *fp;
+
+	remove("TSAVE.INF");
+	CHECK(pf_save("TSAVE.INF", "one", 3) == 0 && pf_save("TSAVE.INF", "two!", 4) == 0);
+	t = pf_load("TSAVE.INF", &n);
+	CHECK(t != NULL && n == 4 && strcmp(t, "two!") == 0);
+	free(t);
+	fp = fopen("TSAVE.IN$", "rb");
+	CHECK(fp == NULL);                 /* the 8.3 temporary name, gone */
+	if (fp != NULL)
+		fclose(fp);
+	/* a reset between the old file going and the new one's renaming */
+	remove("TSAVE.INF");
+	fp = fopen("TSAVE.IN$", "wb");
+	if (fp != NULL)
+	{
+		fputs("whole", fp);
+		fclose(fp);
+	}
+	t = pf_load("TSAVE.INF", &n);
+	CHECK(t != NULL && strcmp(t, "whole") == 0);
+	free(t);
+	remove("TSAVE.INF");
+}
+
 static void test_charset(void)
 {
 	char b[4];
@@ -576,6 +632,8 @@ int main(int argc, char **argv)
 	test_encrypted();
 	test_ref();
 	test_inf();
+	test_inf_put();
+	test_save();
 	test_charset();
 	test_mutations("basic.hyp");
 	test_mutations("images.hyp");

@@ -218,6 +218,12 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False):
             for k in keys:
                 if isinstance(k, tuple) and k[0] in ("click", "rclick"):
                     mouse.click(k[1], k[2], "1" if k[0] == "click" else "3")
+                elif isinstance(k, tuple) and k[0] == "dclick":
+                    mouse.move(k[1], k[2])
+                    mouse.xdo("click", "--repeat", "2", "--delay", "80", "1")
+                    time.sleep(2)
+                elif isinstance(k, tuple) and k[0] == "wait":
+                    time.sleep(k[1])
                 elif isinstance(k, tuple) and k[0] == "menu":
                     mouse.click(k[1], k[2])                # the title drops the menu down
                     mouse.click(k[3], k[4])                # the item
@@ -300,14 +306,57 @@ MOUSE_STEPS = [
 ]
 
 
-def check_file(path, expected):
+# EHYPVIEW.PRG and EHYPVIEW.ACC (the AERA guidelines, 2.3, 6.1), under
+# EmuTOS: the accessory indexes at boot; the program, started from the
+# desktop (C:\\EHV\\EHYPVIEW.PRG), writes C:\\EHYPVIEW.INF with FOLDER=; the
+# accessory chosen meanwhile hands it to the program; the program makes
+# the text smaller and quits; the accessory, opened, takes the new size
+TWIN_STEPS = [
+    ([], ["acc registered", "index 5 guides"]),
+    ([("dclick", 195, 40), ("dclick", 60, 158), ("dclick", 60, 158)],    # DISK C, EHV, the program
+     ["menu shown", "library 0", "index 5 guides"]),
+    ([item(DESK, 2)], ["acc to the program"]),                          # the accessory, in the Desk menu
+    ([("ctrl", MINUS)], ["font System font 8"]),
+    ([("ctrl", Q)], ["quit"]),
+    ([("wait", 6), ("click", 18, 8), ("click", 60, 64)], ["font System font 8"]),    # the desktop's Desk menu
+]
+
+
+def twin_dir():
+    """C: with the accessory in the root and the program in C:\\EHV"""
+    import shutil
+    d = os.path.join(OUT, "twin")
+    if os.path.exists(d):
+        shutil.rmtree(d)
+    shutil.copytree(os.path.join(HDIR, "FIXT"), os.path.join(d, "FIXT"))
+    os.makedirs(os.path.join(d, "EHV"))
+    shutil.copy(os.path.join(HDIR, "EHYPVIEW.PRG"), os.path.join(d, "EHV"))
+    shutil.copy(os.path.join(HDIR, "EHYPVIEW.ACC"), d)
+    with open(os.path.join(d, "ST-GUIDE.INF"), "w") as f:
+        f.write("PATHS=C:\\FIXT\r\nREF=C:\\FIXT\\ALL.REF\r\n")
+    return d
+
+
+def check_inf(path, settings):
+    """EHYPVIEW.INF (the AERA guidelines, 6.1): these settings, CR LF line
+    ends, and a ';' note above each"""
     try:
         with open(path, newline="") as f:
             got = f.read()
     except OSError as e:
         got = str(e)
-    ok = got == expected
+    lines = got.split("\r\n")
+    ok = got.endswith("\r\n") and "\n" not in got.replace("\r\n", "")
+    ok = ok and all(s in lines for s in settings)
+    ok = ok and all(i > 0 and lines[i - 1].startswith(";")
+                    for i, l in enumerate(lines) if l and not l.startswith(";"))
     print("%s  %s: %r" % ("ok  " if ok else "FAIL", os.path.basename(path), got))
+    return ok
+
+
+def check_exists(path, what):
+    ok = os.path.exists(path)
+    print("%s  %s" % ("ok  " if ok else "FAIL", what))
     return ok
 
 
@@ -316,7 +365,7 @@ def main():
     d = copy_dir("viewer", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
     ok = run_scenario("viewer", d, STEPS)
     if ok:
-        ok = check_file(os.path.join(d, "EHYPVIEW.INF"), "FONT=System font\r\nPOINT=8\r\n")
+        ok = check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FONT=System font", "POINT=8", "FOLDER=C:\\"])
     if ok:
         d = copy_dir("libstart", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n",
                      "FONT=System font\nPOINT=8\n")
@@ -335,6 +384,20 @@ def main():
             print("skip  mouse: needs Xvfb and xdotool")
     if ok:
         ok = accessory_smoke()
+    if ok:
+        if have_display():
+            d = twin_dir()
+            xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(1)
+            try:
+                ok = run_scenario("twin", d, TWIN_STEPS, auto=None, windowed=True)
+            finally:
+                xvfb.terminate()
+            ok = check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FOLDER=C:\\EHV", "POINT=8"]) and ok
+            ok = check_exists(os.path.join(d, "EHV", "EHYPVIEW.IDX"), "the program's index, in FOLDER=") and ok
+        else:
+            print("skip  twin: needs Xvfb and xdotool")
     return 0 if ok else 1
 
 

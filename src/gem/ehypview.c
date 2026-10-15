@@ -25,6 +25,7 @@
 #include "fsys.h"
 #include "plat.h"
 #include "inf.h"
+#include "charset.h"
 #include "scan.h"
 #include "view.h"
 #include "gemapp.h"
@@ -38,6 +39,7 @@
 #include "iconify.h"
 #include "clip.h"
 #include "dd.h"
+#include "twin.h"
 #include "version.h"
 
 #define VA_START   0x4711
@@ -69,7 +71,9 @@ static ehv_view view;
 static ehv_scan *scanner;
 static ref_db *allref;
 static char cache_path[200];
-static char start_dir[160];
+static char start_dir[160];           /* where the program started: CRASH.LOG */
+static char home_dir[160];            /* FOLDER=: EHYPVIEW.IDX and .FNT */
+static char settings_path[40];        /* X:\EHYPVIEW.INF, the boot drive's root */
 
 /*
  * Events for the emulator console (NatFeats NF_STDERR; a no-op on real
@@ -1254,6 +1258,11 @@ static void click(short mx, short my, short button)
    the page */
 static void show_request(const char *args)
 {
+	if ((args == NULL || args[0] == '\0') && view.page == NULL)
+	{
+		libwin_open();             /* nothing asked, nothing shown: the library */
+		return;
+	}
 	open_window();
 	if (args != NULL && args[0] != '\0')
 	{
@@ -1370,9 +1379,15 @@ static void message(short *msg)
 			scroll_to(view.top, max_left() * msg[4] / 1000);
 		break;
 	case AC_OPEN:
+		if (msg[4] == menu_id && twin_pass(""))
+		{
+			log_event("acc", "to the program", NULL);
+			break;                     /* EHYPVIEW.PRG runs: its window to the front */
+		}
 		if (msg[4] == menu_id && screen_check("EHypView", ehv_ui_scr_w))	/* not in ST low */
 		{
 			av_init("EHYPVIEW|ST-GUIDE");	/* a desktop started since */
+			font_check();
 			if (view.page != NULL)
 				open_window();
 			else
@@ -1380,6 +1395,7 @@ static void message(short *msg)
 		}
 		break;
 	case AC_CLOSE:
+		twin_reset();                  /* another program in front */
 		if (msg[3] == menu_id)
 		{
 			/* the AES took the windows */
@@ -1413,13 +1429,18 @@ static void message(short *msg)
 			   common/ui/av.c */
 			const char *args;
 
-			if (av_message(msg, &args) == AV_START)
+			if (av_message(msg, &args) == AV_START && !(is_acc && twin_pass(args)))
 				show_request(args);
 		}
 		break;
 	case AC_HELP:
-		show_request((const char *) (((unsigned long) (unsigned short) msg[3] << 16) |
-			(unsigned short) msg[4]));
+		{
+			const char *args = (const char *) (((unsigned long) (unsigned short) msg[3] << 16) |
+				(unsigned short) msg[4]);
+
+			if (!(is_acc && twin_pass(args)))
+				show_request(args);
+		}
 		break;
 	default:
 		{
@@ -1428,8 +1449,21 @@ static void message(short *msg)
 			DROP d;
 			char path[256];
 
-			if (dd_message(msg, DD_WANT_FILES, &d) == DD_FILES && av_arg(d.data, path, sizeof(path)))
-				viewer_show(path, NULL, 0);
+			switch (dd_message(msg, DD_WANT_FILES, &d))
+			{
+			case DD_FILES:
+				if (av_arg(d.data, path, sizeof(path)))
+					viewer_show(path, NULL, 0);
+				break;
+			case DD_NONE:
+				{
+					/* our accessory asking whether we run (twin.h) */
+					const char *a;
+
+					av_message(msg, &a);
+				}
+				break;
+			}
 			dd_done(&d);
 		}
 		break;
@@ -1438,6 +1472,77 @@ static void message(short *msg)
 
 /* ---------------------------------------------------------------- */
 /* index: load the cache, then rescan in the background              */
+
+/* ---------------------------------------------------------------- */
+/* EHYPVIEW.INF: in the boot drive's root, where the accessory finds  */
+/* it too; FOLDER= says where the rest is (the AERA guidelines, 6.1)  */
+
+static const char inf_head[] =
+	"; EHYPVIEW.INF: EHypView's settings, the program's and the accessory's.\r\n"
+	"; A line starting with ';' is a note. EHypView keeps the notes, and\r\n"
+	"; any setting it doesn't know, when it writes the file.\r\n\r\n";
+
+int settings_put(const char *key, const char *value, const char *note)
+{
+	char *text = pf_load(settings_path, NULL), *t;
+	int r = -1;
+
+	t = inf_put(text != NULL ? text : inf_head, key, value, note);
+	if (t != NULL)
+	{
+		r = pf_save(settings_path, t, (unsigned long) strlen(t));
+		free(t);
+	}
+	free(text);
+	return r;
+}
+
+/* The program keeps its files next to itself and says so in FOLDER=;
+   the accessory takes FOLDER=, else the boot drive's root (its files
+   are only the library's index and the fonts measured, so it never
+   asks) */
+static void find_home(void)
+{
+	inf_file *inf;
+	const char *f;
+	pf_info st;
+
+	settings_path[0] = (char) ('A' + boot_drive());
+	strcpy(settings_path + 1, ":\\EHYPVIEW.INF");
+	if (!is_acc)
+	{
+		char *old = fs_join(start_dir, "EHYPVIEW.INF");
+
+		strcpy(home_dir, start_dir);
+		/* EHYPVIEW.INF from before, next to the program: to the root,
+		   the first time */
+		if (old != NULL && pf_stat(settings_path, &st) != 0 && atari_casecmp(old, settings_path) != 0)
+		{
+			unsigned long n;
+			char *t = pf_load(old, &n);
+
+			if (t != NULL)
+				pf_save(settings_path, t, n);
+			free(t);
+		}
+		free(old);
+		inf = inf_load(settings_path, NULL);
+		f = inf != NULL ? inf_get(inf, "FOLDER") : NULL;
+		if (f == NULL || atari_casecmp(f, home_dir) != 0)
+			settings_put("FOLDER", home_dir, "where EHypView keeps its files (EHYPVIEW.IDX, the library; "
+				     "EHYPVIEW.FNT, the fonts measured): the program writes the folder it was started from");
+		inf_free(inf);
+		return;
+	}
+	inf = inf_load(settings_path, NULL);
+	f = inf != NULL ? inf_get(inf, "FOLDER") : NULL;
+	if (f != NULL && f[0] != '\0' && strlen(f) < sizeof(home_dir) &&
+	    (strlen(f) <= 3 || (pf_stat(f, &st) == 0 && st.is_dir)))
+		strcpy(home_dir, f);
+	else
+		strcpy(home_dir, settings_path), home_dir[3] = '\0';	/* X:\ */
+	inf_free(inf);
+}
 
 static inf_file *read_inf(void)
 {
@@ -1455,7 +1560,7 @@ static void start_index(const inf_file *inf)
 	const char *ref = inf ? inf_get(inf, "REF") : NULL;
 	char *p;
 
-	p = fs_join(start_dir, "EHYPVIEW.IDX");
+	p = fs_join(home_dir, "EHYPVIEW.IDX");
 	if (p != NULL)
 	{
 		strncpy(cache_path, p, sizeof(cache_path) - 1);
@@ -1603,6 +1708,12 @@ int main(void)
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;
+	twin_init("EHYPVIEW");
+	if (!is_acc && twin_handover(command_line()))
+	{
+		appl_exit();                   /* EHYPVIEW.ACC runs, and has it */
+		return 0;
+	}
 	if (is_acc)
 	{
 		acc_heap();
@@ -1640,7 +1751,8 @@ int main(void)
 	   ST-GUIDE.ACC, standing in for ST-Guide */
 	av_init("EHYPVIEW|ST-GUIDE");
 
-	font_init(start_dir);
+	find_home();
+	font_init(home_dir, settings_path);
 	log_font();
 	view_init(&view, NULL);
 	inf = read_inf();
@@ -1686,11 +1798,14 @@ int main(void)
 	while (!quit_now)
 	{
 		short flags = MU_MESAG, which;
-		int busy = scanner != NULL || fts_busy;
+		/* the accessory leaves the library's index to EHYPVIEW.PRG
+		   while it runs */
+		int paused = is_acc && scanner != NULL && twin_prg() >= 0;
+		int busy = (scanner != NULL && !paused) || fts_busy;
 
 		if (win_h > 0 || libwin_handle() > 0 || has_menu)
 			flags |= MU_KEYBD | MU_BUTTON;
-		if (busy)
+		if (busy || paused)
 			flags |= MU_TIMER;
 		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, busy ? 0 : 1000, msg, &ev);
 		if ((which & MU_MESAG) && !libwin_message(msg))
@@ -1722,7 +1837,8 @@ int main(void)
 		}
 		if (which & MU_TIMER)
 		{
-			scan_some();
+			if (!paused)
+				scan_some();
 			fts_busy = libwin_idle();
 		}
 		else if (fts_busy == 0)

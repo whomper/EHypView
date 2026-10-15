@@ -43,6 +43,14 @@ static char size_label[MAXSIZE][12];
 static font_pref pref;
 static short cur_id = 1, cur_pt;
 static char inf_path[200], fnt_path[200];
+static unsigned long inf_seen;		/* EHYPVIEW.INF as we last read or wrote it */
+
+static unsigned long stamp(const char *path)
+{
+	pf_info st;
+
+	return pf_stat(path, &st) == 0 ? st.mtime ^ (st.size << 16) ^ st.size : 0;
+}
 
 static void busy(int on)
 {
@@ -301,11 +309,12 @@ static const char *format_name(const FAM *f)
 
 static void save(void)
 {
-	char buf[80];
-	unsigned long n = fontpref_format(&pref, buf, sizeof(buf));
+	char pt[12];
 
-	if (n > 0)
-		pf_save(inf_path, buf, n);
+	sprintf(pt, "%d", pref.point);
+	settings_put("FONT", pref.name, "the text font: SYSTEM, or the name of a GDOS font (View > Font...)");
+	settings_put("POINT", pt, "its size in points; 0: the usual one");
+	inf_seen = stamp(inf_path);
 }
 
 /* pref -> the VDI font, cw and ch */
@@ -341,16 +350,37 @@ static void join(char *out, size_t size, const char *dir, const char *name)
 	snprintf(out, size, "%s%s%s", dir, n > 0 && dir[n - 1] != '\\' ? "\\" : "", name);
 }
 
-void font_init(const char *dir)
+void font_init(const char *dir, const char *inf)
 {
 	char *text;
 
-	join(inf_path, sizeof(inf_path), dir, "EHYPVIEW.INF");
+	snprintf(inf_path, sizeof(inf_path), "%s", inf);
 	join(fnt_path, sizeof(fnt_path), dir, "EHYPVIEW.FNT");
 	text = pf_load(inf_path, NULL);
+	inf_seen = stamp(inf_path);
 	fontpref_parse(&pref, text);
 	free(text);
 	apply();
+}
+
+/* EHYPVIEW.PRG chose another font while the accessory waited: the
+   accessory takes it too */
+void font_check(void)
+{
+	char *text;
+	font_pref was = pref;
+
+	if (stamp(inf_path) == inf_seen)
+		return;
+	text = pf_load(inf_path, NULL);
+	inf_seen = stamp(inf_path);
+	fontpref_parse(&pref, text);
+	free(text);
+	if (strcmp(was.name, pref.name) != 0 || was.point != pref.point)
+	{
+		apply();
+		app_font_changed();
+	}
 }
 
 void font_exit(void)

@@ -54,7 +54,8 @@ int pf_read_at(int h, unsigned long off, void *buf, unsigned long n);
 /* the whole file, NUL-terminated (not counted in *len); NULL on error */
 char *pf_load(const char *path, unsigned long *len);
 
-/* write a whole file safely: "path.tmp", then rename over path */
+/* write a whole file safely: NAME.IN$ for NAME.INF (8.3, as TOS wants),
+   then renamed over it; pf_load finishes a save cut short in between */
 int pf_save(const char *path, const void *data, unsigned long len);
 
 #endif

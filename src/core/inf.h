@@ -31,6 +31,15 @@ void inf_free(inf_file *inf);
 const char *inf_get(const inf_file *inf, const char *key);
 
 /*
+ * EHYPVIEW.INF written back (the AERA guidelines, 6.1): text (the whole
+ * file, or NULL for none yet) with key=value. Each line that sets key is
+ * changed in place; with none, "; note", the line and an empty line are
+ * added at the end. Notes, unknown settings and everything else stay as
+ * they were; lines end CR LF. A malloc'ed copy, or NULL.
+ */
+char *inf_put(const char *text, const char *key, const char *value, const char *note);
+
+/*
  * Split a path list ("C:\GUIDES\;D:\DOC" - separated by ';' or ',') into
  * a malloc'ed array of malloc'ed strings with blanks trimmed.  Returns
  * the number of entries; *out is NULL when there are none.

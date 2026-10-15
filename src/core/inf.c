@@ -115,6 +115,92 @@ const char *inf_get(const inf_file *inf, const char *key)
 	return NULL;
 }
 
+/* the line at p (to its '\n') sets key */
+static int sets(const char *p, const char *key)
+{
+	char k[40];
+	size_t i = 0;
+
+	while (is_blank(*p))
+		p++;
+	while (*p != '\0' && *p != '=' && *p != '\n' && i < sizeof(k) - 1)
+		k[i++] = *p++;
+	if (*p != '=')
+		return 0;
+	while (i > 0 && is_blank(k[i - 1]))
+		i--;
+	k[i] = '\0';
+	return k[0] != ';' && k[0] != '#' && atari_casecmp(k, key) == 0;
+}
+
+char *inf_put(const char *text, const char *key, const char *value, const char *note)
+{
+	size_t tl = text ? strlen(text) : 0, kl = strlen(key), vl = strlen(value);
+	size_t nl = note ? strlen(note) : 0, lines = 1, size;
+	const char *p;
+	char *out, *o;
+	int found = 0;
+
+	for (p = text; p && *p; p++)
+		if (*p == '\n')
+			lines++;
+	size = tl + lines * (kl + vl + 5) + nl + kl + vl + 16;
+	out = malloc(size);
+	if (out == NULL)
+		return NULL;
+	o = out;
+	for (p = text; p && *p;)
+	{
+		const char *e = strchr(p, '\n');
+		size_t len = e ? (size_t) (e - p) : strlen(p);
+
+		if (sets(p, key))
+		{
+			found = 1;
+			memcpy(o, key, kl);
+			o += kl;
+			*o++ = '=';
+			memcpy(o, value, vl);
+			o += vl;
+			*o++ = '\r';
+			*o++ = '\n';
+		} else
+		{
+			memcpy(o, p, len);
+			o += len;
+			if (e != NULL || len > 0)
+			{
+				/* every line ends CR LF, the last one too */
+				if (o > out && o[-1] != '\r')
+					*o++ = '\r';
+				*o++ = '\n';
+			}
+		}
+		p += len + (e != NULL);
+	}
+	if (!found)
+	{
+		if (note != NULL)
+		{
+			*o++ = ';';
+			*o++ = ' ';
+			memcpy(o, note, nl);
+			o += nl;
+			*o++ = '\r';
+			*o++ = '\n';
+		}
+		memcpy(o, key, kl);
+		o += kl;
+		*o++ = '=';
+		memcpy(o, value, vl);
+		o += vl;
+		memcpy(o, "\r\n\r\n", 4);
+		o += 4;
+	}
+	*o = '\0';
+	return out;
+}
+
 unsigned int inf_split_list(const char *value, char ***out)
 {
 	unsigned int n = 0, max = 1;

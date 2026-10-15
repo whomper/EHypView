@@ -57,8 +57,14 @@ void libwin_index_changed(void);          /* a new index (or progress) */
 void libwin_free(void);
 void libwin_font_changed(void);
 
+/* ehypview.c: EHYPVIEW.INF, in the boot drive's root (the AERA
+   guidelines, 6.1): key=value set, the rest of the file kept; note is the
+   ';' line written above a new setting. 0 when written */
+int settings_put(const char *key, const char *value, const char *note);
+
 /* fontsel.c: the text font */
-void font_init(const char *dir);          /* the font from EHYPVIEW.INF in dir */
+void font_init(const char *dir, const char *inf);	/* the font from inf; EHYPVIEW.FNT in dir */
+void font_check(void);                    /* the accessory: inf changed meanwhile? the font again */
 void font_exit(void);
 void font_dialog(void);                   /* View > Font... */
 int font_step(int dir);                   /* the next size up or down: 1 when changed */
