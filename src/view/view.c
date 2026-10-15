@@ -26,6 +26,19 @@ void view_init(ehv_view *v, const ehv_index *idx)
 	v->sel = -1;
 }
 
+static void hist_free(view_hist *h)
+{
+	free(h->path);
+	free(h->title);
+}
+
+/* forget every page gone back from (any move but back and forward) */
+static void forward_clear(ehv_view *v)
+{
+	while (v->nfwd > 0)
+		hist_free(&v->fwd[--v->nfwd]);
+}
+
 void view_free(ehv_view *v)
 {
 	unsigned long i;
@@ -34,8 +47,10 @@ void view_free(ehv_view *v)
 	hyp_page_free(v->page);
 	hyp_close(v->doc);
 	for (i = 0; i < v->nhist; i++)
-		free(v->hist[i].path);
+		hist_free(&v->hist[i]);
 	free(v->hist);
+	forward_clear(v);
+	free(v->fwd);
 	view_init(v, v->idx);
 }
 
@@ -49,30 +64,56 @@ static void set_status(ehv_view *v, const char *a, const char *b, const char *c)
 	snprintf(v->status, sizeof(v->status), "%s%s%s", a ? a : "", b ? b : "", c ? c : "");
 }
 
-static int push_history(ehv_view *v)
+/* room for one more entry on a list */
+static int hist_room(view_hist **list, unsigned long n, unsigned long *cap)
+{
+	if (n == *cap)
+	{
+		unsigned long ncap = *cap ? *cap * 2 : 16;
+		view_hist *p = realloc(*list, ncap * sizeof(view_hist));
+
+		if (p == NULL)
+			return -1;
+		*list = p;
+		*cap = ncap;
+	}
+	return 0;
+}
+
+/* the page shown, put on a list (the history, or the forward list);
+   1 when there was one, 0 when nothing is shown, -1 out of memory */
+static int push_current(ehv_view *v, view_hist **list, unsigned long *n, unsigned long *cap)
 {
 	view_hist *h;
 
 	if (v->page == NULL)
 		return 0;
-	if (v->nhist == v->cap_hist)
-	{
-		unsigned long ncap = v->cap_hist ? v->cap_hist * 2 : 16;
-		view_hist *p = realloc(v->hist, ncap * sizeof(view_hist));
-
-		if (p == NULL)
-			return -1;
-		v->hist = p;
-		v->cap_hist = ncap;
-	}
-	h = &v->hist[v->nhist];
-	h->path = dupstr(v->doc->path);
-	if (h->path == NULL)
+	if (hist_room(list, *n, cap) < 0)
 		return -1;
+	h = &(*list)[*n];
+	h->path = dupstr(v->doc->path);
+	h->title = dupstr(hyp_page_title(v->doc, v->page));
+	if (h->path == NULL || h->title == NULL)
+	{
+		hist_free(h);
+		return -1;
+	}
 	h->node = v->page->num;
 	h->top = v->top;
-	v->nhist++;
-	return 0;
+	(*n)++;
+	return 1;
+}
+
+static int push_history(ehv_view *v)
+{
+	return push_current(v, &v->hist, &v->nhist, &v->cap_hist) < 0 ? -1 : 0;
+}
+
+/* forget the entry push_history() added, the move having failed */
+static void pop_history(ehv_view *v)
+{
+	v->nhist--;
+	hist_free(&v->hist[v->nhist]);
 }
 
 /* replace the page; the document stays */
@@ -146,11 +187,9 @@ static int show(ehv_view *v, const char *path, const char *node, long top, int p
 	}
 	rc = show_entry(v, entry, top);
 	if (rc != VIEW_OK && push)
-	{
-		/* nothing is shown instead: forget the history entry again */
-		v->nhist--;
-		free(v->hist[v->nhist].path);
-	}
+		pop_history(v);           /* nothing is shown instead */
+	else if (rc == VIEW_OK && push)
+		forward_clear(v);
 	return rc;
 }
 
@@ -167,10 +206,10 @@ int view_goto(ehv_view *v, unsigned short entry, unsigned short line)
 		return VIEW_ERROR;
 	if (show_entry(v, entry, line) != VIEW_OK)
 	{
-		v->nhist--;
-		free(v->hist[v->nhist].path);
+		pop_history(v);
 		return VIEW_ERROR;
 	}
+	forward_clear(v);
 	v->status[0] = '\0';
 	return VIEW_OK;
 }
@@ -295,44 +334,135 @@ int view_follow_selected(ehv_view *v)
 	return view_follow(v, &v->page->runs[v->sel]);
 }
 
-int view_back(ehv_view *v)
+/* show a page from a list; the lists stay as they are */
+static int show_hist(ehv_view *v, const view_hist *h)
 {
-	view_hist h;
-	int rc;
+	hyp_doc *doc;
+	int err;
 
-	if (v->nhist == 0)
+	if (v->doc != NULL && strcmp(v->doc->path, h->path) == 0)
+		return show_entry(v, h->node, h->top);
+	/* another hypertext: open it again */
+	doc = hyp_open(h->path, &err);
+	if (doc == NULL)
 	{
-		set_status(v, "This is the first page", NULL, NULL);
+		set_status(v, fs_basename(h->path), ": ", hyp_strerror(err));
+		return VIEW_ERROR;
+	}
+	hyp_page_free(v->page);
+	v->page = NULL;
+	hyp_close(v->doc);
+	v->doc = doc;
+	return show_entry(v, h->node, h->top);
+}
+
+int view_jump(ehv_view *v, long steps)
+{
+	view_hist **from, **to, h;
+	unsigned long *nfrom, *nto, *capto, k, i;
+	int pushed, rc;
+
+	if (steps == 0)
+		return VIEW_OK;
+	if (steps < 0)
+	{
+		from = &v->hist, nfrom = &v->nhist;
+		to = &v->fwd, nto = &v->nfwd, capto = &v->cap_fwd;
+		k = (unsigned long) -steps;
+	} else
+	{
+		from = &v->fwd, nfrom = &v->nfwd;
+		to = &v->hist, nto = &v->nhist, capto = &v->cap_hist;
+		k = (unsigned long) steps;
+	}
+	if (k > *nfrom)
+	{
+		set_status(v, steps < 0 ? "This is the first page" : "There is no page to go forward to", NULL, NULL);
+		return VIEW_ERROR;
+	}
+	/* room for the page shown and the ones passed over */
+	for (i = 0; i < k; i++)
+		if (hist_room(to, *nto + i, capto) < 0)
+		{
+			set_status(v, "Out of memory", NULL, NULL);
+			return VIEW_ERROR;
+		}
+	pushed = push_current(v, to, nto, capto);
+	if (pushed < 0)
+	{
+		set_status(v, "Out of memory", NULL, NULL);
 		return VIEW_ERROR;
 	}
 	view_popup_close(v);
-	h = v->hist[v->nhist - 1];
-	v->nhist--;
-	if (v->doc != NULL && strcmp(v->doc->path, h.path) == 0)
-		rc = show_entry(v, h.node, h.top);
-	else
+	for (i = 1; i < k; i++)
+		(*to)[(*nto)++] = (*from)[--*nfrom];
+	h = (*from)[--*nfrom];
+	rc = show_hist(v, &h);
+	if (rc != VIEW_OK)
 	{
-		/* another hypertext: reopen it by its entry name */
-		hyp_doc *doc;
-		int err;
-
-		doc = hyp_open(h.path, &err);
-		if (doc == NULL)
-		{
-			set_status(v, fs_basename(h.path), ": ", hyp_strerror(err));
-			free(h.path);
-			return VIEW_ERROR;
-		}
-		hyp_page_free(v->page);
-		v->page = NULL;
-		hyp_close(v->doc);
-		v->doc = doc;
-		rc = show_entry(v, h.node, h.top);
+		/* as it was */
+		(*from)[(*nfrom)++] = h;
+		for (i = 1; i < k; i++)
+			(*from)[(*nfrom)++] = (*to)[--*nto];
+		if (pushed)
+			hist_free(&(*to)[--*nto]);
+		return rc;
 	}
-	free(h.path);
-	if (rc == VIEW_OK)
-		v->status[0] = '\0';
-	return rc;
+	hist_free(&h);
+	v->status[0] = '\0';
+	return VIEW_OK;
+}
+
+int view_back(ehv_view *v)
+{
+	return view_jump(v, -1);
+}
+
+int view_forward(ehv_view *v)
+{
+	return view_jump(v, 1);
+}
+
+const char *view_jump_title(const ehv_view *v, long steps)
+{
+	if (steps < 0 && (unsigned long) -steps <= v->nhist)
+		return v->hist[v->nhist - (unsigned long) -steps].title;
+	if (steps > 0 && (unsigned long) steps <= v->nfwd)
+		return v->fwd[v->nfwd - (unsigned long) steps].title;
+	return NULL;
+}
+
+unsigned int view_xref_count(const ehv_view *v)
+{
+	return v->page != NULL ? v->page->nxrefs : 0;
+}
+
+void view_xref_label(const ehv_view *v, unsigned int i, char *buf, unsigned long size)
+{
+	const hyp_xref *x;
+
+	if (size == 0)
+		return;
+	buf[0] = '\0';
+	if (i >= view_xref_count(v))
+		return;
+	x = &v->page->xrefs[i];
+	if (x->text != NULL && x->text[0] != '\0')
+		snprintf(buf, size, "%s", x->text);
+	else if (x->target < v->doc->num_entries)
+		snprintf(buf, size, "%s", v->doc->entries[x->target].name);
+}
+
+int view_xref_follow(ehv_view *v, unsigned int i)
+{
+	hyp_run run;
+
+	if (i >= view_xref_count(v))
+		return VIEW_ERROR;
+	memset(&run, 0, sizeof(run));
+	run.kind = HYP_RUN_LINK;
+	run.target = v->page->xrefs[i].target;
+	return view_follow(v, &run);
 }
 
 /* the entry `which` leads to, or HYP_NO_NODE (with *msg saying why) */
@@ -398,6 +528,10 @@ int view_can(const ehv_view *v, int which)
 
 	if (which == VIEW_BACK)
 		return v->nhist > 0;
+	if (which == VIEW_FORWARD)
+		return v->nfwd > 0;
+	if (which == VIEW_SEEALSO)
+		return view_xref_count(v) > 0;
 	return relative_entry(v, which, &msg) != HYP_NO_NODE;
 }
 

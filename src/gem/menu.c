@@ -44,12 +44,14 @@ static const MBAR_ITEM view_items[] = {
 
 static const MBAR_ITEM nav_items[] = {
 	{ "Back", "Undo", CMD_BACK },
+	{ "Forward", "\x01Undo", CMD_FORWARD },
 	{ "Link in new window", "\x01Return", CMD_LINKWIN },
 	{ "-", NULL, CMD_NONE },
 	{ "Main page", "^Home", CMD_HOME },
 	{ "Contents", "^T", CMD_TOC },
 	{ "Index", "^I", CMD_INDEX },
 	{ "Help page", "Help", CMD_HELP },
+	{ "See also...", NULL, CMD_SEEALSO },
 	{ "-", NULL, CMD_NONE },
 	{ "Previous page", "^Left", CMD_PREV },
 	{ "Next page", "^Right", CMD_NEXT },
@@ -123,7 +125,8 @@ const char *menu_command_name(int cmd)
 		"none", "about", "open", "library", "close", "quit",
 		"back", "home", "index", "toc", "help", "prev", "next",
 		"font", "larger", "smaller", "cut", "copy", "paste",
-		"new-window", "link-window", "bookmark-add", "bookmark-remove"
+		"new-window", "link-window", "bookmark-add", "bookmark-remove",
+		"forward", "see-also"
 	};
 
 	if (cmd >= CMD_BM0 && cmd < CMD_COUNT)

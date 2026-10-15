@@ -18,6 +18,9 @@ accessory, made to replace `ST-GUIDE.ACC`.
 - **In ST-Guide's place:** installed as `ST-GUIDE.ACC`, it answers programs that ask ST-Guide for help
   (`VA_START`, `AC_HELP`), and it reads your `ST-GUIDE.INF`.
 - **Pages as they were written:** styled text, links, lines, boxes and images, with unlimited history.
+- **A toolbar as ST-Guide had:** Back and Forward (with the history on the right button), the main
+  page, the page before and after, Contents, Index, See also, the library and bookmarks, each with a
+  tooltip.
 - **Several windows and bookmarks:** open a link in a new window (⇧-click) or the page in another
   (^N), up to six; keep pages to come back to (^D), in the Bookmarks menu and the library.
 - **Your choice of font:** the system font, or any monospaced GDOS font with NVDI or SpeedoGDOS, in any
@@ -66,8 +69,26 @@ Click a link, or move to it with Tab and press Return. Links lead into any hyper
 when one leads nowhere, the window's info line says so and suggests the closest names. In the program,
 every menu item (**Desk**, **File**, **Edit**, **View**, **Navigate**, **Bookmarks**) has a keyboard
 shortcut, and items you can't use right now are greyed out. The right mouse button, or Insert, opens a
-menu with **Back** first (and, on a link, **Link in new window**), then the pages, **New window**,
-**Add bookmark**, **Copy page**, **Library and search**, **Font...**, and **About EHypView...** last.
+menu with **Back** and **Forward** first (and, on a link, **Link in new window**), then the pages,
+**New window**, **Add bookmark**, **Copy page**, **Library and search**, **Font...**, and
+**About EHypView...** last.
+
+**The toolbar**, at the top of each viewer window, has ST-Guide's buttons in the family's look:
+
+| Button | What it does |
+|---|---|
+| ◀ ▶ | back and forward (the right button: the pages that way, to jump several at once) |
+| ⌂ | the main page |
+| < Contents > | the page before, the contents, the next page |
+| Index | the hypertext's index |
+| See also | the pages the page names with `@xref`, as a menu |
+| Library | the library (ST-Guide's catalog) |
+| Bookmarks | add or remove this page, or go to a bookmark |
+| ≡ | a menu: **About EHypView...**, new window, open, library, copy, bookmark, fonts, close, quit; the accessory, which has no menu bar, finds them here |
+
+A button that can't be used on the page shown is greyed out, and each one says what it does when the
+mouse rests on it for a second. In a narrow window the least needed buttons (See also, Index, ...)
+make room first; the ≡ menu and the keys still reach everything.
 
 | Keys | What they do |
 |---|---|
@@ -76,6 +97,7 @@ menu with **Back** first (and, on a link, **Link in new window**), then the page
 | ^N | a new window, with the same page |
 | ^D | bookmark the page |
 | Backspace, Undo | back |
+| ⇧Undo | forward again |
 | right mouse button, Insert | the right-click menu |
 | Help | the hypertext's help page |
 | ^I / ^T | index / contents |
@@ -111,8 +133,11 @@ the [roadmap](docs/DESIGN.md#roadmap).
 
 ### The library
 
-**File > Library and search** (^L) lists every hypertext found, grouped by subject, with one search
-box. It is also what you see when no page was asked for.
+**File > Library and search** (^L, or the toolbar's **Library**) lists every hypertext found, grouped
+by subject under a heading and a rule, with one search field at the top. Each row has a small picture
+of what it is (a book for a hypertext, a ribbon for a bookmark, a page for a page, a magnifier for the
+full-text search) and the file or hypertext it is in on the right. It is also what you see when no
+page was asked for.
 
 - **Type to search.** Matching page names, aliases and keywords show at once (exact matches first, then
   names starting with what you typed, then names containing it, then similar ones), with matching

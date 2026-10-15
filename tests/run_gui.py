@@ -247,6 +247,9 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False):
                     time.sleep(2)
                 elif isinstance(k, tuple) and k[0] == "wait":
                     time.sleep(k[1])
+                elif isinstance(k, tuple) and k[0] == "hover":      # rest there
+                    mouse.move(k[1], k[2])
+                    time.sleep(2)
                 elif isinstance(k, tuple) and k[0] == "menu":
                     mouse.click(k[1], k[2])                # the title drops the menu down
                     mouse.click(k[3], k[4])                # the item
@@ -309,35 +312,77 @@ def item(title, n):
     return ("menu", title[0], title[1], title[0] + 24, 19 + 16 * n + 8)
 
 
+# the viewer's toolbar (src/gem/toolbar.c): the middle of each button, in
+# the first window (its work area starts at x 27); the page starts 24
+# pixels lower than before it; menus from a button open below it, their
+# first item at y 111, the next 18 below
+TB_Y = 90
+TB_BACK, TB_FORWARD, TB_HOME = (43, TB_Y), (69, TB_Y), (95, TB_Y)
+TB_PREV, TB_TOC, TB_NEXT = (125, TB_Y), (179, TB_Y), (233, TB_Y)
+TB_INDEX, TB_SEEALSO, TB_LIBRARY, TB_BOOKMARKS, TB_MENU = (279, TB_Y), (349, TB_Y), (431, TB_Y), (513, TB_Y), (579, TB_Y)
+
+
+def tb(button, kind="click"):
+    return (kind, button[0], button[1])
+
+
 MOUSE_STEPS = [
     ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
-    ([("click", 120, 118)], ["page %s Second" % BASIC]),    # "to Second"
-    ([("rclick", 300, 150)], ["menu popup"]),               # right button: the menu,
-    ([("click", 330, 161)], ["menu back", "page %s Main" % BASIC]),     # Back first
-    ([("click", 120, 134)], ["popup Pop"]),                 # "popup here": the pop-up,
-    ([("click", 500, 400)], ["popup-closed Pop"]),          # a click outside closes it
-    ([("click", 120, 134)], ["popup Pop"]),                 # and its own link
-    ([("click", 200, 175)], ["popup-link Pop", "page %s Second" % BASIC]),  # goes there
+    # the toolbar: Index, Back, Forward, the history on Back's right button
+    ([tb(TB_INDEX)], ["toolbar index", "page %s Index" % BASIC]),
+    ([tb(TB_BACK)], ["toolbar back", "page %s Main" % BASIC]),
+    ([tb(TB_FORWARD)], ["toolbar forward", "page %s Index" % BASIC]),
+    ([tb(TB_BACK, "rclick")], ["menu back-history"]),
+    ([("click", 70, 111)], ["history -1", "page %s Main" % BASIC]),
+    ([("shift", UNDO)], ["page %s Index" % BASIC]),        # Shift+Undo: forward
     ([BACKSPACE], ["page %s Main" % BASIC]),
-    ([("rclick", 300, 150)], ["menu popup"]),               # and About last (rows of 18)
-    ([("click", 330, 395)], ["menu about", "dialog about *"]),
+    # See also: the page's @xref
+    ([tb(TB_SEEALSO)], ["toolbar see-also", "menu see-also"]),
+    ([("click", 340, 111)], ["see-also The help page", "page %s Help" % BASIC]),
+    ([BACKSPACE], ["page %s Main" % BASIC]),
+    ([("hover",) + TB_LIBRARY], ["tip library"]),           # a tooltip after a second
+    # Bookmarks: add this page, then remove it
+    ([tb(TB_BOOKMARKS)], ["toolbar bookmarks", "menu bookmarks"]),
+    ([("click", 540, 111)], ["menu bookmark-add", "bookmark added *"]),
+    ([tb(TB_BOOKMARKS)], ["toolbar bookmarks", "menu bookmarks"]),
+    ([("click", 540, 129)], ["menu bookmark-remove", "bookmark removed *"]),
+    # the menu button: About first (the accessory's way to it)
+    ([tb(TB_MENU)], ["toolbar menu", "menu toolbar"]),
+    ([("click", 600, 111)], ["menu about", "dialog about *"]),
+    ([("click", 320, 300)], []),                            # a click closes it
+    ([tb(TB_LIBRARY)], ["toolbar library", "library 4"]),
+    ([("wait", 1)], []),                                    # (a picture of it)
+    (list("sec"), ['search "sec" *']),
+    ([ESC], ['search "" 4']),
+    ([("ctrl", W)], ["closed library"]),
+    # the page: links, the right button's menu, pop-ups
+    ([("click", 120, 142)], ["page %s Second" % BASIC]),    # "to Second"
+    ([("rclick", 300, 174)], ["menu popup"]),               # right button: the menu,
+    ([("click", 330, 185)], ["menu back", "page %s Main" % BASIC]),     # Back first
+    ([("click", 120, 158)], ["popup Pop"]),                 # "popup here": the pop-up,
+    ([("click", 500, 424)], ["popup-closed Pop"]),          # a click outside closes it
+    ([("click", 120, 158)], ["popup Pop"]),                 # and its own link
+    ([("click", 200, 199)], ["popup-link Pop", "page %s Second" % BASIC]),  # goes there
+    ([BACKSPACE], ["page %s Main" % BASIC]),
+    ([("rclick", 300, 174)], ["menu popup"]),               # and About last (rows of 18)
+    ([("click", 330, 437)], ["menu about", "dialog about *"]),
     ([("click", 320, 300)], []),                            # a click closes it
     ([item(DESK, 0)], ["menu about", "dialog about *"]),    # the About box
     ([("click", 320, 300)], []),                            # a click closes it
     # several windows: Shift+click opens the link in a new one
-    ([("sclick", 120, 118)], ["window new 2", "page %s Second" % BASIC]),
+    ([("sclick", 120, 142)], ["window new 2", "page %s Second" % BASIC]),
     ([item(BOOK, 0)], ["menu bookmark-add", "bookmark added *"]),
     ([("ctrl", W)], ["closed viewer"]),
     ([item(BOOK, 3)], ["menu bookmark", "page %s Second" % BASIC]),   # in the first window
     ([item(BOOK, 1)], ["menu bookmark-remove", "bookmark removed *"]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
-    ([("rclick", 120, 118)], ["menu popup"]),               # on a link, the menu has
-    ([("click", 150, 147)], ["menu link-window", "window new 2", "page %s Second" % BASIC]),
+    ([("rclick", 120, 142)], ["menu popup"]),               # on a link, the menu has
+    ([("click", 150, 189)], ["menu link-window", "window new 2", "page %s Second" % BASIC]),
     ([("ctrl", W)], ["closed viewer"]),
     ([item(VIEW, 0)], ["menu font", "dialog font"]),        # the font selector
     ([ESC], []),
     ([item(EDIT, 1)], ["menu copy", "copy page *"]),       # the page to the clipboard
-    ([item(NAV, 6)], ["menu help", "page %s Help" % BASIC]),
+    ([item(NAV, 7)], ["menu help", "page %s Help" % BASIC]),
     ([item(NAV, 0)], ["menu back", "page %s Main" % BASIC]),
     ([item(FILE, 2)], ["menu library", "library 4"]),
     # a "quit" link with two windows open closes just its own
