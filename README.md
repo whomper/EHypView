@@ -215,9 +215,9 @@ build/host/hypdump resolve -c guides.idx name appl_init
 ```
 
 **Versions and releases.** `VERSION` holds the last release, major.minor (e.g. 1.0), and the build
-never changes it. A release build (`RELEASE=1`) shows it as it is in the About box; any other build
-shows `1.0-dev`. `binary/` and `dist/` are what make builds; they are never committed, and a build
-changes no tracked file. To release: `tools/bump.py`, commit and push, then **Actions > Release > Run
+never changes it. Every build shows it as it is in the About box; there is no `-dev` label. `binary/`
+and `dist/` are what make builds; they are never committed, and a build changes no tracked file.
+Builds between releases are never handed out: to try a change, release it. To release: `tools/bump.py`, commit and push, then **Actions > Release > Run
 workflow** on `main` with what is new.
 [`.github/workflows/release.yml`](.github/workflows/release.yml) tags the commit (`v1.1`), tests,
 builds the programs and publishes each file and the zip as a GitHub Release with those notes. Pushing
