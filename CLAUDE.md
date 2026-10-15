@@ -20,3 +20,8 @@
   AES/VDI, elf2tos.py), a git subtree of github.com/whomper/AERA-Atari.
   Change it there, never here, then `tools/sync-common.sh`. Only
   `atari/plat_tos.c` is EHypView's own.
+- **The name** reads "AERA | Erez Yaary" wherever it is given: copyright
+  lines (`Copyright (C) 2026 AERA | Erez Yaary`), the About box, the help
+  file's `@author`, the docs, and as the author of every commit:
+  `git commit --author="AERA | Erez Yaary <yaary@me.com>"`, with Claude as
+  the signing committer (AERA-Atari, `standards/GITHUB-IDENTITY.md`).
