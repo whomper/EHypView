@@ -52,7 +52,7 @@ jobs:
       - name: Test
         run: make test
       - name: Build
-        run: make dist RELEASE=1
+        run: make dist
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

@@ -186,12 +186,12 @@ GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookm
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
-# and the build never writes it. A release build (RELEASE=1, as the
-# release workflow makes it) shows it as it is in the About box; any
-# other shows "1.0-dev". tools/bump.py starts a release.
-VERSION_STR := $(shell cat VERSION)$(if $(RELEASE),,-dev)
+# and the build never writes it. Every build shows it as it is in the
+# About box; there is no -dev label, since only releases leave the
+# build machine. tools/bump.py starts a release.
+VERSION_STR := $(shell cat VERSION)
 
-# written again whenever the string changes, so RELEASE=1 rebuilds it
+# written again whenever the string changes (a release commit changes VERSION)
 $(ATARI)/version.c: FORCE | $(ATARI)
 	@printf '/* written by the Makefile: do not edit */\nconst char app_version[] = "%s";\n' "$(VERSION_STR)" > $@.new
 	@if cmp -s $@.new $@; then rm $@.new; else mv $@.new $@; fi
