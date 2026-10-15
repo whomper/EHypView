@@ -87,8 +87,9 @@ EHypView...** last.
 
 **Desk > About EHypView...** shows the version, the number of hypertexts found and the font in use.
 
-Pop-ups open as pages for now. Several viewer windows, tabs, and pop-ups as small windows are still to
-come: [docs/DESIGN.md](docs/DESIGN.md) has the assessment of ST-Guide, the goals and the
+**Pop-ups** (links to a `@pnode`) open as a small framed box just below the link, over the page, as
+in ST-Guide. A click on a link in the box follows it; any other click, or any key, closes the box and
+leaves the page where it was. Several viewer windows and tabs are still to come: [docs/DESIGN.md](docs/DESIGN.md) has the assessment of ST-Guide, the goals and the
 [roadmap](docs/DESIGN.md#roadmap).
 
 ### The library

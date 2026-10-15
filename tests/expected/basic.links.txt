@@ -12,7 +12,8 @@
   line x=2 y=3 w=10 h=2 style=1 arrows=1
   line x=30 y=3 w=-8 h=0 style=1 arrows=3
   rbox x=20 y=3 w=8 h=2 pattern=2
-[Pop] lines=1 width=13
+[Pop] lines=2 width=19
+  line 1: link "Second" -> node Second
 [Help] lines=2 width=10
   line 1: link "Quit" -> quit ␎¯
 [Index] lines=7 width=14
