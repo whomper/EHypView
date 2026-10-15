@@ -1,11 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - its drawing under the names the AERA programs' shared GEM
  * building blocks use (common/ui/gemui.h: the popup and the About box).
  * Only those include this file; the implementations are in gemui.c.
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #ifndef EHV_UI_H
 #define EHV_UI_H

@@ -1,9 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - plat.h on GEMDOS: TOS, EmuTOS, MagiC and MiNT.
  *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.  Follows ECal's atari/plat_tos.c.
+ * Follows ECal's atari/plat_tos.c.
  *
  * Folders are read with Dopendir/Dreaddir where the system has them
  * (MiNT, MagiC: long and lower-case names), else with Fsfirst/Fsnext

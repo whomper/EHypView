@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
 # Print the path of the EmuTOS image for the emulator tests, fetching
 # EmuTOS 1.3 (GPL, 512 KB build: ST to Falcon) into build/emutos first
 # when needed.

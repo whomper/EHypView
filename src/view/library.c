@@ -1,9 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - the library: every hypertext found, and one search box.
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #include <stdio.h>
 #include <stdlib.h>

@@ -7,3 +7,12 @@ test_index_tree/
 test_library_tree/
 binary/
 dist/
+
+# from the AERA repo template
+*.o
+*.pyc
+.venv/
+*.KEY
+CRASH.LOG
+tests/**/work/
+*.log

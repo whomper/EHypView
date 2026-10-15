@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
 # Run EHVCHECK.PRG in Hatari and compare its report with the host build.
 #
 #   tests/run_hatari.sh HOST_EHVCHECK HOST_FIXT HATARI_DIR

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - the font for the text (View > Font...), the same selector
  * as ECal's and EMail's; menus, dialogs and alerts keep the system font.

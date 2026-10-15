@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView tests for the viewer model (src/view): opening, links,
  * history, page navigation and keyboard link selection.

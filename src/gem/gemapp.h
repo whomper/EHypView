@@ -1,10 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - what the viewer window (ehypview.c) and the library window
  * (libwin.c) share.
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #ifndef EHV_GEMAPP_H
 #define EHV_GEMAPP_H

@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
 # Compare hypdump output with the committed reference output.
 #
 #   tests/run_golden.sh build/host/hypdump

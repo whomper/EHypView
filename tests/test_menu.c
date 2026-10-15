@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView tests for the menu tree (src/gem/menu.c): the AES walks it
  * by ob_next/ob_head/ob_tail, so a broken link hangs the machine.

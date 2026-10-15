@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
 # Regenerate the test fixtures and the reference output.
 #
 #   tests/regen.sh /path/to/hcp

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - full-text search through every indexed hypertext.
  *
@@ -12,10 +14,6 @@
  *
  * Matching ignores case (Atari character set).  Each page is reported
  * once, at its first matching line, with the number of matching lines.
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #ifndef EHV_SEARCH_H
 #define EHV_SEARCH_H

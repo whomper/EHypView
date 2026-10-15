@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - the GEM viewer.
  *
@@ -12,10 +14,6 @@
  * looking for ST-Guide find it).  The application has a menu bar
  * (menu.c); every menu item has a keyboard shortcut and both go through
  * command().
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #include <stdio.h>
 #include <stdlib.h>

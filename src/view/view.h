@@ -1,11 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - what a viewer window shows and how it moves: the open
  * hypertext and page, the scroll position, the selected link and the
  * history.  No GEM here, so it is tested on the host; src/gem draws it.
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #ifndef EHV_VIEW_H
 #define EHV_VIEW_H

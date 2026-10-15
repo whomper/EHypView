@@ -1,10 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - a rectangle, as the AERA programs' shared GEM building
  * blocks (common/ui) take it.
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #ifndef EHV_GRECT_H
 #define EHV_GRECT_H

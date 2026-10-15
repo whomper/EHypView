@@ -1,11 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - the drawing the AERA programs' shared GEM building blocks
  * take from the app (common/ui/gemui.h), on EHypView's workstation and
  * in its fonts (fontsel.c: font_sys_push, font_sys_pop).
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #include <string.h>
 #include "tos.h"

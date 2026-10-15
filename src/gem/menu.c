@@ -1,11 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - the menu bar: its titles, items and shortcuts, built by
  * the AERA programs' shared builder (common/ui/mbar.c), which started
  * here.
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #include <stddef.h>
 #include "menu.h"

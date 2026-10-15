@@ -1,13 +1,11 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - the menu bar: EHypView's titles and items, built by the
  * AERA programs' shared builder (common/ui/mbar.c, which started here).
  *
  * menu_build() only fills in an OBJECT tree; it makes no AES calls, so
  * tests/test_menu.c checks the tree on the host.
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #ifndef EHV_MENU_H
 #define EHV_MENU_H

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
 """Build an ALL.REF test fixture.
 
 ALL.REF is a series of REF modules behind one "HREF" header.  This joins

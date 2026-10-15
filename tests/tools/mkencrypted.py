@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
 """Turn an uncompressed hypertext into an "encrypted" one.
 
 ST-Guide can protect a hypertext by XORing every data byte with 127 and

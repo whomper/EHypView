@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
 """Generate the EHypView test fixture sources.
 
 Writes ST-Guide source files (*.stg, Atari character set) and GEM images

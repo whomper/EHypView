@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - the text font setting (no VDI here, so it is tested on the
  * host; src/gem/fontsel.c measures and sets the fonts).
@@ -10,10 +12,6 @@
  * The font is kept by name, since GDOS font ids change when fonts are
  * added.  "System font" with point 8 or 16 is the system font's 8x8 or
  * 8x16 size; point 0 is the size the AES uses.
- *
- * Copyright (C) the EHypView authors.  Free software under the GNU
- * General Public License, version 2 or (at your option) any later
- * version; see COPYING.
  */
 #ifndef EHV_FONTPREF_H
 #define EHV_FONTPREF_H
