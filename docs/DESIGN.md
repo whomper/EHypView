@@ -212,7 +212,7 @@ Rules for `src/core`:
   its page changes, searches and selections through NatFeats, and each
   step waits for the expected event. A second run boots with
   `EHYPVIEW.ACC` and checks that the accessory registers and indexes.
-  Screenshots of every step are kept as a CI artifact. A mouse run puts
+  Every step leaves a screenshot in `build/gui/`. A mouse run puts
   Hatari in a window on Xvfb and moves the mouse with xdotool (as
   EContact's rig does): clicking a link, the right button for back, the
   About box from the Desk menu, the font selector, Navigate and File
