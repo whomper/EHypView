@@ -2,64 +2,180 @@
 
 <img src="docs/icon16.png" width="96" align="right" alt="EHypView icon: an Atari SM124-style monitor showing a page whose link points to another page">
 
-A new, modern viewer for **ST-Guide hypertexts** (`.HYP`) on the Atari
-(Falcon, TT, FireBee). It is meant to replace `ST-GUIDE.ACC`:
-- it finds every guide without `ALL.REF` maintenance
-- it has a library window and one search box
-- it has multiple windows, tabs and unlimited history
-- programs that call ST-Guide for help keep working 
+A modern viewer for ST-Guide hypertexts (`.HYP`) on the Atari TT and Falcon, as a program or a desk
+accessory, made to replace `ST-GUIDE.ACC`.
 
-**Status:** the portable core library is done and tested.
-- It reads `.HYP` files, decompresses LH5, parses pages, and reads `.REF`
-  and `ST-GUIDE.INF`.
-- It finds every hypertext below a set of folders, including all
-  subfolders, and keeps an index of them with a cache.
-- It resolves links, page names and help requests, with "did you mean"
-  suggestions.
+**Highlights**
 
-- It builds into Atari programs and is tested in Hatari (Falcon, EmuTOS).
+- **Finds every hypertext by itself:** ST-Guide's folders, and `\GUIDES` and `\GEMSYS\GUIDES` on every
+  drive, with all their subfolders, scanned in the background and kept in an index. There is no
+  `ALL.REF` to maintain (yours is still read).
+- **A library with one search box:** every hypertext found, grouped by subject. Typing finds page
+  names, aliases and keywords at once; Return searches the full text of every page, which needed the
+  separate HypFind tool in ST-Guide.
+- **Links that lead somewhere:** into any hypertext in the index, wherever it is. One that leads nowhere
+  says so and suggests the closest names ("did you mean").
+- **In ST-Guide's place:** installed as `ST-GUIDE.ACC`, it answers programs that ask ST-Guide for help
+  (`VA_START`, `AC_HELP`), and it reads your `ST-GUIDE.INF`.
+- **Pages as they were written:** styled text, links, lines, boxes and images, with unlimited history.
+- **Your choice of font:** the system font, or any monospaced GDOS font with NVDI or SpeedoGDOS, in any
+  size, changed at any time.
+- **Modern but Atari:** a program with a menu bar or a desk accessory, a shortcut for every menu item,
+  a right-click menu, drag and drop, the clipboard and iconify.
 
-**The first GEM viewer** (`EHYPVIEW.PRG`, also `EHYPVIEW.ACC`) works:
-- one window with styled text, links, lines, boxes and images
-- links followed with the mouse or keyboard, including into other hypertexts
-  anywhere in the index
-- history, help requests (`VA_START`, `AC_HELP`)
-- it opens `DEFHYP` from an existing `ST-GUIDE.INF`
-- a background index scan with cache
-- a menu bar (Desk, File, Navigate, View) in the application; every item has a
-  keyboard shortcut, and items that can't be used right now are greyed out.
-  With the menu bar the program keeps running when its windows are closed,
-  until you choose Quit.
-- a choice of font for the text (View > Font...), with the same font
-  selector as ECal and EMail. You get the system font in 8x8 or 8x16
-  and, with NVDI, SpeedoGDOS or another GDOS, all monospaced GDOS fonts
-  (bitmap, Speedo, TrueType, Type 1). Hypertexts are laid out in character
-  cells, so proportional fonts are shown but can't be picked. Control+Plus
-  and Control+Minus change the size. A font dropped on a window from a
-  font selector (the font protocol) is used too. The choice is kept in
-  `EHYPVIEW.INF` (see below), and the list of which fonts are
-  monospaced in `EHYPVIEW.FNT`.
+![EHypView on a Falcon: the library lists the AERA programs' guides by subject (ClaudeST, EMail, EFTP, EContact, ECal), over ECal's guide open in the viewer](docs/screenshot.png)
 
-**The library window** (Control+L, and what you see when no page was
-asked for) lists every hypertext found, grouped by subject, with one search
-box:
-- Typing shows matching page names, aliases and keywords at once (exact,
-  then starting with, then containing, then similar), plus matching titles.
-- Return on "Search the full text" searches every page of every hypertext
-  in the background; ST-Guide needed the separate HypFind tool for that.
+## Getting started
 
-Still to come: several viewer windows and tabs, and pop-ups as small windows (for now they open as pages). See [docs/DESIGN.md](docs/DESIGN.md) for the
-assessment of ST-Guide, the goals and the roadmap, and
-[docs/FORMAT.md](docs/FORMAT.md) for the file formats.
+Download the latest release from **[Releases](https://github.com/whomper/EHypView/releases/latest)**:
+each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
 
-## Building and testing (host)
+| File | What it is |
+|---|---|
+| `EHYPVIEW.PRG` | the viewer as a program, with a menu bar |
+| `EHYPVIEW.ACC` | the same viewer as a desk accessory (one program under two names) |
+| `EHYPVIEW.RSC`, `EHYPVIEW.ICN`, `EHYPVWMK.ICN` | the desktop icon, in the zip's `icons/` folder (see [The desktop icon](#the-desktop-icon)) |
+| `EHYPVIEW-x.y.zip` | all of them |
+
+1. Copy `EHYPVIEW.PRG` into a folder of its own (e.g. `C:\EHYPVIEW\`) and start it. It opens the
+   hypertext given on its command line, else `DEFHYP` (or `HYPTOP`) from the `ST-GUIDE.INF` in your
+   boot drive's root, else the library. To open a `.HYP` with a double-click, install `EHYPVIEW.PRG`
+   in your desktop as the application for `HYP` files.
+2. To have EHypView inside every program, copy `EHYPVIEW.ACC` to the root of your boot drive and
+   restart. **To replace ST-Guide**, copy it there as `ST-GUIDE.ACC` instead, in place of ST-Guide's,
+   so that programs asking for ST-Guide find it.
+3. Keep your hypertexts (each `.HYP` with its `.REF`) where EHypView looks for them, including all
+   subfolders:
+   - the folders in `PATHS` and `HYPFOLD`, and the folder of `REF`, from `ST-GUIDE.INF`
+   - `\GUIDES` and `\GEMSYS\GUIDES` on every drive from C: on
+
+   The scan runs in the background each time EHypView starts. Its index (`EHYPVIEW.IDX`) has the
+   hypertexts ready at once, and only new or changed files are read again.
+4. Press ^L for the library, Help for the hypertext's help page, and the right mouse button for a menu.
+
+**Needs:** a 68020 or better: a TT or a Falcon (the programs are built for the 68020 to 68060; the
+FireBee's own ColdFire build is still to come, see the [roadmap](docs/DESIGN.md#roadmap)); TOS,
+EmuTOS, MagiC, or MiNT (MultiTOS, XaAES, N.AES); a screen 640 pixels wide or more. NVDI, SpeedoGDOS or
+another GDOS is optional, for more fonts.
+
+## Using the viewer
+
+Click a link, or move to it with Tab and press Return. Links lead into any hypertext in the index, and
+when one leads nowhere, the window's info line says so and suggests the closest names. In the program,
+every menu item (**Desk**, **File**, **Edit**, **Navigate**, **View**) has a keyboard shortcut, and
+items you can't use right now are greyed out. The right mouse button, or Insert, opens a menu with
+**Back** first, then the pages, **Copy page**, **Library and search**, **Font...**, and **About
+EHypView...** last.
+
+| Keys | What they do |
+|---|---|
+| click a link, or Tab / ⇧Tab then Return | follow a link |
+| Backspace, Undo | back |
+| right mouse button, Insert | the right-click menu |
+| Help | the hypertext's help page |
+| ^I / ^T | index / contents |
+| ^Left / ^Right | previous / next page |
+| ^Clr/Home | main page |
+| arrows, ⇧arrows | scroll by a line / a page |
+| Clr/Home, ⇧Clr/Home | top / bottom |
+| ^L | the library (and back to the viewer) |
+| ^O | open a hypertext |
+| ^C | copy the page, as text, to the clipboard |
+| ^W or ^U / ^Q | close the top window / quit |
+| ⇧^F | choose the font |
+| ^+ / ^- (on the keypad, or ^= and ^-) | larger / smaller text |
+
+**Desk > About EHypView...** shows the version, the number of hypertexts found and the font in use.
+
+Pop-ups open as pages for now. Several viewer windows, tabs, and pop-ups as small windows are still to
+come: [docs/DESIGN.md](docs/DESIGN.md) has the assessment of ST-Guide, the goals and the
+[roadmap](docs/DESIGN.md#roadmap).
+
+### The library
+
+**File > Library and search** (^L) lists every hypertext found, grouped by subject, with one search
+box. It is also what you see when no page was asked for.
+
+- **Type to search.** Matching page names, aliases and keywords show at once (exact matches first, then
+  names starting with what you typed, then names containing it, then similar ones), with matching
+  titles.
+- **Search the full text.** Return on **Search the full text for "…"** searches every page of every
+  hypertext in the background.
+- **Keys:** Up/Down to choose, Return or a click to open (or to start the full-text search), Esc to
+  clear the search, Backspace to delete a letter. ^V pastes into the search and ^X cuts it; ^C copies
+  the hypertext chosen.
+
+### Fonts
+
+**View > Font...** (⇧^F) chooses the font for the text, with the same font selector as ECal and EMail.
+You get the system font in 8×8 or 8×16 and, with NVDI, SpeedoGDOS or another GDOS, every monospaced GDOS
+font (bitmap, Speedo, TrueType, Type 1). Hypertexts are laid out in character cells, so proportional
+fonts are shown but can't be picked. ^+ and ^- change the size. A font dropped on a window from a font
+selector (the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and the list of which
+fonts are monospaced in `EHYPVIEW.FNT`.
+
+### Program and accessory
+
+- **The program** has a menu bar, and keeps running when its windows are closed, until you choose
+  **File > Quit** (^Q).
+- **The accessory** has no menu bar: **About EHypView...** is in the right button's menu. Its entry in
+  the Desk menu (**EHypView**) opens the viewer, or the library when no page is shown. It takes its
+  memory when it loads: a third of the largest free block, at most 2 MB.
+- **With both installed,** they never work at once. While `EHYPVIEW.PRG` runs, **EHypView** in the
+  Desk menu brings the program's window to the front, and a font chosen in the program is the
+  accessory's too the next time it opens. Under MagiC or MiNT, where the accessory runs beside the
+  programs, starting `EHYPVIEW.PRG` opens the accessory instead.
+- **If the program crashes** (what would be 2 to 8 bombs), it says so, writes what happened to
+  `CRASH.LOG` next to `EHYPVIEW.PRG` and quits, leaving the Atari running. Under MiNT or MagiC, and in
+  the accessory, there is no `CRASH.LOG`.
+
+### With other programs
+
+- **The Help key.** EMail, EFTP, ECal, EContact and ClaudeST open their guides in EHypView with the
+  Help key when it runs (as an accessory, or as a program under MultiTOS or MagiC). Any program or
+  desktop (Thing, jinnee, Gemini) can hand it a hypertext and a page the same way, with the AV
+  protocol's `VA_START`.
+- **Drag and drop.** Under MultiTOS, MagiC or XaAES, a hypertext dragged onto EHypView's windows opens.
+  The accessory tells the desktop about its windows, so Thing and the like can drop one on them under
+  plain TOS too.
+- **Iconify.** Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the viewer and the
+  library have the iconify button: each shrinks to EHypView's icon. A page asked for by another program
+  (the Help key) brings the viewer back.
+
+### Where its files are
+
+- **`EHYPVIEW.INF`**, the settings, is in the root of the boot drive, where the accessory always finds
+  it. It has a note above each setting, and EHypView keeps the notes, and anything it doesn't know,
+  when it writes the file. An `EHYPVIEW.INF` next to the program, from an older EHypView, is copied to
+  the root the first time.
+- **`FOLDER=`** in it names EHypView's folder, which holds the index of the hypertexts
+  (`EHYPVIEW.IDX`) and `EHYPVIEW.FNT`. `EHYPVIEW.PRG` uses the folder it was started from and writes
+  it into `FOLDER=`; the accessory uses `FOLDER=`, or the root while there is none.
+
+### The desktop icon
+
+`EHYPVIEW.RSC` is a resource with the icon in monochrome (G_ICON) and 16 colours (G_CICON), each with
+its mask: copy them into `DESKICON.RSC` / `DESKCICN.RSC` with a resource editor (Interface, ORCS,
+RSM...). `EHYPVIEW.ICN` and `EHYPVWMK.ICN` are the image and its mask in ICN text format. The icon is
+the same SM124-style monitor as EMail's, ECal's and EContact's, here showing a hypertext: a page whose
+link points to another page.
+
+## Building
 
 ```sh
-make test        # unit + golden tests
-make asan        # the same with AddressSanitizer/UBSan
-make m68k-test   # run the suite as big-endian 68020 code under QEMU
-                 # (apt install gcc-m68k-linux-gnu qemu-user-static)
+sudo apt install gcc-m68k-linux-gnu zip   # Debian/Ubuntu; no MiNTLib needed
+make           # the host tools and tests in build/host, among them hypdump
+make atari     # build/hatari/: EHYPVIEW.PRG, EHYPVIEW.ACC, EHVCHECK.PRG;
+               # binary/: EHYPVIEW.PRG, EHYPVIEW.ACC
+make dist      # dist/: a release's files, each on its own and in EHYPVIEW-x.y.zip
+make icons     # draw the icon again (tools/icon/; python3-pil for the PNGs)
 ```
+
+The Atari programs are built the same way as ECal: with Ubuntu's stock m68k compiler, for the 68020 to
+68060, and no MiNTLib. `common/atari/` holds a small freestanding runtime (start-up code, libc, GEMDOS
+file access, AES/VDI bindings), and `common/tools/elf2tos.py` writes the TOS program file. `common/` is
+the AERA programs' shared code, a copy of [AERA-Atari](https://github.com/whomper/AERA-Atari)'s
+`common/` folder: change it there and bring the copy up to date with `tools/sync-common.sh`.
 
 `build/host/hypdump` inspects any hypertext:
 
@@ -78,135 +194,92 @@ build/host/hypdump resolve -c guides.idx request "'*:\AES.HYP' appl_init"
 build/host/hypdump resolve -c guides.idx name appl_init
 ```
 
-## Building for the Atari
+**Versions and releases.** `VERSION` holds the last release, major.minor (e.g. 1.0), and the build
+never changes it. A release build (`RELEASE=1`) shows it as it is in the About box; any other build
+shows `1.0-dev`. `binary/` and `dist/` are what make builds; they are never committed, and a build
+changes no tracked file. To release: `tools/bump.py`, commit and push, then **Actions > Release > Run
+workflow** on `main` with what is new.
+[`.github/workflows/release.yml`](.github/workflows/release.yml) tags the commit (`v1.1`), tests,
+builds the programs and publishes each file and the zip as a GitHub Release with those notes. Pushing
+a tag `v1.1` made with `git tag -a` does the same, with the tag's message as the notes.
 
-The Atari programs are built the same way as ECal: with Ubuntu's stock m68k
-compiler and no MiNTLib. `common/atari/` holds a small freestanding
-runtime (start-up code, libc, GEMDOS file access, AES/VDI bindings), and
-`common/tools/elf2tos.py` writes the TOS program file. `common/` is the
-AERA programs' shared code, a copy of
-[AERA-Atari](https://github.com/whomper/AERA-Atari)'s `common/` folder:
-change it there and bring the copy up to date with `tools/sync-common.sh`.
+## Source
 
-```sh
-sudo apt install gcc-m68k-linux-gnu      # Debian/Ubuntu
-make atari          # build/hatari/: EHYPVIEW.PRG, EHYPVIEW.ACC, EHVCHECK.PRG;
-                    # binary/: EHYPVIEW.PRG, EHYPVIEW.ACC
-make hatari-test    # run EHVCHECK.PRG in Hatari as a Falcon with EmuTOS
-make gui-test       # drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
-                    # (apt install hatari xvfb xdotool; screenshots in build/gui)
-make icons          # draw the icon again (tools/icon/)
-make dist           # a release's files in dist/
+```
+src/core/   the portable core, without GEM: .HYP files and LH5, pages, .REF and
+            ST-GUIDE.INF; the folder scanner and the index; links and help requests;
+            the full-text search. Built for the Atari and for this computer
+src/view/   the viewer and the library without GEM (links, history, search, the
+            font setting), tested on this computer
+src/gem/    the GEM program: the viewer and library windows, drawing, the menu bar,
+            the font selector, the About box
+atari/      plat_tos.c: the core's file access on GEMDOS, EHypView's own
+common/     the AERA programs' shared code (from AERA-Atari): the TOS runtime,
+            AES/VDI, menu bar, About box, alerts, AV protocol, drag and drop,
+            iconify, elf2tos.py
+icons/      the desktop icon (RSC and ICN files), from tools/icon
+tests/      unit and golden tests, fixtures and their generators, EHVCHECK,
+            the Hatari rigs
+tools/      hypdump, the icon generator, bump.py, sync-common.sh
+docs/       DESIGN.md, FORMAT.md, the icon pictures
 ```
 
-`binary/` and `dist/` are what make builds; they are never committed.
-Each [release](https://github.com/whomper/EHypView/releases/latest) has
-the programs and the icon, each on its own and all together in
-`EHYPVIEW-x.y.zip`.
+[docs/DESIGN.md](docs/DESIGN.md) has the assessment of ST-Guide, the goals, the architecture and the
+roadmap; [docs/FORMAT.md](docs/FORMAT.md) the `.HYP` and `.REF` file formats, with the corrections to
+the published description.
 
-**Versions and releases.** `VERSION` holds the last release, major.minor
-(e.g. 1.0), and the build never changes it. A release build
-(`RELEASE=1`) shows it as it is in the About box; any other build shows
-`1.0-dev`. To release: `tools/bump.py`, commit and push, then run the
-Release workflow (Actions > Release > Run workflow, on main) with what
-is new: [`.github/workflows/release.yml`](.github/workflows/release.yml)
-tags the commit `v1.1`, tests, builds the programs and publishes them as
-a GitHub Release with those notes. Pushing a tag `v1.1` made with
-`git tag -a` does the same, with the tag's message as the notes.
+## Tests
 
-`icons/` holds the desktop icon (in the release's zip, `icons/` too):
-`EHYPVIEW.RSC`, a resource with the icon in monochrome (G_ICON) and 16
-colours (G_CICON), each with its mask. Copy them into `DESKICON.RSC` /
-`DESKCICN.RSC` with a resource editor (Interface, ORCS, RSM...).
-`EHYPVIEW.ICN` and `EHYPVWMK.ICN` are the image and its mask in ICN text
-format. The icon is the same SM124-style monitor as EMail's, ECal's and
-EContact's, here showing a hypertext: a page whose link points to another
-page.
+```sh
+make test         # unit and golden tests on this computer
+make asan         # the same with AddressSanitizer and UBSan
+make m68k-test    # the suite as big-endian 68020 code under QEMU
+                  # (apt install gcc-m68k-linux-gnu qemu-user-static)
+make hatari-test  # EHVCHECK.PRG in Hatari as a Falcon with EmuTOS (apt install hatari)
+make gui-test     # drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
+                  # (apt install hatari xvfb xdotool; screenshots in build/gui)
+```
 
-### Using the viewer
+- **`make test`** runs the unit tests (`tests/test_*.c`: the core, the scanner and index on a real
+  folder tree, the viewer, the library, the menu tree, fonts) and the golden tests
+  (`tests/run_golden.sh`): the text of the test hypertexts must match `hcp`'s own rendering, an
+  independent implementation, and their links, index and header the reviewed files in
+  `tests/expected/`.
+- **`make m68k-test`** catches byte-order and alignment mistakes before they reach real hardware.
+- **`make hatari-test`** runs `EHVCHECK.PRG`, a self-test, not part of the viewer. It exercises the
+  core through GEMDOS on a test folder: scanning, every page and image, links, and the cache. Its
+  report must match the same program built for this computer, line for line. To run it on a real
+  Atari, copy `build/hatari/` (the program and its `FIXT` folder) to a drive and start
+  `EHVCHECK.PRG`.
+- **`make gui-test`** drives `EHYPVIEW.PRG` through Hatari's command FIFO: links (also into a
+  hypertext three folders down), back, help, the library and both searches, fonts and the font
+  selector, the accessory, and the program and accessory side by side. The mouse run (Xvfb and
+  xdotool; skipped without them) clicks links, the right button, the menus and the About box. The
+  viewer reports what it does through NatFeats, and each step waits for it.
 
-`EHYPVIEW.PRG` and `EHYPVIEW.ACC` are in the
-[latest release](https://github.com/whomper/EHypView/releases/latest).
-`EHYPVIEW.PRG` opens the hypertext given on its command line, else `DEFHYP`
-(or `HYPTOP`) from `ST-GUIDE.INF` in the boot drive's root. It looks for
-hypertexts in the `PATHS` from that file, the folder of `REF`, `\GUIDES` and
-`\GEMSYS\GUIDES`, including all subfolders. To replace the ST-Guide
-accessory, copy `EHYPVIEW.ACC` to the boot drive's root as `ST-GUIDE.ACC`,
-so that programs asking for ST-Guide find it.
+Both Hatari rigs fetch EmuTOS 1.3 into `build/emutos` the first time (`tests/emutos.sh`).
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all of the above on every push, and checks
+that the build changed no tracked file.
 
-**Where its files are.** The settings are in `EHYPVIEW.INF` in the root of
-the boot drive, where the accessory always finds them; `FOLDER=` in it
-names EHypView's folder, which holds the index of the hypertexts
-(`EHYPVIEW.IDX`) and `EHYPVIEW.FNT`. `EHYPVIEW.PRG` uses the folder it was
-started from and writes it into `FOLDER=`; the accessory uses `FOLDER=`,
-or the root while there is none. `EHYPVIEW.INF` has a note above each
-setting, and EHypView keeps the notes and anything it doesn't know when it
-writes the file. An `EHYPVIEW.INF` next to the program, from an older
-EHypView, is copied to the root the first time.
+**Test fixtures.** The `.hyp`/`.ref` files in `tests/fixtures` are generated from EHypView's own
+sources (`tests/tools/mkfixtures.py`) by `tests/regen.sh /path/to/hcp`, which also writes the
+reference output in `tests/expected/`; `common/tools/build-hcp.sh DIR` builds `hcp`.
 
-**Program and accessory.** With both installed, they never work at once:
-while `EHYPVIEW.PRG` runs, EHypView in the Desk menu brings the program's
-window to the front, and a font chosen in the program is the accessory's
-too the next time it opens. Under MagiC or MiNT, where the accessory runs
-beside the programs, starting `EHYPVIEW.PRG` opens the accessory instead.
+## Licence
 
-| Keys | Action |
-|---|---|
-| click a link, or Tab / Shift+Tab then Return | follow a link |
-| Backspace, Undo | back |
-| right mouse button, Insert | a menu: Back first, the pages, Library, Font, About last |
-| Help | the hypertext's help page |
-| Control+I / Control+T | index / table of contents |
-| Control+Left / Control+Right | previous / next page |
-| Control+Clr/Home | main page |
-| arrows, Shift+arrows | scroll by line / page |
-| Clr/Home, Shift+Clr/Home | top / bottom |
-| Control+L | the library (and back to the viewer) |
-| Control+O | open a hypertext |
-| Control+C | the page, as text, to the clipboard |
-| Control+W or Control+U / Control+Q | close the top window / quit |
-| Shift+Control+F | choose the font |
-| Control+Plus / Control+Minus (keypad, or `=` and `-`) | larger / smaller text |
+EHypView is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 2 of the License, or (at your option)
+any later version. It is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [COPYING](COPYING).
 
-Desk > About EHypView shows the version, the number of hypertexts found
-and the font in use. EMail, EFTP, ECal, EContact and ClaudeST open their
-guides in EHypView with the Help key when it runs (as an accessory, or
-as a program under MultiTOS or MagiC), and any program or desktop (Thing,
-jinnee, Gemini) can hand it a hypertext and a page the same way, with the
-AV protocol's VA_START. If the program itself crashes
-(what would be 2 to 8 bombs), it says so, writes what happened to
-`CRASH.LOG` next to `EHYPVIEW.PRG` and quits, leaving the Atari running;
-under MiNT or MagiC, and in the accessory, there is no `CRASH.LOG`. The accessory has no menu bar: About is in the right button's menu. Its entry in the Desk menu (EHypView) opens the viewer,
-or the library when no page is shown.
+Copyright (C) 2026 AERA | Erez Yaary.
 
-In the library: type to search, Up/Down to choose, Return or a click to
-open (or to start the full-text search), Esc to clear the search,
-Backspace to delete a letter. Control+V pastes into the search and
-Control+X cuts it; Control+C copies the hypertext chosen.
+The test fixtures are compiled with the `hcp` compiler from
+[HypView](https://github.com/th-otto/hypview), used as an external tool only. No HypView code is
+included in EHypView.
 
-Under MultiTOS, MagiC or XaAES a hypertext dragged onto EHypView's
-windows opens; the accessory tells the desktop about its windows, so
-Thing and the like can drop one on them under plain TOS too.
+---
 
-Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the
-viewer and the library have the iconify button: each shrinks to
-EHypView's icon. A page asked for by another program (the Help key)
-brings the viewer back.
-
-`EHVCHECK.PRG` is a self-test, not part of the viewer. It exercises the core
-library through GEMDOS on a test folder: scanning, every page and image,
-links, and the cache. `make hatari-test` compares its report with the same
-program built for Linux. To run it on a real Atari, copy `build/hatari/`
-(the program and its `FIXT` folder) to a drive and start `EHVCHECK.PRG`.
-
-## License
-
-EHypView is free software under the GNU General Public License, version 2
-or (at your option) any later version. See [COPYING](COPYING).
-
-## Test fixtures
-
-The `.hyp`/`.ref` files in `tests/fixtures` are generated from EHypView's own
-sources by `tests/regen.sh`. That script uses the `hcp` compiler from
-[HypView](https://github.com/th-otto/hypview) as an external tool. No HypView
-code is included in EHypView.
+Part of **AERA** for Atari: [ECal](https://github.com/whomper/ECal) · [EContact](https://github.com/whomper/EContact) · [EMail](https://github.com/whomper/EMail) · [EFTP](https://github.com/whomper/EFTP) · [EHypView](https://github.com/whomper/EHypView) · [ClaudeST](https://github.com/whomper/ClaudeST) · 8-bit: [EDOS](https://github.com/whomper/EDOS) · [EFTP_XL](https://github.com/whomper/EFTP_XL)
