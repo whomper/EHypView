@@ -37,11 +37,15 @@ jobs:
         run: make hatari-test
       - name: Drive the viewer in Hatari with the keyboard and mouse
         run: make gui-test
+      - name: The build changed no tracked file
+        run: |
+          git status --porcelain
+          test -z "$(git status --porcelain)"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: atari-programs
           path: |
-            build/hatari/*.PRG
-            build/hatari/*.ACC
+            binary/
+            build/hatari/EHVCHECK.PRG
             build/gui/*.png

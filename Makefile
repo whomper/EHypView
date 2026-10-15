@@ -6,13 +6,17 @@
 #   make m68k-test  run the suite on big-endian 68020 code under QEMU
 #                   (needs gcc-m68k-linux-gnu and qemu-user-static)
 #   make atari      build the Atari programs (68020-60: Falcon, TT) into
-#                   build/hatari (needs gcc-m68k-linux-gnu)
+#                   build/hatari and binary/ (needs gcc-m68k-linux-gnu)
 #   make hatari-test run EHVCHECK.PRG in Hatari (Falcon, EmuTOS) and compare
 #                   its report with the host build's (needs hatari)
 #   make gui-test   drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
 #                   (needs Xvfb and xdotool for the mouse)
 #   make icons      draw the icon again: src/gem/icon*.h, docs/icon*.png and
-#                   binary/icons/EHYPVIEW.RSC (needs python3-pil for the PNGs)
+#                   icons/EHYPVIEW.RSC (needs python3-pil for the PNGs)
+#   make dist       a release's files in dist/: each file, and EHYPVIEW-x.y.zip
+#
+# binary/ is what make builds, never committed: releases carry the
+# programs (.github/workflows/release.yml).
 
 CC      ?= cc
 CFLAGS  ?= -O2 -g
@@ -132,7 +136,7 @@ HATARI_DIR = build/hatari
 RUNTIME  = crt0 nf libc tos plat_tos gem crash crash_s alert bidi
 RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
-XHDRS    = $(wildcard src/core/*.h common/atari/*.h common/atari/include/*.h)
+XHDRS    = $(wildcard src/core/*.h common/atari/*.h common/atari/include/*.h common/ui/*.h)
 
 $(ATARI)/%.o: common/atari/%.S | $(ATARI)
 	$(XCC) $(XCPU) -c -o $@ $<
@@ -171,11 +175,17 @@ GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/ehypv
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o
 
-# every build counts the version up (VERSION, major.minor as in EMail,
-# ECal and EContact): version.c is written again when anything else in
-# the program was compiled again.  Commit VERSION with binary/.
-$(ATARI)/version.c: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) src/gem/version.h tools/bump.py
-	python3 tools/bump.py VERSION $@
+# the version: VERSION holds the last release (major.minor, e.g. 1.0),
+# and the build never writes it. A release build (RELEASE=1, as the
+# release workflow makes it) shows it as it is in the About box; any
+# other shows "1.0-dev". tools/bump.py starts a release.
+VERSION_STR := $(shell cat VERSION)$(if $(RELEASE),,-dev)
+
+# written again whenever the string changes, so RELEASE=1 rebuilds it
+$(ATARI)/version.c: FORCE | $(ATARI)
+	@printf '/* written by the Makefile: do not edit */\nconst char app_version[] = "%s";\n' "$(VERSION_STR)" > $@.new
+	@if cmp -s $@.new $@; then rm $@.new; else mv $@.new $@; fi
+FORCE:
 $(ATARI)/version.o: $(ATARI)/version.c
 	$(XCC) $(XFLAGS) -std=c99 -c -o $@ $<
 
@@ -214,13 +224,14 @@ $(HOST)/ehvcheck: tests/ehvcheck.c $(HOST)/libehv.a
 atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPVIEW.ACC \
        binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC
 
-# the programs as released, committed with VERSION (as in EMail and ECal)
+# what goes onto the Atari: binary/ (built, never committed)
 binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC: binary/%: $(HATARI_DIR)/%
 	mkdir -p binary
 	cp $< $@
 
 # the icon: src/gem/icon.h and icon16.h (the About box), docs/icon*.png,
-# and binary/icons/ (EHYPVIEW.RSC and ICN files for desktop icons)
+# and icons/ (EHYPVIEW.RSC and ICN files for desktop icons), committed;
+# a release carries them
 icons: tools/icon/make_icon.py tools/icon/make_rsc.py
 	python3 tools/icon/make_icon.py >/dev/null
 	cd tools/icon && python3 make_rsc.py
@@ -235,7 +246,20 @@ hatari-test: atari $(HOST)/ehvcheck
 	$(call make_fixt,build/hostcheck)
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 
-clean:
-	rm -rf build
+# a release's files: each one in dist/, and all of them in
+# dist/EHYPVIEW-x.y.zip (the icons in icons/), for the release workflow
+DIST    := binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC
+ICONS   := icons/EHYPVIEW.RSC icons/EHYPVIEW.ICN icons/EHYPVWMK.ICN
+dist: atari
+	rm -rf dist
+	mkdir -p dist/zip/icons
+	cp $(DIST) $(ICONS) dist/
+	cp $(DIST) dist/zip/
+	cp $(ICONS) dist/zip/icons/
+	cd dist/zip && zip -q -9 -r ../EHYPVIEW-$(VERSION_STR).zip .
+	rm -rf dist/zip
 
-.PHONY: icons all test asan m68k-test atari hatari-test gui-test clean
+clean:
+	rm -rf build binary dist
+
+.PHONY: icons all test asan m68k-test atari dist hatari-test gui-test clean FORCE

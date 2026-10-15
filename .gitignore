@@ -5,3 +5,5 @@ test_core_*.hyp
 __pycache__/
 test_index_tree/
 test_library_tree/
+binary/
+dist/

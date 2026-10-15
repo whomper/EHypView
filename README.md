@@ -90,18 +90,31 @@ change it there and bring the copy up to date with `tools/sync-common.sh`.
 
 ```sh
 sudo apt install gcc-m68k-linux-gnu      # Debian/Ubuntu
-make atari          # build/hatari/: EHYPVIEW.PRG, EHYPVIEW.ACC, EHVCHECK.PRG
+make atari          # build/hatari/: EHYPVIEW.PRG, EHYPVIEW.ACC, EHVCHECK.PRG;
+                    # binary/: EHYPVIEW.PRG, EHYPVIEW.ACC
 make hatari-test    # run EHVCHECK.PRG in Hatari as a Falcon with EmuTOS
 make gui-test       # drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
                     # (apt install hatari xvfb xdotool; screenshots in build/gui)
 make icons          # draw the icon again (tools/icon/)
+make dist           # a release's files in dist/
 ```
 
-Every build of the program counts the version up (`VERSION`, major.minor,
-shown in the About box), as in EMail, ECal and EContact, and copies the
-programs to `binary/`. Commit `VERSION` together with `binary/`.
+`binary/` and `dist/` are what make builds; they are never committed.
+Each [release](https://github.com/whomper/EHypView/releases/latest) has
+the programs and the icon, each on its own and all together in
+`EHYPVIEW-x.y.zip`.
 
-`binary/` holds the programs as released, and `binary/icons/` holds the desktop icon:
+**Versions and releases.** `VERSION` holds the last release, major.minor
+(e.g. 1.0), and the build never changes it. A release build
+(`RELEASE=1`) shows it as it is in the About box; any other build shows
+`1.0-dev`. To release: `tools/bump.py`, commit and push, then run the
+Release workflow (Actions > Release > Run workflow, on main) with what
+is new: [`.github/workflows/release.yml`](.github/workflows/release.yml)
+tags the commit `v1.1`, tests, builds the programs and publishes them as
+a GitHub Release with those notes. Pushing a tag `v1.1` made with
+`git tag -a` does the same, with the tag's message as the notes.
+
+`icons/` holds the desktop icon (in the release's zip, `icons/` too):
 `EHYPVIEW.RSC`, a resource with the icon in monochrome (G_ICON) and 16
 colours (G_CICON), each with its mask. Copy them into `DESKICON.RSC` /
 `DESKCICN.RSC` with a resource editor (Interface, ORCS, RSM...).
@@ -112,6 +125,8 @@ page.
 
 ### Using the viewer
 
+`EHYPVIEW.PRG` and `EHYPVIEW.ACC` are in the
+[latest release](https://github.com/whomper/EHypView/releases/latest).
 `EHYPVIEW.PRG` opens the hypertext given on its command line, else `DEFHYP`
 (or `HYPTOP`) from `ST-GUIDE.INF` in the boot drive's root. It looks for
 hypertexts in the `PATHS` from that file, the folder of `REF`, `\GUIDES` and
