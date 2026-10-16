@@ -33,6 +33,7 @@
 #include "pagedraw.h"
 #include "menu.h"
 #include "toolbar.h"
+#include "stmem.h"
 #include "crash.h"
 #include "av.h"
 #include "grect.h"
@@ -2541,9 +2542,22 @@ static const char *command_line(void)
 /* an accessory takes its memory once, at start-up (see libc.c) */
 static void acc_heap(void)
 {
-	long avail = (long) Malloc(-1L);
-	long want = avail / 3;
+	long st = (long) Mxalloc(-1L, 0), avail, want;
 	void *p;
+
+	/* first the pictures' ST RAM (stmem.h): an eighth of what is free
+	   there, 32 to 256 KB; TOS 1.x has no Mxalloc, and only ST RAM */
+	if (st == -32)
+		st = (long) Malloc(-1L);
+	st /= 8;
+	if (st > 256L * 1024)
+		st = 256L * 1024;
+	if (st < 32L * 1024)
+		st = 32L * 1024;
+	stmem_reserve(st);
+
+	avail = (long) Malloc(-1L);
+	want = avail / 3;
 
 	if (want > 2L * 1024 * 1024)
 		want = 2L * 1024 * 1024;

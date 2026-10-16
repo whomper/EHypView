@@ -5,11 +5,13 @@
  * font (see pagedraw.h).  Moved here from ehypview.c so that a pop-up
  * draws its page the same way as the viewer window.
  */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "gem.h"
 #include "gemapp.h"
 #include "pagedraw.h"
+#include "stmem.h"
 
 /*
  * Convert a HYP image (planar, standard format) for the screen.  Images
@@ -124,7 +126,7 @@ static void load_image(hyp_doc *doc, const hyp_gfx *g, gimage *im)
 	src.fd_r1 = src.fd_r2 = src.fd_r3 = 0;
 	im->form = src;
 	im->form.fd_stand = 0;
-	im->form.fd_addr = malloc(plane * np);
+	im->form.fd_addr = st_alloc((long) (plane * np));   /* copied to the screen: ST RAM */
 	if (im->form.fd_addr == NULL)
 	{
 		free(std);
@@ -140,7 +142,7 @@ void layout_free(playout *L)
 	unsigned short i;
 
 	for (i = 0; L->images != NULL && i < L->nimages; i++)
-		free(L->images[i].form.fd_addr);
+		st_free(L->images[i].form.fd_addr);
 	free(L->images);
 	free(L->line_y);
 	free(L->gfx_y);
@@ -167,9 +169,29 @@ void layout_make(playout *L, hyp_doc *doc, const hyp_page *pg)
 	}
 	L->pg = pg;
 	L->nimages = pg->ngfx;
-	for (i = 0; i < pg->ngfx; i++)
-		if (pg->gfx[i].type == HYP_GFX_IMAGE)
-			load_image(doc, &pg->gfx[i], &L->images[i]);
+	{
+		unsigned short shown = 0, in_st = 0;
+
+		for (i = 0; i < pg->ngfx; i++)
+			if (pg->gfx[i].type == HYP_GFX_IMAGE)
+			{
+				load_image(doc, &pg->gfx[i], &L->images[i]);
+				if (L->images[i].form.fd_addr != NULL)
+				{
+					shown++;
+					in_st = (unsigned short) (in_st + st_ram_addr(L->images[i].form.fd_addr));
+				}
+			}
+		if (shown > 0)
+		{
+			/* for the tests: where the pictures are (a blitter reads
+			   only ST RAM) */
+			char num[8];
+
+			sprintf(num, "%u", shown);
+			log_event("pictures", num, in_st == shown ? "st-ram" : "fast-ram");
+		}
+	}
 
 	/* an @limage pushes the text of its line down (as ST-Guide does) */
 	for (l = 0; l < n; l++)
