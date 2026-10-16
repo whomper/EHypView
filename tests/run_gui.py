@@ -97,7 +97,7 @@ LIBRARY_START = [
 DISPLAY = ":99"
 
 
-def start_hatari(hdir, auto, fifo, log_path, windowed=False):
+def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=()):
     for name in (fifo, os.path.join(hdir, "EHYPVIEW.IDX")):
         if os.path.exists(name):
             os.remove(name)
@@ -108,7 +108,7 @@ def start_hatari(hdir, auto, fifo, log_path, windowed=False):
     args = ["hatari", "--tos", EMUTOS, "--machine", "falcon", "--monitor", "vga", "--memsize", "14",
             "--natfeats", "yes", "--sound", "off", "--confirm-quit", "no",
             "--statusbar", "no", "--log-level", "fatal", "--harddrive", hdir, "--gemdos-drive", "C",
-            "--cmd-fifo", fifo]
+            "--cmd-fifo", fifo] + list(extra)
     # in a window, one screen pixel is one window pixel for the mouse;
     # fast-forward would outrun the mouse moves
     args += ["-w", "--borders", "no", "--zoom", "1"] if windowed else ["--fast-forward", "yes"]
@@ -198,10 +198,10 @@ def matches(ev, expected):
     return ev == expected
 
 
-def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False):
+def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, extra=()):
     fifo = os.path.join(OUT, name + ".fifo")
     log_path = os.path.join(OUT, name + ".log")
-    hatari = start_hatari(hdir, auto, fifo, log_path, windowed)
+    hatari = start_hatari(hdir, auto, fifo, log_path, windowed, extra)
     mouse = Mouse() if windowed else None
     for _ in range(100):
         if os.path.exists(fifo):
@@ -409,6 +409,36 @@ TWIN_STEPS = [
 ]
 
 
+# a Falcon with 64 MB of Fast RAM (TT-RAM), where malloc gives Fast RAM: the
+# pictures of a page must still be in ST RAM, which is all a blitter reads
+# (a CT60 Falcon with TOS's VDI showed garbage). The program, then the
+# accessory, whose ST RAM is reserved at boot
+FASTRAM = ["--ttram", "64", "--addr24", "off"]
+FASTRAM_STEPS = [
+    ([], ["pictures 3 st-ram", "page %s Main" % IMAGES]),    # laid out, then shown
+    ([("ctrl", Q)], ["quit"]),
+]
+ACC_FASTRAM_STEPS = [
+    ([], ["acc registered", "index 5 guides"]),
+    ([("wait", 6), ("click", 18, 8), ("click", 60, 64)], ["library 4"]),   # the desktop's Desk menu
+    (list("image"), ['search "image" 1']),
+    ([RETURN], ["pictures 3 st-ram", "page %s Main" % IMAGES]),
+]
+
+
+def acc_fastram_dir():
+    """C: with the accessory in the root, and FIXT"""
+    import shutil
+    d = os.path.join(OUT, "accfast")
+    if os.path.exists(d):
+        shutil.rmtree(d)
+    shutil.copytree(os.path.join(HDIR, "FIXT"), os.path.join(d, "FIXT"))
+    shutil.copy(os.path.join(HDIR, "EHYPVIEW.ACC"), d)
+    with open(os.path.join(d, "ST-GUIDE.INF"), "w") as f:
+        f.write("PATHS=C:\\FIXT\r\nREF=C:\\FIXT\\ALL.REF\r\n")
+    return d
+
+
 def twin_dir():
     """C: with the accessory in the root and the program in C:\\EHV"""
     import shutil
@@ -487,6 +517,21 @@ def main():
             ok = check_exists(os.path.join(d, "EHV", "EHYPVIEW.IDX"), "the program's index, in FOLDER=") and ok
         else:
             print("skip  twin: needs Xvfb and xdotool")
+    if ok:
+        d = copy_dir("fastram", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=%s\n" % IMAGES)
+        ok = run_scenario("fastram", d, FASTRAM_STEPS, extra=FASTRAM)
+    if ok:
+        if have_display():
+            d = acc_fastram_dir()
+            xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(1)
+            try:
+                ok = run_scenario("accfast", d, ACC_FASTRAM_STEPS, auto=None, windowed=True, extra=FASTRAM)
+            finally:
+                xvfb.terminate()
+        else:
+            print("skip  accfast: needs Xvfb and xdotool")
     return 0 if ok else 1
 
 

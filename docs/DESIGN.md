@@ -118,6 +118,8 @@ src/gem/       the GEM program
   toolbar.c    the toolbar's buttons and layout (no AES calls; tested on
                the host)
   pagedraw.c   a page laid out and drawn (the viewer's and a pop-up's)
+  stmem.c      ST RAM for the pictures copied to the screen: a blitter
+               can't read TT/Fast RAM (no AES calls; tested on the host)
   libwin.c     library window
   menu.c       the menu bar, built in code (no resource file)
   fontsel.c    the text font: selector dialog (from ECal), sizes, font protocol
@@ -226,10 +228,15 @@ Rules for `src/core`:
   `C:\EHV`: the program, started from the desktop, writes `FOLDER=` and
   its index there; the accessory, chosen meanwhile, hands it to the
   program; the font the program chose is the accessory's when it next
-  opens (the AERA guidelines, 2.3 and 6.1). `tests/test_menu.c` also checks
+  opens (the AERA guidelines, 2.3 and 6.1). Two more runs give the Falcon
+  64 MB of Fast RAM, where malloc returns Fast RAM: a page's pictures
+  must still be in ST RAM, in the program and in the accessory (which
+  reserves its ST RAM at boot). `tests/test_menu.c` also checks
   the menu tree (links, positions on 320- to 1280-pixel screens, commands)
   on the host, and `tests/test_toolbar.c` the toolbar's layout (every
-  button at a window's width, the least needed going first as it narrows).
+  button at a window's width, the least needed going first as it narrows),
+  `tests/test_stmem.c` and `test_stmem_acc.c` the pictures' ST RAM (blocks
+  apart and intact, joined when freed, the accessory's one block).
 - `tests/test_index.c` builds a real folder tree for the scanner and
   resolver tests: mixed-case names, a folder with spaces, a duplicate, a
   damaged file, a symbolic link loop, a REF beside a file and an ALL.REF

@@ -40,7 +40,7 @@ HOST     = build/host
 CORE_OBJ = $(patsubst src/core/%.c,$(HOST)/%.o,$(CORE_SRC)) $(HOST)/view.o $(HOST)/library.o $(HOST)/fontpref.o $(HOST)/bookmark.o
 
 all: $(HOST)/hypdump $(HOST)/test_core $(HOST)/test_index $(HOST)/test_view $(HOST)/test_library \
-     $(HOST)/test_menu $(HOST)/test_toolbar $(HOST)/test_fonts $(HOST)/test_bookmark
+     $(HOST)/test_menu $(HOST)/test_toolbar $(HOST)/test_stmem $(HOST)/test_stmem_acc $(HOST)/test_fonts $(HOST)/test_bookmark
 
 $(HOST)/%.o: src/core/%.c src/core/*.h | $(HOST)
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -c -o $@ $<
@@ -81,6 +81,12 @@ $(HOST)/test_menu: tests/test_menu.c src/gem/menu.c src/gem/menu.h src/view/book
 $(HOST)/test_toolbar: tests/test_toolbar.c src/gem/toolbar.c src/gem/toolbar.h | $(HOST)
 	$(CC) -Isrc/gem $(WARN) $(CFLAGS) -o $@ tests/test_toolbar.c src/gem/toolbar.c
 
+# and the pictures' ST RAM, with malloc for GEMDOS (the program's, the accessory's)
+$(HOST)/test_stmem: tests/test_stmem.c src/gem/stmem.c src/gem/stmem.h | $(HOST)
+	$(CC) -Isrc/gem $(WARN) $(CFLAGS) -o $@ tests/test_stmem.c src/gem/stmem.c
+$(HOST)/test_stmem_acc: tests/test_stmem_acc.c src/gem/stmem.c src/gem/stmem.h | $(HOST)
+	$(CC) -Isrc/gem $(WARN) $(CFLAGS) -o $@ tests/test_stmem_acc.c src/gem/stmem.c
+
 $(HOST):
 	mkdir -p $@
 
@@ -91,6 +97,8 @@ test: all
 	$(HOST)/test_library tests/fixtures
 	$(HOST)/test_menu
 	$(HOST)/test_toolbar
+	$(HOST)/test_stmem
+	$(HOST)/test_stmem_acc
 	$(HOST)/test_fonts
 	$(HOST)/test_bookmark
 	sh tests/run_golden.sh $(HOST)/hypdump
@@ -103,7 +111,7 @@ asan:
 M68K_CC = m68k-linux-gnu-gcc
 M68K    = build/m68k-linux
 
-m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c common/ui/mbar.c tests/test_menu.c tests/test_toolbar.c tests/test_fonts.c tests/test_bookmark.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
+m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c src/gem/stmem.c common/ui/mbar.c tests/test_menu.c tests/test_toolbar.c tests/test_stmem.c tests/test_stmem_acc.c tests/test_fonts.c tests/test_bookmark.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
 	mkdir -p $(M68K)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_core tests/test_core.c $(CORE_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_index tests/test_index.c $(CORE_SRC)
@@ -111,6 +119,8 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_library tests/test_library.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) -Isrc/gem -Isrc/view -Isrc/core -Icommon/ui -Icommon/atari $(WARN) -O2 -static -o $(M68K)/test_menu tests/test_menu.c src/gem/menu.c common/ui/mbar.c
 	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_toolbar tests/test_toolbar.c src/gem/toolbar.c
+	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_stmem tests/test_stmem.c src/gem/stmem.c
+	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_stmem_acc tests/test_stmem_acc.c src/gem/stmem.c
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_fonts tests/test_fonts.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_bookmark tests/test_bookmark.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/hypdump tools/hypdump.c $(CORE_SRC)
@@ -122,6 +132,8 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c
 	qemu-m68k-static $(M68K)/test_library tests/fixtures
 	qemu-m68k-static $(M68K)/test_menu
 	qemu-m68k-static $(M68K)/test_toolbar
+	qemu-m68k-static $(M68K)/test_stmem
+	qemu-m68k-static $(M68K)/test_stmem_acc
 	qemu-m68k-static $(M68K)/test_fonts
 	qemu-m68k-static $(M68K)/test_bookmark
 	sh tests/run_golden.sh $(M68K)/hypdump.sh
@@ -188,7 +200,7 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
-           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o \
+           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o
 
