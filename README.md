@@ -2,25 +2,25 @@
 
 <img src="docs/icon16.png" width="96" align="right" alt="EHypView icon: an Atari SM124-style monitor showing a page whose link points to another page">
 
-A modern viewer for ST-Guide hypertexts (`.HYP`) on the Atari TT and Falcon, as a program or a desk
-accessory, made to replace `ST-GUIDE.ACC`.
+EHypView reads and searches `.HYP` hypertexts, the help that Atari programs come with, on the TT and
+Falcon. It runs as a program or as a desk accessory, finds every hypertext on your drives by itself,
+and is the help viewer your other programs open when you press Help.
 
 **Highlights**
 
-- **Finds every hypertext by itself:** ST-Guide's folders, and `\GUIDES` and `\GEMSYS\GUIDES` on every
-  drive, with all their subfolders, scanned in the background and kept in an index. There is no
-  `ALL.REF` to maintain (yours is still read).
+- **Finds every hypertext by itself:** the folders named in `ST-GUIDE.INF`, and `\GUIDES` and
+  `\GEMSYS\GUIDES` on every drive, with all their subfolders, scanned in the background and kept in an
+  index. There is no `ALL.REF` to maintain (yours is still read).
 - **A library with one search box:** every hypertext found, grouped by subject. Typing finds page
-  names, aliases and keywords at once; Return searches the full text of every page, which needed the
-  separate HypFind tool in ST-Guide.
+  names, aliases and keywords at once; Return searches the full text of every page of every hypertext.
 - **Links that lead somewhere:** into any hypertext in the index, wherever it is. One that leads nowhere
   says so and suggests the closest names ("did you mean").
-- **In ST-Guide's place:** installed as `ST-GUIDE.ACC`, it answers programs that ask ST-Guide for help
-  (`VA_START`, `AC_HELP`), and it reads your `ST-GUIDE.INF`.
+- **Help for your other programs:** a program that asks for help (`VA_START`, `AC_HELP`) gets its page.
+  Installed under the name programs look for, `ST-GUIDE.ACC`, it is found by all of them, and it reads
+  the `ST-GUIDE.INF` they share.
 - **Pages as they were written:** styled text, links, lines, boxes and images, with unlimited history.
-- **A toolbar as ST-Guide had:** Back and Forward (with the history on the right button), the main
-  page, the page before and after, Contents, Index, See also, the library and bookmarks, each with a
-  tooltip.
+- **A toolbar:** Back and Forward (with the history on the right button), the main page, the page
+  before and after, Contents, Index, See also, the library and bookmarks, each with a tooltip.
 - **Several windows and bookmarks:** open a link in a new window (⇧-click) or the page in another
   (^N), up to six; keep pages to come back to (^D), in the Bookmarks menu and the library.
 - **Your choice of font:** the system font, or any monospaced GDOS font with NVDI or SpeedoGDOS, in any
@@ -28,7 +28,7 @@ accessory, made to replace `ST-GUIDE.ACC`.
 - **Modern but Atari:** a program with a menu bar or a desk accessory, a shortcut for every menu item,
   a right-click menu, drag and drop, the clipboard and iconify.
 
-![EHypView on a Falcon: the library lists the AERA programs' guides by subject (ClaudeST, EMail, EFTP, EContact, ECal), over ECal's guide open in the viewer](docs/screenshot.png)
+![EHypView on a Falcon: the library lists the AERA programs' guides by subject (EMail, EContact, ECal) over the viewer, which shows a page of ECal's guide under its toolbar](docs/screenshot.png)
 
 ## Getting started
 
@@ -47,8 +47,8 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
    boot drive's root, else the library. To open a `.HYP` with a double-click, install `EHYPVIEW.PRG`
    in your desktop as the application for `HYP` files.
 2. To have EHypView inside every program, copy `EHYPVIEW.ACC` to the root of your boot drive and
-   restart. **To replace ST-Guide**, copy it there as `ST-GUIDE.ACC` instead, in place of ST-Guide's,
-   so that programs asking for ST-Guide find it.
+   restart. **To be the help viewer for every program**, copy it there as `ST-GUIDE.ACC` instead (in
+   place of any accessory with that name): that is the name programs look for when you press Help.
 3. Keep your hypertexts (each `.HYP` with its `.REF`) where EHypView looks for them, including all
    subfolders:
    - the folders in `PATHS` and `HYPFOLD`, and the folder of `REF`, from `ST-GUIDE.INF`
@@ -73,7 +73,9 @@ menu with **Back** and **Forward** first (and, on a link, **Link in new window**
 **New window**, **Add bookmark**, **Copy page**, **Library and search**, **Font...**, and
 **About EHypView...** last.
 
-**The toolbar**, at the top of each viewer window, has ST-Guide's buttons in the family's look:
+**The toolbar**, at the top of each viewer window, drawn like the other AERA programs' toolbars:
+
+![The viewer showing a page of ECal's guide, with the toolbar above it and the Back button's tooltip, "Back (Undo). Right button: the history"](docs/toolbar.png)
 
 | Button | What it does |
 |---|---|
@@ -82,7 +84,7 @@ menu with **Back** and **Forward** first (and, on a link, **Link in new window**
 | < Contents > | the page before, the contents, the next page |
 | Index | the hypertext's index |
 | See also | the pages the page names with `@xref`, as a menu |
-| Library | the library (ST-Guide's catalog) |
+| Library | the library: every hypertext found, and the search |
 | Bookmarks | add or remove this page, or go to a bookmark |
 | ≡ | a menu: **About EHypView...**, new window, open, library, copy, bookmark, fonts, close, quit; the accessory, which has no menu bar, finds them here |
 
@@ -114,9 +116,9 @@ make room first; the ≡ menu and the keys still reach everything.
 
 **Desk > About EHypView...** shows the version, the number of hypertexts found and the font in use.
 
-**Pop-ups** (links to a `@pnode`) open as a small framed box just below the link, over the page, as
-in ST-Guide. A click on a link in the box follows it; any other click, or any key, closes the box and
-leaves the page where it was.
+**Pop-ups** (links to a `@pnode`) open as a small framed box just below the link, over the page. A
+click on a link in the box follows it; any other click, or any key, closes the box and leaves the
+page where it was.
 
 **Several windows.** Each viewer window has its own page, history and scroll position; up to six are
 open at once, each a little below and right of the last. The menu commands act on the one in front.
@@ -128,8 +130,8 @@ are first in the library too, where the accessory, which has no menu bar, finds 
 one, Delete removes it. They are kept in `EHYPVIEW.INF` (`BOOKMARK1` to `BOOKMARK10`), which the
 program and the accessory share.
 
-Tabs are still to come: [docs/DESIGN.md](docs/DESIGN.md) has the assessment of ST-Guide, the goals and
-the [roadmap](docs/DESIGN.md#roadmap).
+Tabs are still to come: [docs/DESIGN.md](docs/DESIGN.md) has the goals and the
+[roadmap](docs/DESIGN.md#roadmap).
 
 ### The library
 
@@ -138,6 +140,8 @@ by subject under a heading and a rule, with one search field at the top. Each ro
 of what it is (a book for a hypertext, a ribbon for a bookmark, a page for a page, a magnifier for the
 full-text search) and the file or hypertext it is in on the right. It is also what you see when no
 page was asked for.
+
+![The library searching for "remind": the page Reminders in ECal's guide, and the full-text search for the word](docs/library.png)
 
 - **Type to search.** Matching page names, aliases and keywords show at once (exact matches first, then
   names starting with what you typed, then names containing it, then similar ones), with matching
@@ -266,10 +270,10 @@ icons/      the desktop icon (RSC and ICN files), from tools/icon
 tests/      unit and golden tests, fixtures and their generators, EHVCHECK,
             the Hatari rigs
 tools/      hypdump, the icon generator, bump.py, sync-common.sh
-docs/       DESIGN.md, FORMAT.md, the icon pictures
+docs/       DESIGN.md, FORMAT.md, the icon pictures, the screenshots
 ```
 
-[docs/DESIGN.md](docs/DESIGN.md) has the assessment of ST-Guide, the goals, the architecture and the
+[docs/DESIGN.md](docs/DESIGN.md) has the goals, the design decisions, the architecture and the
 roadmap; [docs/FORMAT.md](docs/FORMAT.md) the `.HYP` and `.REF` file formats, with the corrections to
 the published description.
 
