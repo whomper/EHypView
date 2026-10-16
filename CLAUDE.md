@@ -49,8 +49,12 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - **A release** carries `EHYPVIEW.PRG`, `EHYPVIEW.ACC` and the icon (`make atari` copies the
   programs to `binary/`; the icons are committed in `icons/`). The first release was 1.0.
 - Before pushing: `make test`, `make asan`, `make m68k-test`,
-  `make hatari-test` and `make gui-test` (the last needs hatari, Xvfb and
-  xdotool), and `make atari` with no warnings.
+  `make hatari-test`, `make gui-test` and `make quiet-test` (the last two
+  need hatari, Xvfb and xdotool), and `make atari` with no warnings.
+- The accessory starts quietly (guideline 2.2): nothing but set-up before
+  its first event call, and the index (src/core/libjob.c) in short steps
+  through common/ui/bgwork.c. `make quiet-test` measures it with an
+  `-DAES_PROFILE` build: no stretch over 50 ms while it reads and indexes.
 - The icon is drawn by `tools/icon/make_icon.py` (the family's SM124
   monitor); `make icons` writes src/gem/icon*.h, docs/icon*.png and
   icons/EHYPVIEW.RSC (committed). The About box (src/gem/about.c) follows

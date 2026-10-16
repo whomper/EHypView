@@ -55,6 +55,29 @@ static int grow(void **arr, unsigned long *cap, unsigned long n, size_t sz)
 	return 0;
 }
 
+int ehv_index_reserve(ehv_index *idx, unsigned long nguides, unsigned long nsyms)
+{
+	if (nguides > idx->cap_guides)
+	{
+		void *p = realloc(idx->guides, nguides * sizeof(ehv_guide));
+
+		if (p == NULL)
+			return -1;
+		idx->guides = p;
+		idx->cap_guides = nguides;
+	}
+	if (nsyms > idx->cap_syms)
+	{
+		void *p = realloc(idx->syms, nsyms * sizeof(ehv_sym));
+
+		if (p == NULL)
+			return -1;
+		idx->syms = p;
+		idx->cap_syms = nsyms;
+	}
+	return 0;
+}
+
 /* pool copy that reports failure for non-NULL input */
 static int pdup(ehv_index *idx, const char **dst, const char *src)
 {
@@ -142,61 +165,76 @@ long ehv_index_copy_guide(ehv_index *idx, const ehv_index *from, unsigned long g
 	return ng;
 }
 
-int ehv_index_merge_ref(ehv_index *idx, const ref_db *db)
+/* one ALL.REF module merged into the guides it names */
+static int merge_module(ehv_index *idx, const ref_db *db, unsigned long m)
 {
-	unsigned long m;
+	const ref_module *mod = &db->modules[m];
+	char file[256];
+	unsigned long g, matched = 0;
 
-	for (m = 0; m < db->nmodules; m++)
+	if (mod->file == NULL || mod->file[0] == '\0')
+		return 0;
+	ref_module_filename(mod, file, sizeof(file));
+	for (g = 0; g < idx->nguides; g++)
 	{
-		const ref_module *mod = &db->modules[m];
-		char file[256];
-		unsigned long g, matched = 0;
+		ehv_guide *gd = &idx->guides[g];
+		const char *base = fs_basename(file);
+		size_t kl = strlen(gd->key);
+		unsigned long s;
 
-		if (mod->file == NULL || mod->file[0] == '\0')
+		if (atari_ncasecmp(gd->key, base, kl) != 0 || atari_casecmp(base + kl, ".hyp") != 0)
 			continue;
-		ref_module_filename(mod, file, sizeof(file));
-		for (g = 0; g < idx->nguides; g++)
+		matched++;
+		if (gd->ref_path != NULL)
+			continue;            /* its own REF file wins */
+		for (s = mod->first; s < mod->first + mod->count; s++)
 		{
-			ehv_guide *gd = &idx->guides[g];
-			const char *base = fs_basename(file);
-			size_t kl = strlen(gd->key);
-			unsigned long s;
+			const ref_symbol *rs = &db->syms[s];
+			unsigned char kind;
 
-			if (atari_ncasecmp(gd->key, base, kl) != 0 || atari_casecmp(base + kl, ".hyp") != 0)
+			if (rs->kind == REF_ALIAS)
+				kind = EHV_SYM_ALIAS;
+			else if (rs->kind == REF_LABEL)
+				kind = EHV_SYM_LABEL;
+			else
+				continue;        /* pages come from the HYP itself */
+			if (rs->node == NULL)
 				continue;
-			matched++;
-			if (gd->ref_path != NULL)
-				continue;            /* its own REF file wins */
-			for (s = mod->first; s < mod->first + mod->count; s++)
-			{
-				const ref_symbol *rs = &db->syms[s];
-				unsigned char kind;
-
-				if (rs->kind == REF_ALIAS)
-					kind = EHV_SYM_ALIAS;
-				else if (rs->kind == REF_LABEL)
-					kind = EHV_SYM_LABEL;
-				else
-					continue;        /* pages come from the HYP itself */
-				if (rs->node == NULL)
-					continue;
-				if (ehv_index_add_sym(idx, g, kind, rs->line, rs->name, rs->node, 2) < 0)
-					return -1;
-			}
-		}
-		if (matched == 0)
-		{
-			const char **p = realloc(idx->orphans, (idx->norphans + 1) * sizeof(char *));
-
-			if (p == NULL)
+			if (ehv_index_add_sym(idx, g, kind, rs->line, rs->name, rs->node, 2) < 0)
 				return -1;
-			idx->orphans = p;
-			if ((p[idx->norphans] = pool_strdup(&idx->pool, file)) == NULL)
-				return -1;
-			idx->norphans++;
 		}
 	}
+	if (matched == 0)
+	{
+		const char **p = realloc(idx->orphans, (idx->norphans + 1) * sizeof(char *));
+
+		if (p == NULL)
+			return -1;
+		idx->orphans = p;
+		if ((p[idx->norphans] = pool_strdup(&idx->pool, file)) == NULL)
+			return -1;
+		idx->norphans++;
+	}
 	return 0;
+}
+
+int ehv_index_merge_ref_some(ehv_index *idx, const ref_db *db, unsigned long *next, unsigned int budget)
+{
+	while (*next < db->nmodules)
+	{
+		if (budget-- == 0)
+			return 0;
+		if (merge_module(idx, db, (*next)++) < 0)
+			return -1;
+	}
+	return 1;
+}
+
+int ehv_index_merge_ref(ehv_index *idx, const ref_db *db)
+{
+	unsigned long next = 0;
+
+	return ehv_index_merge_ref_some(idx, db, &next, (unsigned int) -1) < 0 ? -1 : 0;
 }
 
 /* ---------------------------------------------------------------- */
@@ -235,116 +273,267 @@ static int cmp_exact(const void *a, const void *b)
 	return x->idx < y->idx ? -1 : x->idx > y->idx;
 }
 
-static int cmp_sym_order(const void *a, const void *b)
-{
-	const sort_item *x = a, *y = b;
+/*
+ * A merge sort that stops after a number of moves and goes on where it
+ * stopped: a sort of thousands of names in one go would hold an Atari
+ * for seconds.  Stable, so with the comparisons' last key (the position)
+ * it puts things in the same order as before (qsort, to version 1.6).
+ */
+typedef struct {
+	sort_item *a, *b;
+	unsigned long n, width, lo, mid, hi, i, j, k;
+	int merging;
+	int (*cmp)(const void *, const void *);
+} msort;
 
-	/* rank holds the guide; idx the original position */
-	if (x->rank != y->rank)
-		return x->rank < y->rank ? -1 : 1;
-	return x->idx < y->idx ? -1 : x->idx > y->idx;
+static void ms_init(msort *m, sort_item *a, sort_item *b, unsigned long n,
+                    int (*cmp)(const void *, const void *))
+{
+	memset(m, 0, sizeof(*m));
+	m->a = a;
+	m->b = b;
+	m->n = n;
+	m->width = 1;
+	m->cmp = cmp;
 }
 
-static unsigned long *sorted(sort_item *items, unsigned long n,
-                             int (*cmp)(const void *, const void *))
+/* 1 once sorted (in m->a), 0 when the budget ran out */
+static int ms_step(msort *m, unsigned long budget)
+{
+	while (m->width < m->n)
+	{
+		if (!m->merging)
+		{
+			if (m->lo >= m->n)
+			{
+				sort_item *t = m->a;
+
+				m->a = m->b;           /* a pass done: the next one from b */
+				m->b = t;
+				m->width *= 2;
+				m->lo = 0;
+				continue;
+			}
+			m->mid = m->lo + m->width < m->n ? m->lo + m->width : m->n;
+			m->hi = m->mid + m->width < m->n ? m->mid + m->width : m->n;
+			m->i = m->k = m->lo;
+			m->j = m->mid;
+			m->merging = 1;
+		}
+		while (m->k < m->hi)
+		{
+			if (budget == 0)
+				return 0;
+			budget--;
+			if (m->i < m->mid && (m->j >= m->hi || m->cmp(&m->a[m->i], &m->a[m->j]) <= 0))
+				m->b[m->k++] = m->a[m->i++];
+			else
+				m->b[m->k++] = m->a[m->j++];
+		}
+		m->merging = 0;
+		m->lo = m->hi;
+	}
+	return 1;
+}
+
+/* what ehv_index_finish_some() does next */
+enum { F_START, F_COUNT, F_PLACE, F_GROUPED, F_KEY, F_PATH, F_NAME, F_SORT, F_DONE };
+
+struct ehv_finish {
+	ehv_index *idx;
+	int phase, table;               /* F_SORT: which table, F_KEY... */
+	unsigned long i;
+	unsigned long *start;           /* F_COUNT, F_PLACE: per guide */
+	ehv_sym *ns;
+	sort_item *items, *tmp;
+	msort m;
+};
+
+#define MOVES  64                       /* sort moves per unit of budget */
+
+ehv_finish *ehv_index_finish_begin(ehv_index *idx)
+{
+	ehv_finish *f = calloc(1, sizeof(*f));
+
+	if (f != NULL)
+		f->idx = idx;
+	return f;
+}
+
+void ehv_index_finish_abort(ehv_finish *f)
+{
+	if (f == NULL)
+		return;
+	free(f->start);
+	free(f->ns);
+	free(f->items);
+	free(f->tmp);
+	free(f);
+}
+
+/* the sorted order into a table */
+static unsigned long *table_of(const sort_item *items, unsigned long n)
 {
 	unsigned long *out = malloc((n ? n : 1) * sizeof(unsigned long));
 	unsigned long i;
 
-	if (out == NULL)
-		return NULL;
-	qsort(items, n, sizeof(sort_item), cmp);
-	for (i = 0; i < n; i++)
-		out[i] = items[i].idx;
+	if (out != NULL)
+		for (i = 0; i < n; i++)
+			out[i] = items[i].idx;
 	return out;
+}
+
+int ehv_index_finish_some(ehv_finish *f, unsigned int budget)
+{
+	ehv_index *idx = f->idx;
+
+	while (f->phase != F_DONE)
+	{
+		if (budget-- == 0)
+			return 0;
+		switch (f->phase)
+		{
+		case F_START:
+		{
+			unsigned long n = idx->nguides > idx->nsyms ? idx->nguides : idx->nsyms;
+
+			free_tables(idx);
+			f->items = malloc((n ? n : 1) * sizeof(sort_item));
+			f->tmp = malloc((n ? n : 1) * sizeof(sort_item));
+			f->start = calloc(idx->nguides + 1, sizeof(unsigned long));
+			f->ns = malloc((idx->nsyms ? idx->nsyms : 1) * sizeof(ehv_sym));
+			if (f->items == NULL || f->tmp == NULL || f->start == NULL || f->ns == NULL)
+				return -1;
+			f->i = 0;
+			f->phase = F_COUNT;
+			break;
+		}
+		case F_COUNT:
+			/* the symbols grouped by guide, keeping their order: how
+			   many each guide has */
+		{
+			unsigned long end = f->i + MOVES < idx->nsyms ? f->i + MOVES : idx->nsyms;
+
+			for (; f->i < end; f->i++)
+				f->start[idx->syms[f->i].guide + 1]++;
+			if (f->i == idx->nsyms)
+			{
+				unsigned long g;
+
+				for (g = 0; g < idx->nguides; g++)
+					f->start[g + 1] += f->start[g];
+				for (g = 0; g < idx->nguides; g++)
+				{
+					idx->guides[g].first_sym = f->start[g];
+					idx->guides[g].nsyms = f->start[g + 1] - f->start[g];
+				}
+				f->i = 0;
+				f->phase = F_PLACE;
+			}
+			break;
+		}
+		case F_PLACE:
+		{
+			unsigned long end = f->i + MOVES < idx->nsyms ? f->i + MOVES : idx->nsyms;
+
+			for (; f->i < end; f->i++)
+				f->ns[f->start[idx->syms[f->i].guide]++] = idx->syms[f->i];
+			if (f->i == idx->nsyms)
+				f->phase = F_GROUPED;
+			break;
+		}
+		case F_GROUPED:
+		{
+			unsigned long g;
+
+			free(idx->syms);
+			idx->syms = f->ns;
+			idx->cap_syms = idx->nsyms;
+			f->ns = NULL;
+			free(f->start);
+			f->start = NULL;
+			for (g = 0; g < idx->nguides; g++)
+				if (idx->guides[g].nsyms == 0)
+					idx->guides[g].first_sym = 0;
+			f->i = 0;
+			f->phase = F_KEY;
+			break;
+		}
+		case F_KEY:
+		case F_PATH:
+		case F_NAME:
+		{
+			/* the items to sort, MOVES * 4 at a time: guides by key,
+			   then by scan root, then scan order; by path; symbols by
+			   name, then kind, then root */
+			unsigned long n = f->phase == F_NAME ? idx->nsyms : idx->nguides;
+			unsigned long end = f->i + MOVES * 4 < n ? f->i + MOVES * 4 : n;
+
+			for (; f->i < end; f->i++)
+			{
+				sort_item *it = &f->items[f->i];
+
+				if (f->phase == F_KEY)
+				{
+					it->str = idx->guides[f->i].key;
+					it->rank = idx->guides[f->i].root;
+				} else if (f->phase == F_PATH)
+				{
+					it->str = idx->guides[f->i].path;
+					it->rank = 0;
+				} else
+				{
+					const ehv_sym *sy = &idx->syms[f->i];
+
+					it->str = sy->name;
+					it->rank = (unsigned long) kind_rank(sy->kind) << 16 | idx->guides[sy->guide].root;
+				}
+				it->idx = f->i;
+			}
+			if (f->i < n)
+				break;
+			ms_init(&f->m, f->items, f->tmp, n, f->phase == F_PATH ? cmp_exact : cmp_casefold);
+			f->table = f->phase;
+			f->i = 0;
+			f->phase = F_SORT;
+			break;
+		}
+		case F_SORT:
+			if (ms_step(&f->m, MOVES))
+			{
+				unsigned long *t = table_of(f->m.a, f->m.n);
+
+				if (t == NULL)
+					return -1;
+				if (f->table == F_KEY)
+				{
+					idx->by_key = t;
+					f->phase = F_PATH;
+				} else if (f->table == F_PATH)
+				{
+					idx->by_path = t;
+					f->phase = F_NAME;
+				} else
+				{
+					idx->by_name = t;
+					f->phase = F_DONE;
+				}
+			}
+			break;
+		}
+	}
+	return 1;
 }
 
 int ehv_index_finish(ehv_index *idx)
 {
-	unsigned long n = idx->nguides > idx->nsyms ? idx->nguides : idx->nsyms;
-	sort_item *items = malloc((n ? n : 1) * sizeof(sort_item));
-	unsigned long i, g;
-	unsigned long *perm;
+	ehv_finish *f = ehv_index_finish_begin(idx);
+	int r = f != NULL ? ehv_index_finish_some(f, (unsigned int) -1) : -1;
 
-	free_tables(idx);
-	if (items == NULL)
-		return -1;
-
-	/* group symbols by guide, keeping their order */
-	for (i = 0; i < idx->nsyms; i++)
-	{
-		items[i].str = NULL;
-		items[i].rank = idx->syms[i].guide;
-		items[i].idx = i;
-	}
-	perm = sorted(items, idx->nsyms, cmp_sym_order);
-	if (perm == NULL)
-		goto fail;
-	{
-		ehv_sym *ns = malloc((idx->nsyms ? idx->nsyms : 1) * sizeof(ehv_sym));
-
-		if (ns == NULL)
-		{
-			free(perm);
-			goto fail;
-		}
-		for (i = 0; i < idx->nsyms; i++)
-			ns[i] = idx->syms[perm[i]];
-		free(perm);
-		free(idx->syms);
-		idx->syms = ns;
-		idx->cap_syms = idx->nsyms;
-	}
-	for (g = 0; g < idx->nguides; g++)
-		idx->guides[g].nsyms = 0;
-	for (i = idx->nsyms; i-- > 0; )
-	{
-		ehv_guide *gd = &idx->guides[idx->syms[i].guide];
-
-		gd->first_sym = i;
-		gd->nsyms++;
-	}
-	for (g = 0; g < idx->nguides; g++)
-		if (idx->guides[g].nsyms == 0)
-			idx->guides[g].first_sym = 0;
-
-	/* guides by key, then by scan root, then scan order */
-	for (g = 0; g < idx->nguides; g++)
-	{
-		items[g].str = idx->guides[g].key;
-		items[g].rank = idx->guides[g].root;
-		items[g].idx = g;
-	}
-	if ((idx->by_key = sorted(items, idx->nguides, cmp_casefold)) == NULL)
-		goto fail;
-
-	for (g = 0; g < idx->nguides; g++)
-	{
-		items[g].str = idx->guides[g].path;
-		items[g].idx = g;
-	}
-	if ((idx->by_path = sorted(items, idx->nguides, cmp_exact)) == NULL)
-		goto fail;
-
-	/* symbols by name, then kind, then root */
-	for (i = 0; i < idx->nsyms; i++)
-	{
-		const ehv_sym *s = &idx->syms[i];
-
-		items[i].str = s->name;
-		items[i].rank = (unsigned long) kind_rank(s->kind) << 16 | idx->guides[s->guide].root;
-		items[i].idx = i;
-	}
-	if ((idx->by_name = sorted(items, idx->nsyms, cmp_casefold)) == NULL)
-		goto fail;
-
-	free(items);
-	return 0;
-
-fail:
-	free(items);
-	free_tables(idx);
-	return -1;
+	ehv_index_finish_abort(f);
+	if (r < 0)
+		free_tables(idx);
+	return r < 0 ? -1 : 0;
 }
 
 long ehv_index_find_path(const ehv_index *idx, const char *path)
@@ -659,9 +848,30 @@ unsigned long ehv_index_suggest_guides(const ehv_index *idx, const char *file,
 /* ---------------------------------------------------------------- */
 /* cache file                                                        */
 
+/*
+ * Text, one record per line, fields split by tabs:
+ *
+ *   EHYPVIEW-INDEX 2
+ *   C  nguides nsyms              how many follow, to make room at once
+ *   R  size mtime path            ALL.REF as merged (when there was one)
+ *   G  ... path ref               a hypertext, then its
+ *   M  code value                   @database, @subject...
+ *   N  kind line from name node     and its names, ALL.REF's too
+ *   O  path                       an ALL.REF module with no hypertext
+ *   K / P / S  numbers            the tables, sorted: by_key, by_path,
+ *                                 by_name (version 2)
+ *   END nguides nsyms
+ *
+ * Version 2 keeps the tables and ALL.REF's names, so loading is a
+ * read through the file (in steps), with nothing to sort; a version 1
+ * file (to EHypView 1.6) is loaded and sorted afresh.
+ */
 #define CACHE_MAGIC "EHYPVIEW-INDEX"
+#define CHUNK       4096L              /* bytes read or written per step */
+#define LINES       8                  /* lines read or written per step */
+#define PER_LINE    32                 /* table numbers per line */
 
-/* the cache text is built in memory and written in one go */
+/* the cache text is built in memory and written in pieces */
 typedef struct {
 	char *data;
 	unsigned long len, cap;
@@ -697,21 +907,40 @@ static void out_str(outbuf *o, const char *s)
 	out_bytes(o, s, strlen(s));
 }
 
+/* a number, as sprintf("%lu") would write it but much quicker */
+static void out_num(outbuf *o, char before, unsigned long v)
+{
+	char b[12];
+	int n = (int) sizeof(b);
+
+	do
+		b[--n] = (char) ('0' + v % 10);
+	while ((v /= 10) != 0);
+	b[--n] = before;
+	out_bytes(o, b + n, (unsigned long) (sizeof(b) - (size_t) n));
+}
+
 static void put_field(outbuf *o, const char *s)
 {
 	out_bytes(o, "\t", 1);
 	if (s == NULL)
 		return;
-	for (; *s != '\0'; s++)
+	while (*s != '\0')
 	{
+		/* the plain run, then the one character to write escaped */
+		size_t n = strcspn(s, "\\\t\n\r");
+
+		out_bytes(o, s, (unsigned long) n);
+		s += n;
 		switch (*s)
 		{
 		case '\\': out_bytes(o, "\\\\", 2); break;
 		case '\t': out_bytes(o, "\\t", 2); break;
 		case '\n': out_bytes(o, "\\n", 2); break;
 		case '\r': out_bytes(o, "\\r", 2); break;
-		default:   out_bytes(o, s, 1); break;
+		default: return;
 		}
+		s++;
 	}
 }
 
@@ -729,55 +958,236 @@ static void put_meta(outbuf *o, char code, const char *value)
 	out_str(o, "\n");
 }
 
-int ehv_index_save(const ehv_index *idx, const char *path)
+static void put_guide(outbuf *o, const ehv_index *idx, unsigned long g)
 {
-	outbuf o;
-	char num[128];
-	unsigned long g, i, nsyms = 0;
-	int rc;
+	const ehv_guide *gd = &idx->guides[g];
 
-	memset(&o, 0, sizeof(o));
-	sprintf(num, "%s %d\n", CACHE_MAGIC, EHV_CACHE_VERSION);
-	out_str(&o, num);
-	for (g = 0; g < idx->nguides; g++)
+	out_str(o, "G");
+	out_num(o, '\t', gd->size);
+	out_num(o, '\t', gd->mtime);
+	out_num(o, '\t', gd->root);
+	if (gd->error < 0)                  /* HYP_ERR_*: negative */
 	{
-		const ehv_guide *gd = &idx->guides[g];
+		out_str(o, "\t");
+		out_num(o, '-', (unsigned long) -gd->error);
+	} else
+		out_num(o, '\t', (unsigned long) gd->error);
+	out_num(o, '\t', gd->os);
+	out_num(o, '\t', gd->width);
+	out_num(o, '\t', gd->stg_flags);
+	out_num(o, '\t', gd->ref_size);
+	out_num(o, '\t', gd->ref_mtime);
+	put_field(o, gd->path);
+	put_field(o, gd->ref_path ? gd->ref_path : "");
+	out_str(o, "\n");
+	put_meta(o, 'D', gd->database);
+	put_meta(o, 'S', gd->subject);
+	put_meta(o, 'A', gd->author);
+	put_meta(o, 'V', gd->version);
+	put_meta(o, 'H', gd->hostname);
+	put_meta(o, 'F', gd->default_node);
+	put_meta(o, 'P', gd->help_node);
+	put_meta(o, 'C', gd->charset);
+	put_meta(o, 'L', gd->language);
+}
 
-		sprintf(num, "G\t%lu\t%lu\t%u\t%d\t%u\t%u\t%u\t%lu\t%lu",
-			gd->size, gd->mtime, gd->root, gd->error, gd->os, gd->width, gd->stg_flags,
-			gd->ref_size, gd->ref_mtime);
-		out_str(&o, num);
-		put_field(&o, gd->path);
-		put_field(&o, gd->ref_path ? gd->ref_path : "");
-		out_str(&o, "\n");
-		put_meta(&o, 'D', gd->database);
-		put_meta(&o, 'S', gd->subject);
-		put_meta(&o, 'A', gd->author);
-		put_meta(&o, 'V', gd->version);
-		put_meta(&o, 'H', gd->hostname);
-		put_meta(&o, 'F', gd->default_node);
-		put_meta(&o, 'P', gd->help_node);
-		put_meta(&o, 'C', gd->charset);
-		put_meta(&o, 'L', gd->language);
-		for (i = gd->first_sym; i < gd->first_sym + gd->nsyms; i++)
+static void put_sym(outbuf *o, const ehv_sym *sy)
+{
+	out_str(o, "N");
+	out_num(o, '\t', sy->kind);
+	out_num(o, '\t', sy->line);
+	out_num(o, '\t', sy->from_ref);
+	put_field(o, sy->name);
+	put_field(o, sy->node == sy->name ? "" : sy->node);
+	out_str(o, "\n");
+}
+
+/* what ehv_index_save_some() does next */
+enum { S_OPEN, S_HEAD, S_GUIDES, S_ORPHANS, S_TABLES, S_END, S_CLOSE, S_DONE };
+
+struct ehv_saver {
+	const ehv_index *idx;
+	char *path, *tmp;
+	outbuf o;                       /* written out each CHUNK */
+	int phase, table, h;
+	unsigned long i, k;             /* S_GUIDES: guide, and its name (0: the guide itself) */
+};
+
+ehv_saver *ehv_index_save_begin(const ehv_index *idx, const char *path)
+{
+	ehv_saver *v = calloc(1, sizeof(*v));
+
+	if (v == NULL)
+		return NULL;
+	v->idx = idx;
+	v->h = -1;
+	v->path = malloc(strlen(path) + 1);
+	v->tmp = pf_tmp_name(path);
+	if (v->path == NULL || v->tmp == NULL)
+	{
+		ehv_index_save_abort(v);
+		return NULL;
+	}
+	strcpy(v->path, path);
+	return v;
+}
+
+void ehv_index_save_abort(ehv_saver *v)
+{
+	if (v == NULL)
+		return;
+	if (v->h >= 0)
+	{
+		pf_close(v->h);
+		pf_remove(v->tmp);
+	}
+	free(v->o.data);
+	free(v->path);
+	free(v->tmp);
+	free(v);
+}
+
+/* what is built goes to the file (a step of its own) */
+static int flush(ehv_saver *v)
+{
+	if (v->o.failed)
+		return -1;
+	if (v->o.len > 0 && pf_write(v->h, v->o.data, (long) v->o.len) != (long) v->o.len)
+		return -1;
+	v->o.len = 0;
+	return 0;
+}
+
+int ehv_index_save_some(ehv_saver *v, unsigned int budget)
+{
+	const ehv_index *idx = v->idx;
+	int k;
+
+	while (v->phase != S_DONE)
+	{
+		if (budget-- == 0)
+			return 0;
+		if (v->o.len >= (unsigned long) CHUNK)
 		{
-			const ehv_sym *sy = &idx->syms[i];
+			if (flush(v) < 0)
+				return -1;
+			continue;
+		}
+		switch (v->phase)
+		{
+		case S_OPEN:
+			if ((v->h = pf_open(v->tmp, PF_WRITE)) < 0)
+				return -1;
+			v->phase = S_HEAD;
+			break;
+		case S_HEAD:
+		{
+			char head[32];
 
-			if (sy->from_ref == 2)
-				continue;
-			sprintf(num, "N\t%u\t%u\t%u", sy->kind, sy->line, sy->from_ref);
-			out_str(&o, num);
-			put_field(&o, sy->name);
-			put_field(&o, sy->node == sy->name ? "" : sy->node);
-			out_str(&o, "\n");
-			nsyms++;
+			sprintf(head, "%s %d\n", CACHE_MAGIC, EHV_CACHE_VERSION);
+			out_str(&v->o, head);
+		}
+			out_str(&v->o, "C");
+			out_num(&v->o, '\t', idx->nguides);
+			out_num(&v->o, '\t', idx->nsyms);
+			out_str(&v->o, "\n");
+			if (idx->allref_path != NULL)
+			{
+				out_str(&v->o, "R");
+				out_num(&v->o, '\t', idx->allref_size);
+				out_num(&v->o, '\t', idx->allref_mtime);
+				put_field(&v->o, idx->allref_path);
+				out_str(&v->o, "\n");
+			}
+			v->i = v->k = 0;
+			v->phase = S_GUIDES;
+			break;
+		case S_GUIDES:
+			/* a few lines: a guide, or some of its names */
+			for (k = 0; k < LINES && v->i < idx->nguides; k++)
+			{
+				const ehv_guide *gd = &idx->guides[v->i];
+
+				if (v->k == 0)
+					put_guide(&v->o, idx, v->i);
+				if (v->k < gd->nsyms)
+					put_sym(&v->o, &idx->syms[gd->first_sym + v->k]);
+				if (++v->k >= gd->nsyms)
+				{
+					v->i++;
+					v->k = 0;
+				}
+			}
+			if (v->i >= idx->nguides)
+				v->phase = S_ORPHANS;
+			break;
+		case S_ORPHANS:
+			for (v->i = 0; v->i < idx->norphans; v->i++)
+			{
+				out_str(&v->o, "O");
+				put_field(&v->o, idx->orphans[v->i]);
+				out_str(&v->o, "\n");
+			}
+			v->i = 0;
+			v->table = 0;
+			v->phase = idx->by_key != NULL && idx->by_path != NULL && idx->by_name != NULL ? S_TABLES : S_END;
+			break;
+		case S_TABLES:
+			for (k = 0; k < 4 && v->phase == S_TABLES; k++)
+			{
+				/* a line of one table, PER_LINE numbers */
+				static const char code[3] = { 'K', 'P', 'S' };
+				const unsigned long *t = v->table == 0 ? idx->by_key : v->table == 1 ? idx->by_path : idx->by_name;
+				unsigned long n = v->table < 2 ? idx->nguides : idx->nsyms, m;
+
+				if (v->i < n)
+				{
+					out_bytes(&v->o, &code[v->table], 1);
+					for (m = 0; m < PER_LINE && v->i < n; m++)
+						out_num(&v->o, m ? ' ' : '\t', t[v->i++]);
+					out_str(&v->o, "\n");
+				}
+				if (v->i >= n)
+				{
+					v->i = 0;
+					if (++v->table == 3)
+						v->phase = S_END;
+				}
+			}
+			break;
+		case S_END:
+			out_str(&v->o, "END");
+			out_num(&v->o, '\t', idx->nguides);
+			out_num(&v->o, '\t', idx->nsyms);
+			out_str(&v->o, "\n");
+			if (flush(v) < 0)
+				return -1;
+			v->phase = S_CLOSE;
+			break;
+		case S_CLOSE:
+			pf_close(v->h);
+			v->h = -1;
+			/* TOS cannot rename over an existing file */
+			pf_remove(v->path);
+			if (pf_rename(v->tmp, v->path) != 0)
+			{
+				pf_remove(v->tmp);
+				return -1;
+			}
+			v->phase = S_DONE;
+			break;
 		}
 	}
-	sprintf(num, "END\t%lu\t%lu\n", idx->nguides, nsyms);
-	out_str(&o, num);
-	rc = o.failed ? -1 : pf_save(path, o.data, o.len);
-	free(o.data);
-	return rc;
+	return 1;
+}
+
+int ehv_index_save(const ehv_index *idx, const char *path)
+{
+	ehv_saver *v = ehv_index_save_begin(idx, path);
+	int r = v != NULL ? ehv_index_save_some(v, (unsigned int) -1) : -1;
+
+	ehv_index_save_abort(v);
+	return r < 0 ? -1 : 0;
 }
 
 /* next line of a loaded file, terminated in place; NULL at the end */
@@ -829,101 +1239,299 @@ static int split_fields(char *line, char **fields, int max)
 	return n;
 }
 
-ehv_index *ehv_index_load(const char *path)
-{
-	unsigned long size;
-	char *buf = pf_load(path, &size), *pos, *end, *line;
+struct ehv_loader {
 	ehv_index *idx;
-	char *f[16];
-	long cur = -1;
-	int done = 0;
-	char magic[32];
+	int h, version, done;
+	char *buf, *pos, *end;
+	unsigned long size, got;
+	long cur;                       /* the guide being read */
+	unsigned long nt[3];            /* numbers read into each table */
+	ehv_finish *fin;                /* a version 1 file: sorted afresh */
+};
 
-	if (buf == NULL)
+ehv_loader *ehv_index_load_begin(const char *path)
+{
+	ehv_loader *l;
+	pf_info st;
+
+	if (pf_stat(path, &st) != 0 || st.is_dir)
 		return NULL;
-	idx = ehv_index_new();
-	if (idx == NULL)
+	l = calloc(1, sizeof(*l));
+	if (l == NULL)
+		return NULL;
+	l->cur = -1;
+	l->size = st.size;
+	l->buf = malloc(l->size + 1);
+	l->idx = ehv_index_new();
+	l->h = pf_open(path, PF_READ);
+	if (l->buf == NULL || l->idx == NULL || l->h < 0)
 	{
-		free(buf);
+		ehv_index_load_abort(l);
 		return NULL;
 	}
-	pos = buf;
-	end = buf + size;
-	line = next_line(&pos, end);
-	sprintf(magic, "%s %d", CACHE_MAGIC, EHV_CACHE_VERSION);
-	if (line == NULL || strcmp(line, magic) != 0)
-		goto fail;
+	return l;
+}
 
-	while (!done && (line = next_line(&pos, end)) != NULL)
+void ehv_index_load_abort(ehv_loader *l)
+{
+	if (l == NULL)
+		return;
+	if (l->h >= 0)
+		pf_close(l->h);
+	ehv_index_finish_abort(l->fin);
+	ehv_index_free(l->idx);
+	free(l->buf);
+	free(l);
+}
+
+/* a number of a line; quicker than strtoul() */
+static unsigned long num_of(const char *p)
+{
+	unsigned long v = 0;
+
+	while (*p >= '0' && *p <= '9')
+		v = v * 10 + (unsigned long) (*p++ - '0');
+	return v;
+}
+
+/* the numbers of a table line, after its tab */
+static int read_table(ehv_loader *l, int t, char *p)
+{
+	ehv_index *idx = l->idx;
+	unsigned long **tab = t == 0 ? &idx->by_key : t == 1 ? &idx->by_path : &idx->by_name;
+	unsigned long n = t < 2 ? idx->nguides : idx->nsyms;
+
+	if (l->version < 2)
+		return -1;
+	if (*tab == NULL && (*tab = malloc((n ? n : 1) * sizeof(unsigned long))) == NULL)
+		return -1;
+	while (*p != '\0')
 	{
-		int n = split_fields(line, f, 16);
+		char *e;
+		unsigned long v = strtoul(p, &e, 10);
 
-		if (strcmp(f[0], "G") == 0 && n == 12)
+		if (e == p || v >= n || l->nt[t] >= n)
+			return -1;
+		(*tab)[l->nt[t]++] = v;
+		p = e;
+		while (*p == ' ')
+			p++;
+	}
+	return 0;
+}
+
+/* one line of the file; 1 at END, -1 when it is not right */
+static int read_line(ehv_loader *l, char *line)
+{
+	ehv_index *idx = l->idx;
+	char *f[16];
+	int n;
+
+	if (line[0] == 'K' || line[0] == 'P' || line[0] == 'S')
+	{
+		if (line[1] != '\t')
+			return -1;
+		return read_table(l, line[0] == 'K' ? 0 : line[0] == 'P' ? 1 : 2, line + 2);
+	}
+	n = split_fields(line, f, 16);
+	if (f[0][0] == 'N' && f[0][1] == '\0' && n == 6 && l->cur >= 0)
+	{
+		/* the most of them, first */
+		unsigned long kind = num_of(f[1]), from = num_of(f[3]);
+
+		if (kind > EHV_SYM_LABEL || f[4][0] == '\0' || from > 2 || (from == 2 && l->version < 2))
+			return -1;
+		return ehv_index_add_sym(idx, (unsigned long) l->cur, (unsigned char) kind,
+				(unsigned short) num_of(f[2]), f[4], f[5][0] != '\0' ? f[5] : NULL, (int) from);
+	}
+	if (strcmp(f[0], "C") == 0 && n == 3 && l->version >= 2 && idx->nguides == 0)
+		return ehv_index_reserve(idx, num_of(f[1]), num_of(f[2]));
+	if (strcmp(f[0], "G") == 0 && n == 12)
+	{
+		ehv_guide g;
+
+		memset(&g, 0, sizeof(g));
+		g.size = strtoul(f[1], NULL, 10);
+		g.mtime = strtoul(f[2], NULL, 10);
+		g.root = (unsigned short) strtoul(f[3], NULL, 10);
+		g.error = (int) strtol(f[4], NULL, 10);
+		g.os = (unsigned char) strtoul(f[5], NULL, 10);
+		g.width = (unsigned short) strtoul(f[6], NULL, 10);
+		g.stg_flags = (unsigned short) strtoul(f[7], NULL, 10);
+		g.ref_size = strtoul(f[8], NULL, 10);
+		g.ref_mtime = strtoul(f[9], NULL, 10);
+		g.path = f[10];
+		g.ref_path = f[11][0] != '\0' ? f[11] : NULL;
+		if (g.path[0] == '\0' || (l->cur = ehv_index_add_guide(idx, &g)) < 0)
+			return -1;
+	} else if (strcmp(f[0], "M") == 0 && n == 3 && l->cur >= 0)
+	{
+		ehv_guide *g = &idx->guides[l->cur];
+		const char **dst;
+
+		switch (f[1][0])
 		{
-			ehv_guide g;
+		case 'D': dst = &g->database; break;
+		case 'S': dst = &g->subject; break;
+		case 'A': dst = &g->author; break;
+		case 'V': dst = &g->version; break;
+		case 'H': dst = &g->hostname; break;
+		case 'F': dst = &g->default_node; break;
+		case 'P': dst = &g->help_node; break;
+		case 'C': dst = &g->charset; break;
+		case 'L': dst = &g->language; break;
+		default: dst = NULL; break;
+		}
+		if (dst != NULL && pdup(idx, dst, f[2]) < 0)
+			return -1;
+	} else if (strcmp(f[0], "N") == 0 && n == 6 && l->cur >= 0)
+	{
+		unsigned long kind = strtoul(f[1], NULL, 10);
+		unsigned long from = strtoul(f[3], NULL, 10);
 
-			memset(&g, 0, sizeof(g));
-			g.size = strtoul(f[1], NULL, 10);
-			g.mtime = strtoul(f[2], NULL, 10);
-			g.root = (unsigned short) strtoul(f[3], NULL, 10);
-			g.error = (int) strtol(f[4], NULL, 10);
-			g.os = (unsigned char) strtoul(f[5], NULL, 10);
-			g.width = (unsigned short) strtoul(f[6], NULL, 10);
-			g.stg_flags = (unsigned short) strtoul(f[7], NULL, 10);
-			g.ref_size = strtoul(f[8], NULL, 10);
-			g.ref_mtime = strtoul(f[9], NULL, 10);
-			g.path = f[10];
-			g.ref_path = f[11][0] != '\0' ? f[11] : NULL;
-			if (g.path[0] == '\0' || (cur = ehv_index_add_guide(idx, &g)) < 0)
-				goto fail;
-		} else if (strcmp(f[0], "M") == 0 && n == 3 && cur >= 0)
+		if (kind > EHV_SYM_LABEL || f[4][0] == '\0' || from > 2 || (from == 2 && l->version < 2))
+			return -1;
+		if (ehv_index_add_sym(idx, (unsigned long) l->cur, (unsigned char) kind,
+				(unsigned short) strtoul(f[2], NULL, 10),
+				f[4], f[5][0] != '\0' ? f[5] : NULL, (int) from) < 0)
+			return -1;
+	} else if (strcmp(f[0], "R") == 0 && n == 4 && l->version >= 2 && idx->nguides == 0)
+	{
+		idx->allref_size = strtoul(f[1], NULL, 10);
+		idx->allref_mtime = strtoul(f[2], NULL, 10);
+		if (pdup(idx, &idx->allref_path, f[3]) < 0)
+			return -1;
+	} else if (strcmp(f[0], "O") == 0 && n == 2 && l->version >= 2)
+	{
+		const char **p = realloc(idx->orphans, (idx->norphans + 1) * sizeof(char *));
+
+		if (p == NULL)
+			return -1;
+		idx->orphans = p;
+		if (pdup(idx, &p[idx->norphans], f[1]) < 0)
+			return -1;
+		idx->norphans++;
+	} else if (strcmp(f[0], "END") == 0 && n == 3)
+	{
+		if (strtoul(f[1], NULL, 10) != idx->nguides || strtoul(f[2], NULL, 10) != idx->nsyms)
+			return -1;
+		return 1;
+	} else
+	{
+		return -1;
+	}
+	return 0;
+}
+
+int ehv_index_load_some(ehv_loader *l, unsigned int budget)
+{
+	ehv_index *idx = l->idx;
+
+	while (budget-- > 0)
+	{
+		if (l->got < l->size)
 		{
-			ehv_guide *g = &idx->guides[cur];
-			const char **dst;
+			/* the file, a piece at a time */
+			unsigned long left = l->size - l->got;
+			long n = left > (unsigned long) CHUNK ? CHUNK : (long) left;
 
-			switch (f[1][0])
+			if (pf_read(l->h, l->buf + l->got, n) != n)
+				return -1;
+			l->got += (unsigned long) n;
+			if (l->got == l->size)
 			{
-			case 'D': dst = &g->database; break;
-			case 'S': dst = &g->subject; break;
-			case 'A': dst = &g->author; break;
-			case 'V': dst = &g->version; break;
-			case 'H': dst = &g->hostname; break;
-			case 'F': dst = &g->default_node; break;
-			case 'P': dst = &g->help_node; break;
-			case 'C': dst = &g->charset; break;
-			case 'L': dst = &g->language; break;
-			default: dst = NULL; break;
-			}
-			if (dst != NULL && pdup(idx, dst, f[2]) < 0)
-				goto fail;
-		} else if (strcmp(f[0], "N") == 0 && n == 6 && cur >= 0)
-		{
-			unsigned long kind = strtoul(f[1], NULL, 10);
+				char *line, magic[32];
 
-			if (kind > EHV_SYM_LABEL || f[4][0] == '\0')
-				goto fail;
-			if (ehv_index_add_sym(idx, (unsigned long) cur, (unsigned char) kind,
-					(unsigned short) strtoul(f[2], NULL, 10),
-					f[4], f[5][0] != '\0' ? f[5] : NULL,
-					(int) strtoul(f[3], NULL, 10)) < 0)
-				goto fail;
-		} else if (strcmp(f[0], "END") == 0 && n == 3)
+				pf_close(l->h);
+				l->h = -1;
+				l->pos = l->buf;
+				l->end = l->buf + l->size;
+				line = next_line(&l->pos, l->end);
+				if (line == NULL || strncmp(line, CACHE_MAGIC " ", sizeof(CACHE_MAGIC)) != 0)
+					return -1;
+				l->version = (int) strtol(line + sizeof(CACHE_MAGIC), NULL, 10);
+				sprintf(magic, "%s %d", CACHE_MAGIC, l->version);
+				if ((l->version != 1 && l->version != 2) || strcmp(line, magic) != 0)
+					return -1;
+			}
+			continue;
+		}
+		if (!l->done)
 		{
-			if (strtoul(f[1], NULL, 10) != idx->nguides || strtoul(f[2], NULL, 10) != idx->nsyms)
-				goto fail;
-			done = 1;
-		} else
+			int k;
+
+			for (k = 0; k < LINES; k++)
+			{
+				char *line = next_line(&l->pos, l->end);
+				int r;
+
+				if (line == NULL)
+					return -1;                 /* no END */
+				if ((r = read_line(l, line)) < 0)
+					return -1;
+				if (r == 1)
+				{
+					l->done = 1;
+					break;
+				}
+			}
+			if (!l->done)
+				continue;
+			free(l->buf);
+			l->buf = NULL;
+			{
+				unsigned long g;
+
+				for (g = 0; g < idx->nguides; g++)
+					if (idx->guides[g].nsyms == 0)
+						idx->guides[g].first_sym = 0;   /* as ehv_index_finish() leaves it */
+			}
+			if (l->version >= 2)
+			{
+				/* the tables as saved, all of them */
+				if (l->nt[0] != idx->nguides || l->nt[1] != idx->nguides || l->nt[2] != idx->nsyms)
+					return -1;
+				return 1;
+			}
+			/* version 1: no tables nor ALL.REF names; sorted here, and
+			   saved again by the next scan */
+			idx->old_file = 1;
+			if ((l->fin = ehv_index_finish_begin(idx)) == NULL)
+				return -1;
+			continue;
+		}
 		{
-			goto fail;
+			int r = ehv_index_finish_some(l->fin, 1);
+
+			if (r != 0)
+				return r;
 		}
 	}
-	if (!done || ehv_index_finish(idx) < 0)
-		goto fail;
-	free(buf);
-	return idx;
+	return 0;
+}
 
-fail:
-	free(buf);
-	ehv_index_free(idx);
-	return NULL;
+ehv_index *ehv_index_load_take(ehv_loader *l)
+{
+	ehv_index *idx = l->idx;
+
+	l->idx = NULL;
+	ehv_index_load_abort(l);
+	return idx;
+}
+
+ehv_index *ehv_index_load(const char *path)
+{
+	ehv_loader *l = ehv_index_load_begin(path);
+	int r;
+
+	if (l == NULL)
+		return NULL;
+	while ((r = ehv_index_load_some(l, 64)) == 0)
+		;
+	if (r < 0)
+	{
+		ehv_index_load_abort(l);
+		return NULL;
+	}
+	return ehv_index_load_take(l);
 }

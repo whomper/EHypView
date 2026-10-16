@@ -25,12 +25,14 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "charset.h"
 #include "fsys.h"
 #include "plat.h"
 #include "index.h"
 #include "scan.h"
 #include "resolve.h"
 #include "inf.h"
+#include "libjob.h"
 
 static int failures, checks;
 static const char *fixdir;
@@ -536,7 +538,19 @@ static void test_cache(const ehv_index *idx, const ref_db *allref)
 		unsigned long hit;
 
 		CHECK(ehv_index_find_symbol(loaded, "Detail", -1, &hit, 1) == 1);
-		CHECK(ehv_index_find_symbol(loaded, "Zweite", -1, &hit, 1) == 1);  /* own REF only */
+		/* ALL.REF's names are kept too (version 2), with the tables */
+		CHECK(ehv_index_find_symbol(loaded, "Zweite", -1, &hit, 1) ==
+		      ehv_index_find_symbol(idx, "Zweite", -1, &hit, 1));
+		CHECK(loaded->nsyms == idx->nsyms && loaded->norphans == idx->norphans);
+		CHECK(!loaded->old_file);
+		CHECK(memcmp(loaded->by_key, idx->by_key, idx->nguides * sizeof(unsigned long)) == 0);
+		CHECK(memcmp(loaded->by_path, idx->by_path, idx->nguides * sizeof(unsigned long)) == 0);
+		CHECK(memcmp(loaded->by_name, idx->by_name, idx->nsyms * sizeof(unsigned long)) == 0);
+		for (g = 0; g < idx->nsyms; g++)
+			if (strcmp(loaded->syms[g].name, idx->syms[g].name) != 0 ||
+			    loaded->syms[g].guide != idx->syms[g].guide)
+				break;
+		CHECK(g == idx->nsyms);
 	}
 
 	/* rescan with the cache: nothing is read again */
@@ -588,6 +602,204 @@ static void test_cache(const ehv_index *idx, const ref_db *allref)
 	checks++;
 }
 
+/* ---------------------------------------------------------------- */
+/* the library's index in short steps (libjob.h)                     */
+
+/* the tables in the order the lookups expect */
+static int tables_sorted(const ehv_index *idx)
+{
+	unsigned long k;
+
+	for (k = 0; k + 1 < idx->nsyms; k++)
+	{
+		const ehv_sym *a = &idx->syms[idx->by_name[k]], *b = &idx->syms[idx->by_name[k + 1]];
+		int c = atari_casecmp(a->name, b->name);
+
+		if (c > 0)
+			return 0;
+		if (c == 0 && a->kind == b->kind && idx->guides[a->guide].root == idx->guides[b->guide].root &&
+		    idx->by_name[k] > idx->by_name[k + 1])
+			return 0;                      /* not stable */
+	}
+	for (k = 0; k + 1 < idx->nguides; k++)
+		if (strcmp(idx->guides[idx->by_path[k]].path, idx->guides[idx->by_path[k + 1]].path) > 0 ||
+		    atari_casecmp(idx->guides[idx->by_key[k]].key, idx->guides[idx->by_key[k + 1]].key) > 0)
+			return 0;
+	for (k = 0; k < idx->nsyms; k++)          /* grouped by guide */
+		if (k < idx->guides[idx->syms[k].guide].first_sym ||
+		    k >= idx->guides[idx->syms[k].guide].first_sym + idx->guides[idx->syms[k].guide].nsyms)
+			return 0;
+	return 1;
+}
+
+static int same_index(const ehv_index *a, const ehv_index *b)
+{
+	unsigned long k;
+
+	if (a->nguides != b->nguides || a->nsyms != b->nsyms || a->norphans != b->norphans)
+		return 0;
+	for (k = 0; k < a->nguides; k++)
+		if (strcmp(a->guides[k].path, b->guides[k].path) != 0 || a->by_key[k] != b->by_key[k] ||
+		    a->by_path[k] != b->by_path[k] || a->guides[k].first_sym != b->guides[k].first_sym)
+			return 0;
+	for (k = 0; k < a->nsyms; k++)
+		if (strcmp(a->syms[k].name, b->syms[k].name) != 0 || a->by_name[k] != b->by_name[k] ||
+		    a->syms[k].from_ref != b->syms[k].from_ref)
+			return 0;
+	return 1;
+}
+
+/* the job to its end; *nindex: indices it handed out; the last one */
+static ehv_index *run_job(const char *cache, const char *allref, int *nindex, int *unchanged, int *steps)
+{
+	ehv_libjob *j = ehv_libjob_begin(cache, (const char *const *) roots, 4, allref);
+	ehv_index *idx = NULL;
+	int r;
+
+	*nindex = *steps = 0;
+	CHECK(j != NULL);
+	if (j == NULL)
+		return NULL;
+	while ((r = ehv_libjob_step(j)) >= 0 && r != EHV_JOB_DONE)
+	{
+		++*steps;
+		if (r == EHV_JOB_INDEX)
+		{
+			ehv_index_free(idx);
+			idx = ehv_libjob_take(j);
+			++*nindex;
+		}
+	}
+	CHECK(r == EHV_JOB_DONE);
+	*unchanged = ehv_libjob_unchanged(j);
+	ehv_libjob_free(j);
+	return idx;
+}
+
+static void test_libjob(const ref_db *db)
+{
+	char cache[1024], allref[1024], allref2[1024];
+	ehv_index *want, *got;
+	ehv_scan_status st;
+	pf_info before, after;
+	int n, same, steps;
+	char *text;
+	unsigned long len;
+
+	snprintf(cache, sizeof(cache), "%s", tp("job.idx"));      /* tp(): one buffer */
+	snprintf(allref, sizeof(allref), "%s", tp("all.ref"));
+	snprintf(allref2, sizeof(allref2), "%s", tp("all2.ref"));
+	remove(cache);
+	want = scan_tree(NULL, db, &st);
+	CHECK(want != NULL && tables_sorted(want));
+
+	/* no cache yet: scanned, sorted, saved; one index handed out */
+	got = run_job(cache, allref, &n, &same, &steps);
+	CHECK(got != NULL && n == 1 && !same && steps > 10);
+	CHECK(got != NULL && want != NULL && same_index(got, want));
+	CHECK(pf_stat(cache, &before) == 0);
+	ehv_index_free(got);
+
+	/* again: the index read is handed out, nothing changed, nothing
+	   written */
+	sleep(1);
+	got = run_job(cache, allref, &n, &same, &steps);
+	CHECK(got != NULL && n == 1 && same);
+	CHECK(got != NULL && want != NULL && same_index(got, want) && tables_sorted(got));
+	CHECK(pf_stat(cache, &after) == 0 && after.mtime == before.mtime);
+	ehv_index_free(got);
+
+	/* ALL.REF changed: built again (its names merged afresh) */
+	{
+		char *ref = pf_load(allref, &len);
+
+		CHECK(ref != NULL);
+		write_file(allref2, ref, len);
+		free(ref);
+	}
+	got = run_job(cache, allref2, &n, &same, &steps);
+	CHECK(got != NULL && n == 2 && !same && same_index(got, want));
+	ehv_index_free(got);
+	got = run_job(cache, allref2, &n, &same, &steps);
+	CHECK(got != NULL && n == 1 && same);
+	ehv_index_free(got);
+
+	/* no ALL.REF any more: its names go */
+	got = run_job(cache, NULL, &n, &same, &steps);
+	CHECK(got != NULL && n == 2 && !same && got->norphans == 0 && tables_sorted(got));
+	ehv_index_free(got);
+
+	/* a hypertext changed: read again */
+	got = run_job(cache, allref, &n, &same, &steps);
+	CHECK(got != NULL && n == 2 && !same && same_index(got, want));
+	ehv_index_free(got);
+	copy_file("other.hyp", tp("r1/sub/deeper/deepest/Other.Hyp"));
+	got = run_job(cache, allref, &n, &same, &steps);
+	CHECK(got != NULL && n == 2 && !same && tables_sorted(got));
+	ehv_index_free(got);
+
+	/* one gone, then back: built again each time */
+	{
+		char gone[1024];
+
+		snprintf(gone, sizeof(gone), "%s", tp("r2/basic.hyp"));
+		remove(gone);
+		got = run_job(cache, allref, &n, &same, &steps);
+		CHECK(got != NULL && n == 2 && !same && got->nguides == 4 && tables_sorted(got));
+		ehv_index_free(got);
+		copy_file("basic.hyp", gone);
+		got = run_job(cache, allref, &n, &same, &steps);
+		CHECK(got != NULL && n == 2 && !same && got->nguides == 5 && tables_sorted(got));
+		ehv_index_free(got);
+		got = run_job(cache, allref, &n, &same, &steps);
+		CHECK(got != NULL && n == 1 && same);
+		ehv_index_free(got);
+	}
+
+	/* a version 1 file (EHypView 1.6): read, sorted, written again as 2 */
+	text = pf_load(cache, &len);
+	CHECK(text != NULL);
+	if (text != NULL)
+	{
+		char *v1 = malloc(len + 1), *line, *o = v1;
+		unsigned long nsyms = 0, nguides = 0;
+
+		for (line = strtok(text, "\n"); line != NULL; line = strtok(NULL, "\n"))
+		{
+			if (strncmp(line, "EHYPVIEW-INDEX", 14) == 0)
+				o += sprintf(o, "EHYPVIEW-INDEX 1\n");
+			else if (line[0] == 'G')
+				o += sprintf(o, "%s\n", line), nguides++;
+			else if (line[0] == 'M')
+				o += sprintf(o, "%s\n", line);
+			if (line[0] == 'N')
+			{
+				char kind[8], ln[8], from[8];
+
+				if (sscanf(line, "N\t%7[^\t]\t%7[^\t]\t%7[^\t]", kind, ln, from) == 3 && strcmp(from, "2") != 0)
+					o += sprintf(o, "%s\n", line), nsyms++;
+			}
+		}
+		o += sprintf(o, "END\t%lu\t%lu\n", nguides, nsyms);
+		write_file(cache, v1, (size_t) (o - v1));
+		free(v1);
+		free(text);
+		got = ehv_index_load(cache);
+		CHECK(got != NULL && got->old_file && tables_sorted(got));
+		ehv_index_free(got);
+		got = run_job(cache, allref, &n, &same, &steps);
+		CHECK(got != NULL && n == 2 && !same && tables_sorted(got));
+		ehv_index_free(got);
+		text = pf_load(cache, &len);
+		CHECK(text != NULL && strncmp(text, "EHYPVIEW-INDEX 2\n", 17) == 0);
+		free(text);
+		got = run_job(cache, allref, &n, &same, &steps);
+		CHECK(got != NULL && n == 1 && same);
+		ehv_index_free(got);
+	}
+	ehv_index_free(want);
+}
+
 int main(int argc, char **argv)
 {
 	ehv_index *idx;
@@ -615,6 +827,7 @@ int main(int argc, char **argv)
 		test_scan(idx, &st);
 		test_resolve(idx);
 		test_cache(idx, allref);
+		test_libjob(allref);
 	}
 	ehv_index_free(idx);
 	ref_close(allref);

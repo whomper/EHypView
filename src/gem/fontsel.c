@@ -352,7 +352,11 @@ static void join(char *out, size_t size, const char *dir, const char *name)
 	snprintf(out, size, "%s%s%s", dir, n > 0 && dir[n - 1] != '\\' ? "\\" : "", name);
 }
 
-void font_init(const char *dir, const char *inf)
+/* the accessory at start: the GDOS font chosen only when it is first
+   opened (loading GDOS fonts at boot would hold the machine) */
+static int waiting;
+
+void font_init(const char *dir, const char *inf, int later)
 {
 	char *text;
 
@@ -362,7 +366,21 @@ void font_init(const char *dir, const char *inf)
 	inf_seen = stamp(inf_path);
 	fontpref_parse(&pref, text);
 	free(text);
-	apply();
+	if (later && !fontpref_is_system(&pref))
+	{
+		waiting = 1;
+		set_font(1, sys_point());
+	} else
+		apply();
+}
+
+void font_wake(void)
+{
+	if (waiting)
+	{
+		waiting = 0;
+		apply();
+	}
 }
 
 /* EHYPVIEW.PRG chose another font while the accessory waited: the

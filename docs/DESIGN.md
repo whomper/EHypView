@@ -150,8 +150,12 @@ Rules for `src/core`:
   - A folder reachable from several roots, or through a symbolic link loop,
     is read once. Folders are identified by device and inode, or by their
     path ignoring case where there are no inodes (TOS).
-  - The scan runs in small steps (one folder or one file per unit), so the
-    GEM program stays responsive.
+  - The scan runs in small steps (a few folder entries, or a few names of
+    a hypertext, per unit), so the GEM program stays responsive.
+  - With an index from before it first only checks: each hypertext found
+    must be the next one in that index, with the same size and date. At
+    the first difference it starts again and builds the index; when
+    there is none, nothing is copied, sorted or written.
 - **Sources of names.**
   - Every `.HYP` contributes its title data and all page names, read from
     its own index table without decompressing anything.
@@ -160,9 +164,18 @@ Rules for `src/core`:
   - `ALL.REF` fills in the same for guides that have no REF of their own.
     Entries for files that don't exist are listed so the user can see
     them; that is RefCheck's job done automatically.
-- **Cache.** The index is saved as a small text file. On the next start it
-  loads instantly, and a rescan re-reads only files whose size, date or
-  REF changed.
+- **Cache.** The index is saved as a text file, `EHYPVIEW.IDX` (version 2:
+  the names of `ALL.REF` and the sorted lookup tables are in it, so loading
+  sorts nothing). A rescan re-reads only files whose size, date or REF
+  changed. An index from version 1 (to EHypView 1.6) is read and sorted,
+  and saved again as version 2.
+- **In steps.** `src/core/libjob.c` keeps the index up to date one short
+  step at a time: reading `EHYPVIEW.IDX` (8 KB or a dozen lines a step),
+  the scan, merging `ALL.REF`, sorting (a stable merge sort that stops
+  after a few dozen moves) and saving. The GEM program runs it in slices
+  of 40 ms between events (`common/ui/bgwork.c`), so even the accessory
+  never holds the machine for long; the accessory starts on it when it
+  is first opened (`START=`).
 - **Default roots.** `PATHS`, `HYPFOLD` and the folder of `REF` from an
   existing `ST-GUIDE.INF`, then `*:\GUIDES` and `*:\GEMSYS\GUIDES`
   (`*:` = every hard disk).

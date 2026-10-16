@@ -95,6 +95,7 @@ typedef struct {
 typedef struct {
 	char *path;
 	char *ref;               /* matching .REF in the same folder */
+	pf_info info, rinfo;     /* as found: the .HYP, its .REF */
 } file_item;
 
 struct ehv_scan {
@@ -111,10 +112,42 @@ struct ehv_scan {
 	file_item *files;
 	unsigned long nfiles, next_file;
 
+	/* the folder being read, ENTRIES entries per step */
+	int listing;
+	dir_item dir;
+	char **names, **subs;
+	pf_info *subinfo;
+	long nnames, next_name;
+	unsigned long nsub;
+
 	strset visited;
 	ehv_scan_status st;
 	char *current;
+
+	/*
+	 * With a previous index the scan may first only check (checking):
+	 * each hypertext found must be the next one of `prev`, unchanged.
+	 * At the first difference it starts again, building.  So when
+	 * nothing changed nothing is copied, read or sorted.
+	 */
+	int checking;
+	unsigned long nchecked;
+	int changed;              /* a guide read again, gone, moved or new */
+
+	/* the hypertext being read or copied, NAMES names per step */
+	int part;                 /* PART_* */
+	long ng, pg;              /* its guide in idx; the one copied from prev */
+	unsigned long next;       /* the next name to take */
+	hyp_doc *doc;
+	ref_db *db;
+	const file_item *file;
 };
+
+#define NAMES 16              /* names added per step */
+
+static void end_listing(ehv_scan *s);
+
+enum { PART_NONE, PART_COPY, PART_HYP, PART_REF };
 
 static char *dupstr(const char *s)
 {
@@ -130,6 +163,15 @@ static void set_current(ehv_scan *s, const char *path)
 	free(s->current);
 	s->current = path ? dupstr(path) : NULL;
 	s->st.current = s->current;
+}
+
+ehv_scan *ehv_scan_begin_check(const char *const *roots, unsigned int nroots, const ehv_index *previous)
+{
+	ehv_scan *s = ehv_scan_begin(roots, nroots, previous);
+
+	if (s != NULL && previous != NULL && !previous->old_file)
+		s->checking = 1;
+	return s;
 }
 
 ehv_scan *ehv_scan_begin(const char *const *roots, unsigned int nroots, const ehv_index *previous)
@@ -175,6 +217,9 @@ void ehv_scan_abort(ehv_scan *s)
 
 	if (s == NULL)
 		return;
+	hyp_close(s->doc);
+	ref_close(s->db);
+	end_listing(s);
 	ehv_index_free(s->idx);
 	if (s->roots != NULL)
 		for (i = 0; i < s->nroots; i++)
@@ -192,6 +237,28 @@ void ehv_scan_abort(ehv_scan *s)
 const ehv_scan_status *ehv_scan_status_get(const ehv_scan *s)
 {
 	return &s->st;
+}
+
+/* from the start again, building the index (it changed) */
+static void restart(ehv_scan *s)
+{
+	unsigned long i;
+
+	for (i = 0; i < s->ndirs; i++)
+		free(s->dirs[i].path);
+	s->ndirs = 0;
+	end_listing(s);
+	free_files(s);
+	strset_free(&s->visited);
+	s->next_root = 0;
+	s->checking = 0;
+	s->changed = 1;
+	memset(&s->st, 0, sizeof(s->st));
+	set_current(s, NULL);
+	/* room for what prev had, and a little more: growing the arrays
+	   later would copy them, thousands of names at once */
+	ehv_index_reserve(s->idx, s->prev->nguides + s->prev->nguides / 8 + 8,
+			  s->prev->nsyms + s->prev->nsyms / 8 + 64);
 }
 
 /*
@@ -263,53 +330,92 @@ static int cmp_names(const void *a, const void *b)
 	return c != 0 ? c : strcmp(x, y);
 }
 
-/* the .REF partner of a .HYP in a sorted name list */
+/* the .REF partner of a .HYP in a sorted name list: the first name
+   that is the .HYP's with ".ref" ignoring case */
 static const char *find_ref(char **names, long n, const char *hyp)
 {
 	size_t stem = strlen(hyp) - 4;
-	long i;
+	char key[260];
+	long lo = 0, hi = n;
 
-	for (i = 0; i < n; i++)
+	if (stem + 5 > sizeof(key))
+		return NULL;
+	memcpy(key, hyp, stem);
+	strcpy(key + stem, ".ref");
+	while (lo < hi)
 	{
-		const char *nm = names[i];
+		long mid = lo + (hi - lo) / 2;
 
-		if (strlen(nm) == stem + 4 && atari_ncasecmp(nm, hyp, stem) == 0 &&
-			atari_casecmp(nm + stem, ".ref") == 0)
-			return nm;
+		if (atari_casecmp(names[mid], key) < 0)
+			lo = mid + 1;
+		else
+			hi = mid;
 	}
-	return NULL;
+	return lo < n && atari_casecmp(names[lo], key) == 0 ? names[lo] : NULL;
 }
 
-/* read one directory: queue subfolders and hypertexts */
+#define ENTRIES 4            /* folder entries looked at per step */
+
+static void end_listing(ehv_scan *s)
+{
+	while (s->nsub > 0)
+		free(s->subs[--s->nsub]);
+	free(s->subs);
+	free(s->subinfo);
+	pf_free_list(s->names, s->nnames);
+	free(s->dir.path);
+	s->subs = NULL;
+	s->subinfo = NULL;
+	s->names = NULL;
+	s->nnames = s->next_name = 0;
+	s->dir.path = NULL;
+	s->listing = 0;
+}
+
+/* start reading a folder: its names now, its entries in the steps after */
 static int read_dir(ehv_scan *s, dir_item *d)
 {
-	char **names;
-	long n, i;
-	unsigned long nsub = 0;
-	char **subs;
+	long n;
 
 	set_current(s, d->path);
 	s->st.dirs++;
-	n = pf_list_dir(d->path, &names);
+	s->dir = *d;                     /* the path is the scan's now */
+	d->path = NULL;
+	n = pf_list_dir(s->dir.path, &s->names);
 	if (n <= 0)
 	{
-		pf_free_list(names, n);
+		pf_free_list(s->names, n);
+		s->names = NULL;
+		free(s->dir.path);
+		s->dir.path = NULL;
 		return 0;                    /* unreadable folders are skipped */
 	}
-	qsort(names, (size_t) n, sizeof(char *), cmp_names);
-
-	subs = malloc((size_t) n * sizeof(char *));
+	s->nnames = n;
+	qsort(s->names, (size_t) n, sizeof(char *), cmp_names);
+	s->subs = malloc((size_t) n * sizeof(char *));
+	s->subinfo = malloc((size_t) n * sizeof(pf_info));
 	s->files = calloc((size_t) n, sizeof(file_item));
-	if (subs == NULL || s->files == NULL)
-		goto nomem;
+	if (s->subs == NULL || s->subinfo == NULL || s->files == NULL)
+		return -1;
+	s->next_name = 0;
+	s->nsub = 0;
+	s->listing = 1;
+	return 0;
+}
 
-	for (i = 0; i < n; i++)
+/* some more entries of the folder being read: subfolders and hypertexts */
+static int read_entries(ehv_scan *s)
+{
+	int k;
+
+	for (k = 0; k < ENTRIES && s->next_name < s->nnames; k++)
 	{
-		char *full = fs_join(d->path, names[i]);
+		const char *name = s->names[s->next_name++];
+		char *full = fs_join(s->dir.path, name);
 		pf_info info;
 
 		if (full == NULL)
-			goto nomem;
+			return -1;
 		if (pf_stat(full, &info) != 0)
 		{
 			free(full);
@@ -317,55 +423,50 @@ static int read_dir(ehv_scan *s, dir_item *d)
 		}
 		if (info.is_dir)
 		{
-			if (d->depth < EHV_SCAN_MAX_DEPTH)
-				subs[nsub++] = full;
-			else
+			if (s->dir.depth < EHV_SCAN_MAX_DEPTH)
+			{
+				s->subinfo[s->nsub] = info;
+				s->subs[s->nsub++] = full;
+			} else
 				free(full);
-		} else if (fs_has_ext(names[i], ".hyp"))
+		} else if (fs_has_ext(name, ".hyp"))
 		{
 			file_item *f = &s->files[s->nfiles++];
-			const char *ref = find_ref(names, n, names[i]);
+			const char *ref = find_ref(s->names, s->nnames, name);
 
 			f->path = full;
-			if (ref != NULL && (f->ref = fs_join(d->path, ref)) == NULL)
-				goto nomem;
+			f->info = info;
+			if (ref != NULL)
+			{
+				if ((f->ref = fs_join(s->dir.path, ref)) == NULL)
+					return -1;
+				if (pf_stat(f->ref, &f->rinfo) != 0)
+					memset(&f->rinfo, 0, sizeof(f->rinfo));
+			}
 		} else
 		{
 			free(full);
 		}
 	}
+	if (s->next_name < s->nnames)
+		return 0;
 
 	/* depth first, alphabetical: push in reverse */
-	while (nsub > 0)
+	while (s->nsub > 0)
 	{
-		char *sub = subs[--nsub];
-		pf_info info;
-		int r = 0;
+		char *sub = s->subs[--s->nsub];
+		int r;
 
-		if (pf_stat(sub, &info) == 0)
-		{
-			s->cur_root = d->root;
-			r = push_dir(s, sub, &info, (unsigned short) (d->depth + 1));
-		}
+		s->cur_root = s->dir.root;
+		r = push_dir(s, sub, &s->subinfo[s->nsub], (unsigned short) (s->dir.depth + 1));
 		free(sub);
 		if (r < 0)
-		{
-			while (nsub > 0)
-				free(subs[--nsub]);
-			goto nomem;
-		}
+			return -1;
 	}
-	free(subs);
-	pf_free_list(names, n);
+	/* files found here belong to its root */
+	s->cur_root = s->dir.root;
+	end_listing(s);
 	return 0;
-
-nomem:
-	if (subs != NULL)
-		while (nsub > 0)
-			free(subs[--nsub]);
-	free(subs);
-	pf_free_list(names, n);
-	return -1;
 }
 
 static int same_ref(const ehv_guide *g, const char *ref, const pf_info *ri)
@@ -375,14 +476,14 @@ static int same_ref(const ehv_guide *g, const char *ref, const pf_info *ri)
 	return strcmp(ref, g->ref_path) == 0 && ri->size == g->ref_size && ri->mtime == g->ref_mtime;
 }
 
-/* read a hypertext (and its .REF) from disk into the index */
+/* read a hypertext from disk into the index: its guide now, its names
+   (and those of its .REF) in the steps after */
 static int read_guide(ehv_scan *s, const file_item *f, ehv_guide *g)
 {
 	int err;
 	hyp_doc *doc = hyp_open(f->path, &err);
-	long ng;
-	unsigned short i;
 
+	s->changed = 1;
 	g->error = err;
 	if (doc != NULL)
 	{
@@ -399,8 +500,8 @@ static int read_guide(ehv_scan *s, const file_item *f, ehv_guide *g)
 		g->width = doc->width;
 		g->stg_flags = doc->stg_flags;
 	}
-	ng = ehv_index_add_guide(s->idx, g);
-	if (ng < 0)
+	s->ng = ehv_index_add_guide(s->idx, g);
+	if (s->ng < 0)
 	{
 		hyp_close(doc);
 		return -1;
@@ -411,59 +512,125 @@ static int read_guide(ehv_scan *s, const file_item *f, ehv_guide *g)
 		return 0;
 	}
 	s->st.opened++;
-	for (i = 0; i < doc->num_entries; i++)
+	s->doc = doc;
+	s->file = f;
+	s->next = 0;
+	s->part = PART_HYP;
+	return 0;
+}
+
+/* some more names of the hypertext being read or copied */
+static int more_names(ehv_scan *s)
+{
+	unsigned int n;
+
+	for (n = 0; n < NAMES; n++)
 	{
-		const hyp_entry *e = &doc->entries[i];
-
-		if (!HYP_IS_TEXT(e->type) || e->name[0] == '\0')
-			continue;
-		if (ehv_index_add_sym(s->idx, (unsigned long) ng,
-				e->type == HYP_NODE_POPUP ? EHV_SYM_POPUP : EHV_SYM_NODE,
-				0, e->name, NULL, 0) < 0)
+		if (s->part == PART_COPY)
 		{
-			hyp_close(doc);
-			return -1;
-		}
-	}
-	hyp_close(doc);
+			const ehv_guide *src = &s->prev->guides[s->pg];
+			const ehv_sym *sy;
 
-	if (f->ref != NULL)
-	{
-		ref_db *db = ref_open(f->ref, NULL);
-		unsigned long k;
-
-		if (db != NULL)
-		{
-			for (k = 0; k < db->nsyms; k++)
+			if (s->next >= src->nsyms)
 			{
-				const ref_symbol *rs = &db->syms[k];
-				unsigned char kind = rs->kind == REF_ALIAS ? EHV_SYM_ALIAS : EHV_SYM_LABEL;
-
-				if ((rs->kind != REF_ALIAS && rs->kind != REF_LABEL) || rs->node == NULL)
-					continue;
-				if (ehv_index_add_sym(s->idx, (unsigned long) ng, kind, rs->line, rs->name, rs->node, 1) < 0)
-				{
-					ref_close(db);
-					return -1;
-				}
+				s->part = PART_NONE;
+				return 0;
 			}
-			ref_close(db);
-		}
+			sy = &s->prev->syms[src->first_sym + s->next++];
+			if (sy->from_ref == 2)
+				continue;               /* ALL.REF's are merged afresh */
+			if (ehv_index_add_sym(s->idx, (unsigned long) s->ng, sy->kind, sy->line, sy->name,
+					sy->node, sy->from_ref) < 0)
+				return -1;
+		} else if (s->part == PART_HYP)
+		{
+			const hyp_entry *e;
+
+			if (s->next >= s->doc->num_entries)
+			{
+				hyp_close(s->doc);
+				s->doc = NULL;
+				s->next = 0;
+				s->part = s->file->ref != NULL ? PART_REF : PART_NONE;
+				return 0;
+			}
+			e = &s->doc->entries[s->next++];
+			if (!HYP_IS_TEXT(e->type) || e->name[0] == '\0')
+				continue;
+			if (ehv_index_add_sym(s->idx, (unsigned long) s->ng,
+					e->type == HYP_NODE_POPUP ? EHV_SYM_POPUP : EHV_SYM_NODE,
+					0, e->name, NULL, 0) < 0)
+				return -1;
+		} else if (s->part == PART_REF)
+		{
+			const ref_symbol *rs;
+
+			if (s->db == NULL)
+			{
+				s->db = ref_open(s->file->ref, NULL);    /* a step of its own */
+				if (s->db == NULL)
+					s->part = PART_NONE;
+				return 0;
+			}
+			if (s->next >= s->db->nsyms)
+			{
+				ref_close(s->db);
+				s->db = NULL;
+				s->part = PART_NONE;
+				return 0;
+			}
+			rs = &s->db->syms[s->next++];
+			if ((rs->kind != REF_ALIAS && rs->kind != REF_LABEL) || rs->node == NULL)
+				continue;
+			if (ehv_index_add_sym(s->idx, (unsigned long) s->ng,
+					rs->kind == REF_ALIAS ? EHV_SYM_ALIAS : EHV_SYM_LABEL,
+					rs->line, rs->name, rs->node, 1) < 0)
+				return -1;
+		} else
+			return 0;
 	}
 	return 0;
 }
 
+static void restart(ehv_scan *s);
+
+/* 1: f is the next hypertext of prev, unchanged */
+static int same_as_next(const ehv_scan *s, const file_item *f, const pf_info *info,
+                        const pf_info *rinfo, unsigned short root)
+{
+	const ehv_guide *old;
+
+	if (s->nchecked >= s->prev->nguides)
+		return 0;
+	old = &s->prev->guides[s->nchecked];
+	return strcmp(old->path, f->path) == 0 && old->size == info->size && old->mtime == info->mtime &&
+	       old->root == root && same_ref(old, f->ref, rinfo);
+}
+
+/* a hypertext found: 0 = taken (its names may follow in more steps),
+   1 = the scan starts again, -1 = out of memory */
 static int index_file(ehv_scan *s, const file_item *f, unsigned short root)
 {
 	pf_info info, rinfo;
 	ehv_guide g;
 
 	set_current(s, f->path);
-	if (pf_stat(f->path, &info) != 0)
-		return 0;                    /* vanished meanwhile */
-	memset(&rinfo, 0, sizeof(rinfo));
-	if (f->ref != NULL && pf_stat(f->ref, &rinfo) != 0)
-		memset(&rinfo, 0, sizeof(rinfo));
+	info = f->info;                  /* as the folder was read */
+	rinfo = f->rinfo;
+
+	if (s->checking)
+	{
+		if (same_as_next(s, f, &info, &rinfo, root))
+		{
+			if (s->prev->guides[s->nchecked].error != HYP_OK)
+				s->st.failed++;
+			s->nchecked++;
+			s->st.reused++;
+			return 0;
+		}
+		restart(s);                  /* something changed: build it */
+		return 1;
+	}
 
 	if (s->prev != NULL)
 	{
@@ -475,14 +642,21 @@ static int index_file(ehv_scan *s, const file_item *f, unsigned short root)
 
 			if (old->size == info.size && old->mtime == info.mtime && same_ref(old, f->ref, &rinfo))
 			{
-				long ng = ehv_index_copy_guide(s->idx, s->prev, (unsigned long) pg);
+				/* the guide now, its names in the steps after */
+				long ng = ehv_index_add_guide(s->idx, old);
 
 				if (ng < 0)
 					return -1;
+				if (ng != pg || old->root != root)
+					s->changed = 1;      /* in another place in the list */
 				s->idx->guides[ng].root = root;
 				s->st.reused++;
 				if (old->error != HYP_OK)
 					s->st.failed++;
+				s->ng = ng;
+				s->pg = pg;
+				s->next = 0;
+				s->part = PART_COPY;
 				return 0;
 			}
 		}
@@ -527,13 +701,29 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 {
 	while (budget-- > 0)
 	{
+		if (s->part != PART_NONE)
+		{
+			if (more_names(s) < 0)
+				return -1;
+			if (s->part == PART_NONE)
+				s->next_file++;
+			continue;
+		}
+		if (s->listing)
+		{
+			if (read_entries(s) < 0)
+				return -1;
+			continue;
+		}
 		if (s->next_file < s->nfiles)
 		{
 			unsigned short root = s->cur_root;
+			int r = index_file(s, &s->files[s->next_file], root);
 
-			if (index_file(s, &s->files[s->next_file], root) < 0)
+			if (r < 0)
 				return -1;
-			s->next_file++;
+			if (r == 0 && s->part == PART_NONE)
+				s->next_file++;
 			continue;
 		}
 		free_files(s);
@@ -545,8 +735,6 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 			s->cur_root = d.root;
 			r = read_dir(s, &d);
 			free(d.path);
-			/* files found in d belong to d's root */
-			s->cur_root = d.root;
 			if (r < 0)
 				return -1;
 			continue;
@@ -557,18 +745,48 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 				return -1;
 			continue;
 		}
+		if (s->checking && s->nchecked != s->prev->nguides)
+		{
+			restart(s);              /* some are gone */
+			continue;
+		}
 		set_current(s, NULL);
 		return 1;
 	}
 	return 0;
 }
 
-ehv_index *ehv_scan_finish(ehv_scan *s, const ref_db *allref)
+int ehv_scan_next_is_big(const ehv_scan *s)
+{
+	if (s->part == PART_REF)
+		return s->db == NULL;                 /* reading the .REF */
+	if (s->part != PART_NONE || s->listing)
+		return 0;
+	if (s->next_file < s->nfiles)
+		return !s->checking;                  /* opening a hypertext */
+	return 1;                                 /* reading a folder, or a root */
+}
+
+int ehv_scan_changed(const ehv_scan *s)
+{
+	if (s->checking)
+		return 0;                    /* all checked: as before */
+	return s->changed || s->prev == NULL || s->prev->old_file || s->idx->nguides != s->prev->nguides;
+}
+
+ehv_index *ehv_scan_take(ehv_scan *s)
 {
 	ehv_index *idx = s->idx;
 
 	s->idx = NULL;
 	ehv_scan_abort(s);
+	return idx;
+}
+
+ehv_index *ehv_scan_finish(ehv_scan *s, const ref_db *allref)
+{
+	ehv_index *idx = ehv_scan_take(s);
+
 	if (allref != NULL && ehv_index_merge_ref(idx, allref) < 0)
 	{
 		ehv_index_free(idx);

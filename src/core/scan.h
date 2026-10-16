@@ -41,6 +41,15 @@ typedef struct {
  */
 ehv_scan *ehv_scan_begin(const char *const *roots, unsigned int nroots, const ehv_index *previous);
 
+/*
+ * The same, but checking first: while every hypertext found is the next
+ * one of `previous`, unchanged, nothing is copied.  At the first
+ * difference the scan starts again and builds the index.  When nothing
+ * changed, ehv_scan_changed() says so and the scan's own index is empty:
+ * keep `previous`.
+ */
+ehv_scan *ehv_scan_begin_check(const char *const *roots, unsigned int nroots, const ehv_index *previous);
+
 /* do up to `budget` units; 1 = finished, 0 = more to do, -1 = out of memory */
 int ehv_scan_step(ehv_scan *scan, unsigned int budget);
 
@@ -54,6 +63,22 @@ const ehv_scan_status *ehv_scan_status_get(const ehv_scan *scan);
 ehv_index *ehv_scan_finish(ehv_scan *scan, const ref_db *allref);
 
 void ehv_scan_abort(ehv_scan *scan);
+
+/*
+ * After the last step: whether the index differs from `previous` (a
+ * hypertext read again, new, gone or in another place in the list, or
+ * `previous` came from an old cache file).  When it doesn't, `previous`
+ * may simply be kept: ALL.REF aside, it is what the scan would build.
+ */
+int ehv_scan_changed(const ehv_scan *scan);
+
+/* the next step opens a file or reads a folder: slower than the others,
+   so a program may begin a slice of its own with it */
+int ehv_scan_next_is_big(const ehv_scan *scan);
+
+/* end the scan and return its index as found, not yet sorted (for
+   ehv_index_merge_ref_some() and ehv_index_finish_some()) */
+ehv_index *ehv_scan_take(ehv_scan *scan);
 
 /* the whole scan in one call */
 ehv_index *ehv_scan_all(const char *const *roots, unsigned int nroots,

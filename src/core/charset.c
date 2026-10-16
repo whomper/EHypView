@@ -86,7 +86,7 @@ static const unsigned char upper_lower[][2] = {
 	{ 0xB8, 0xB1 }, /* O tilde */     { 0xC1, 0xC0 }  /* IJ */
 };
 
-unsigned char atari_tolower(unsigned char c)
+static unsigned char lower_of(unsigned char c)
 {
 	unsigned int i;
 
@@ -100,12 +100,37 @@ unsigned char atari_tolower(unsigned char c)
 	return c;
 }
 
+/* the lower case of every character, made once: comparisons ignoring
+   case are what sorting the index does most */
+static unsigned char lower[256];
+static int lower_made;
+
+static const unsigned char *lower_table(void)
+{
+	if (!lower_made)
+	{
+		unsigned int c;
+
+		for (c = 0; c < 256; c++)
+			lower[c] = lower_of((unsigned char) c);
+		lower_made = 1;
+	}
+	return lower;
+}
+
+unsigned char atari_tolower(unsigned char c)
+{
+	return lower_table()[c];
+}
+
 int atari_ncasecmp(const char *a, const char *b, unsigned long n)
 {
-	for (; n > 0; n--, a++, b++)
+	const unsigned char *t = lower_table();
+	const unsigned char *x = (const unsigned char *) a, *y = (const unsigned char *) b;
+
+	for (; n > 0; n--, x++, y++)
 	{
-		int ca = atari_tolower((unsigned char) *a);
-		int cb = atari_tolower((unsigned char) *b);
+		int ca = t[*x], cb = t[*y];
 
 		if (ca != cb || ca == 0)
 			return ca - cb;

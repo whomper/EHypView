@@ -28,6 +28,7 @@ void text_at(short x, short y, const char *s, long n);
 int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short w2, short h2);
 int scanning(void);                       /* the index is being rebuilt */
 unsigned long scan_found(void);           /* hypertexts found so far    */
+const char *index_busy(void);             /* what the index's job does: "Reading the library..." */
 
 /* show a page in the viewer window (opening it when needed) */
 void viewer_show(const char *path, const char *node, unsigned short line);
@@ -64,7 +65,9 @@ void app_bookmark_remove(int i);         /* Delete in the library, the menu */
 int settings_put(const char *key, const char *value, const char *note);
 
 /* fontsel.c: the text font */
-void font_init(const char *dir, const char *inf);	/* the font from inf; EHYPVIEW.FNT in dir */
+void font_init(const char *dir, const char *inf, int later);	/* the font from inf; EHYPVIEW.FNT in dir;
+							   later: a GDOS font only at font_wake() */
+void font_wake(void);                     /* the accessory, first opened: its font now */
 void font_check(void);                    /* the accessory: inf changed meanwhile? the font again */
 void font_exit(void);
 void font_dialog(void);                   /* View > Font... */
