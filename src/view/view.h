@@ -27,11 +27,14 @@
 #define VIEW_HELP    4           /* @help page                   */
 #define VIEW_HOME    5           /* default page                 */
 #define VIEW_BACK    6           /* view_can() only: the history */
+#define VIEW_FORWARD 7           /* view_can() only: pages gone back from */
+#define VIEW_SEEALSO 8           /* view_can() only: the page's @xref list */
 
 typedef struct {
 	char *path;
 	unsigned short node;
 	long top;
+	char *title;                 /* the page's title then (the history menu) */
 } view_hist;
 
 typedef struct {
@@ -40,8 +43,11 @@ typedef struct {
 	hyp_page *page;              /* NULL when nothing is open    */
 	long top, left;              /* first visible line / column  */
 	long sel;                    /* selected link (index into page->runs), -1 */
-	view_hist *hist;
+	view_hist *hist;             /* back: the last one is the page before */
 	unsigned long nhist, cap_hist;
+	view_hist *fwd;              /* forward: pages gone back from, the last
+	                                one next; any other move empties it */
+	unsigned long nfwd, cap_fwd;
 	char status[200];            /* message for the info line    */
 	/*
 	 * A link to a @pnode opens it as a pop-up, as ST-Guide does: a small
@@ -89,10 +95,29 @@ long view_popup_cols(const ehv_view *v);
 /* back to the previous page; VIEW_ERROR when there is none */
 int view_back(ehv_view *v);
 
+/* forward again to the page gone back from; VIEW_ERROR when there is none */
+int view_forward(ehv_view *v);
+
+/*
+ * Several steps at once (the history menu): steps < 0 goes back, > 0
+ * forward.  The pages passed over move to the other list, as if each
+ * step had been taken.
+ */
+int view_jump(ehv_view *v, long steps);
+
+/* the title of the page `steps` away (< 0 back, > 0 forward), or NULL */
+const char *view_jump_title(const ehv_view *v, long steps);
+
+/* the page's "See also" entries (@xref): how many, a label, follow one */
+unsigned int view_xref_count(const ehv_view *v);
+void view_xref_label(const ehv_view *v, unsigned int i, char *buf, unsigned long size);
+int view_xref_follow(ehv_view *v, unsigned int i);
+
 /* VIEW_NEXT, VIEW_PREV, ... */
 int view_relative(ehv_view *v, int which);
 
-/* nonzero when view_relative(which), or view_back for VIEW_BACK, would work */
+/* nonzero when view_relative(which) would work; VIEW_BACK, VIEW_FORWARD:
+   there is a page that way; VIEW_SEEALSO: the page has @xref entries */
 int view_can(const ehv_view *v, int which);
 
 /*

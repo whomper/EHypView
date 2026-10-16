@@ -206,6 +206,73 @@ static void test_relative(void)
 	view_free(&v);
 }
 
+/* back and forward, as a web browser: forward is gone after any other move */
+static void test_forward(void)
+{
+	ehv_view v;
+
+	view_init(&v, NULL);
+	CHECK(!view_can(&v, VIEW_FORWARD) && view_forward(&v) == VIEW_ERROR);
+	CHECK(view_open(&v, fx("other.hyp"), NULL, 0) == VIEW_OK);         /* Start */
+	CHECK(view_relative(&v, VIEW_NEXT) == VIEW_OK);                     /* Detail */
+	CHECK(view_relative(&v, VIEW_INDEX) == VIEW_OK);                    /* Index */
+	CHECK(v.nhist == 2 && v.nfwd == 0);
+	CHECK(view_jump_title(&v, -1) != NULL && view_jump_title(&v, -3) == NULL && view_jump_title(&v, 1) == NULL);
+	CHECK(view_back(&v) == VIEW_OK && strcmp(page_name(&v), "Detail") == 0);
+	CHECK(view_can(&v, VIEW_FORWARD) && v.nhist == 1 && v.nfwd == 1);
+	CHECK(view_jump_title(&v, 1) != NULL && view_jump_title(&v, 1)[0] != '\0');
+	CHECK(view_forward(&v) == VIEW_OK && strcmp(page_name(&v), "Index") == 0);
+	CHECK(!view_can(&v, VIEW_FORWARD) && view_forward(&v) == VIEW_ERROR && v.status[0] != '\0');
+	CHECK(v.nhist == 2);
+
+	/* two steps back at once: the page between goes forward too */
+	CHECK(view_jump(&v, -2) == VIEW_OK && strcmp(page_name(&v), "Start") == 0);
+	CHECK(v.nhist == 0 && v.nfwd == 2);
+	CHECK(view_jump(&v, -1) == VIEW_ERROR && strcmp(page_name(&v), "Start") == 0 && v.nfwd == 2);
+	CHECK(view_jump(&v, 3) == VIEW_ERROR && v.nfwd == 2);               /* not that far */
+	CHECK(view_jump(&v, 1) == VIEW_OK && strcmp(page_name(&v), "Detail") == 0);
+	CHECK(view_jump(&v, 1) == VIEW_OK && strcmp(page_name(&v), "Index") == 0 && v.nfwd == 0);
+	CHECK(view_jump(&v, -2) == VIEW_OK && view_jump(&v, 2) == VIEW_OK && strcmp(page_name(&v), "Index") == 0);
+	CHECK(view_jump(&v, 0) == VIEW_OK && strcmp(page_name(&v), "Index") == 0);
+
+	/* another move forgets the way forward */
+	CHECK(view_back(&v) == VIEW_OK && v.nfwd == 1);
+	CHECK(view_relative(&v, VIEW_HOME) == VIEW_OK && v.nfwd == 0 && !view_can(&v, VIEW_FORWARD));
+
+	/* across hypertexts, and where it scrolled to */
+	CHECK(view_open(&v, fx("basic.hyp"), "Second", 2) == VIEW_OK && v.nfwd == 0);
+	CHECK(view_back(&v) == VIEW_OK && ends_with(v.doc->path, "other.hyp"));
+	CHECK(view_forward(&v) == VIEW_OK && ends_with(v.doc->path, "basic.hyp"));
+	CHECK(strcmp(page_name(&v), "Second") == 0 && v.top == 2);
+	CHECK(view_jump_title(&v, -1) != NULL && view_jump_title(&v, -1)[0] != '\0');
+	view_free(&v);
+	CHECK(v.nfwd == 0 && v.fwd == NULL);
+}
+
+/* "See also": the page's @xref entries */
+static void test_xref(void)
+{
+	ehv_view v;
+	char label[80];
+
+	view_init(&v, NULL);
+	CHECK(view_xref_count(&v) == 0 && !view_can(&v, VIEW_SEEALSO));
+	CHECK(view_open(&v, fx("basic.hyp"), NULL, 0) == VIEW_OK);
+	CHECK(view_xref_count(&v) == 2 && view_can(&v, VIEW_SEEALSO));
+	view_xref_label(&v, 0, label, sizeof(label));
+	CHECK(strcmp(label, "The help page") == 0);
+	view_xref_label(&v, 1, label, sizeof(label));
+	CHECK(strstr(label, "other.hyp") != NULL);                          /* no text: the target */
+	view_xref_label(&v, 9, label, sizeof(label));
+	CHECK(label[0] == '\0');
+	CHECK(view_xref_follow(&v, 9) == VIEW_ERROR && strcmp(page_name(&v), "Main") == 0);
+	CHECK(view_xref_follow(&v, 0) == VIEW_OK && strcmp(page_name(&v), "Help") == 0);
+	CHECK(v.nhist == 1 && !view_can(&v, VIEW_SEEALSO));
+	CHECK(view_back(&v) == VIEW_OK && view_xref_follow(&v, 1) == VIEW_OK);
+	CHECK(ends_with(v.doc->path, "other.hyp"));
+	view_free(&v);
+}
+
 static void test_open_errors(void)
 {
 	ehv_view v;
@@ -296,6 +363,8 @@ int main(int argc, char **argv)
 	test_open_and_links();
 	test_popup();
 	test_relative();
+	test_forward();
+	test_xref();
 	test_open_errors();
 	test_selection();
 	test_request();

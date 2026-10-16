@@ -106,13 +106,17 @@ common/        the AERA programs' shared code (git subtree of AERA-Atari):
   (next) image.c   planar image -> VDI raster for any screen depth
   search.c     step-wise full-text search through every hypertext
 src/view/      without GEM, tested on the host:
-  view.c       the viewer model: open, links, history, link selection
+  view.c       the viewer model: open, links, history back and forward,
+               See also (@xref), link selection
   library.c    the library: grouped list, name search, full-text hits
   fontpref.c   the font setting, size steps
   bookmark.c   bookmarks, as BOOKMARKn lines in EHYPVIEW.INF
 src/gem/       the GEM program
-  ehypview.c   viewer windows (up to six), events, pop-up boxes, bookmarks,
-               AV protocol, startup
+  ehypview.c   viewer windows (up to six), events, the toolbar's drawing,
+               menus and tooltips, pop-up boxes, bookmarks, AV protocol,
+               startup
+  toolbar.c    the toolbar's buttons and layout (no AES calls; tested on
+               the host)
   pagedraw.c   a page laid out and drawn (the viewer's and a pop-up's)
   libwin.c     library window
   menu.c       the menu bar, built in code (no resource file)
@@ -216,13 +220,16 @@ Rules for `src/core`:
   Hatari in a window on Xvfb and moves the mouse with xdotool (as
   EContact's rig does): clicking a link, the right button for back, the
   About box from the Desk menu, the font selector, Navigate and File
-  items. A last run has the accessory in the root and the program in
+  items, and the toolbar: Index, Back, Forward, the history on Back's
+  right button, See also, a tooltip, the Bookmarks and menu buttons, the
+  library. A last run has the accessory in the root and the program in
   `C:\EHV`: the program, started from the desktop, writes `FOLDER=` and
   its index there; the accessory, chosen meanwhile, hands it to the
   program; the font the program chose is the accessory's when it next
   opens (the AERA guidelines, 2.3 and 6.1). `tests/test_menu.c` also checks
   the menu tree (links, positions on 320- to 1280-pixel screens, commands)
-  on the host.
+  on the host, and `tests/test_toolbar.c` the toolbar's layout (every
+  button at a window's width, the least needed going first as it narrows).
 - `tests/test_index.c` builds a real folder tree for the scanner and
   resolver tests: mixed-case names, a folder with spaces, a duplicate, a
   damaged file, a symbolic link loop, a REF beside a file and an ALL.REF
@@ -245,6 +252,8 @@ Rules for `src/core`:
 4. ~~Library window and search.~~ ✔ ~~Menu bar.~~ ✔ ~~Font choice.~~ ✔
    (GDOS fonts are untested: EmuTOS in Hatari has no GDOS)
 5. ~~Pop-ups in a box over the page.~~ ✔ (modal, as ST-Guide's: the next
-   click or key closes them) ~~Several windows.~~ ✔ ~~Bookmarks.~~ ✔ Tabs,
-   settings dialog, colour images.
+   click or key closes them) ~~Several windows.~~ ✔ ~~Bookmarks.~~ ✔
+   ~~A toolbar (ST-Guide's buttons, back and forward, See also,
+   tooltips).~~ ✔ Tabs, settings dialog, colour images, tooltips through
+   BubbleGEM when it runs.
 6. Accessory build, FireBee build, release packaging.

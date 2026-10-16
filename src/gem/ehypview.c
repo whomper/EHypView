@@ -3,9 +3,11 @@
 /*
  * EHypView - the GEM viewer.
  *
- * One window showing one page.  Text is laid out on the character grid
- * of the system font, as ST-Guide does: graphics (@line, @box, @image)
- * are positioned in character cells.  Navigation (links, history, help
+ * Windows showing a page each, under a toolbar (toolbar.c: Back,
+ * Forward, the main page, the page before and after, Contents, Index,
+ * See also, the library, bookmarks, a menu).  Text is laid out on the
+ * character grid of the text font, as ST-Guide does: graphics (@line,
+ * @box, @image) are positioned in character cells.  Navigation (links, history, help
  * requests) lives in src/view and the core library; this file draws and
  * handles events.
  *
@@ -30,6 +32,7 @@
 #include "gemapp.h"
 #include "pagedraw.h"
 #include "menu.h"
+#include "toolbar.h"
 #include "crash.h"
 #include "av.h"
 #include "grect.h"
@@ -204,9 +207,23 @@ static void pick_current(void)
 /* ---------------------------------------------------------------- */
 /* window geometry and scrolling                                     */
 
+/* the toolbar of the current viewer's window, laid out */
+static void bar(toolbar *t)
+{
+	short x, y, w, h;
+
+	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);
+	tb_layout(t, x, y, w, sys_cw, sys_ch);
+}
+
+/* where the page is: the work area below the toolbar */
 static void work_area(short *x, short *y, short *w, short *h)
 {
+	short th = tb_height(sys_ch);
+
 	wind_get(cur->h, WF_WORKXYWH, x, y, w, h);
+	*y = (short) (*y + th);
+	*h = (short) (*h > th ? *h - th : 0);
 }
 
 static long visible_lines(void)
@@ -321,8 +338,8 @@ static void draw_message(short x, short y, const char *const *lines)
 		text_at(x, y, *lines, (long) strlen(*lines));
 }
 
-/* draw the work area within one rectangle (screen coordinates) */
-static void draw_rect(short cx, short cy, short cw_, short ch_)
+/* draw the page within one rectangle (screen coordinates) */
+static void draw_page(short cx, short cy, short cw_, short ch_)
 {
 	short wx, wy, ww, wh;
 	short clip[4];
@@ -357,6 +374,177 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	oy = wy - cur->lay.gfx_y[cur->view.top];
 	layout_draw(&cur->lay, ox, oy, cur->view.top, cx, cy, cw_, ch_, cur->view.sel, page_cols());
 	vs_clip(vdi_h, 0, clip);
+}
+
+/* ---------------------------------------------------------------- */
+/* the toolbar (toolbar.c lays it out)                               */
+
+/* what a button can do now */
+static int bar_enabled(int b)
+{
+	switch (b)
+	{
+	case TB_BACK: return view_can(&cur->view, VIEW_BACK);
+	case TB_FORWARD: return view_can(&cur->view, VIEW_FORWARD);
+	case TB_HOME: return view_can(&cur->view, VIEW_HOME);
+	case TB_PREV: return view_can(&cur->view, VIEW_PREV);
+	case TB_TOC: return view_can(&cur->view, VIEW_TOC);
+	case TB_NEXT: return view_can(&cur->view, VIEW_NEXT);
+	case TB_INDEX: return view_can(&cur->view, VIEW_INDEX);
+	case TB_SEEALSO: return view_can(&cur->view, VIEW_SEEALSO);
+	}
+	return 1;
+}
+
+static void vline_(short x, short y1, short y2)
+{
+	short p[4];
+
+	p[0] = p[2] = x;
+	p[1] = y1;
+	p[3] = y2;
+	v_pline(vdi_h, 2, p);
+}
+
+/* an arrow as ECal draws it: a solid head and a shaft, so it looks the
+   same whatever the font; as wide as high, on tall pixels too */
+static void draw_arrow(short x, short y, short w, short h, int dir)
+{
+	short hh = (short) ((h - 6) / 2), cy = (short) (y + h / 2), tw, sh, c, x0;
+
+	if (hh < 2)
+		hh = 2;
+	tw = (short) (hh * 2 * sys_cw / sys_ch);
+	if (tw < 3)
+		tw = 3;
+	sh = (short) (hh / 3);
+	x0 = (short) (x + w / 2 + dir * tw);       /* the tip */
+	for (c = 0; c <= tw; c++)
+	{
+		short half = (short) ((long) hh * c / tw);
+
+		vline_((short) (x0 - dir * c), (short) (cy - half), (short) (cy + half));
+	}
+	for (c = tw; c <= 2 * tw; c++)
+		vline_((short) (x0 - dir * c), (short) (cy - sh), (short) (cy + sh));
+}
+
+/* a house, for the main page: a solid roof over a framed wall and a door */
+static void draw_house(short x, short y, short w, short h)
+{
+	short top = (short) (y + 3), bot = (short) (y + h - 4), cx = (short) (x + w / 2);
+	short hw = (short) ((long) (bot - top) * sys_cw / sys_ch), rh = (short) ((bot - top) / 2), c, p[10];
+
+	if (hw < 3)
+		hw = 3;
+	for (c = 0; c <= hw; c++)
+	{
+		short yy = (short) (top + (long) rh * c / hw);
+
+		vline_((short) (cx - c), yy, (short) (top + rh));
+		vline_((short) (cx + c), yy, (short) (top + rh));
+	}
+	p[0] = p[6] = p[8] = (short) (cx - hw + 2);
+	p[1] = p[3] = p[9] = (short) (top + rh);
+	p[2] = p[4] = (short) (cx + hw - 2);
+	p[5] = p[7] = bot;
+	v_pline(vdi_h, 5, p);
+	fill(1, (short) (cx - hw / 4), (short) (bot - rh / 2 - 1), (short) (cx + hw / 4), bot);
+	vswr_mode(vdi_h, MD_REPLACE);
+}
+
+/* the inside of a button greyed, as the AES greys what can't be used:
+   every other pixel cleared */
+static void dim(short x1, short y1, short x2, short y2)
+{
+	short pxy[4];
+
+	pxy[0] = x1;
+	pxy[1] = y1;
+	pxy[2] = x2;
+	pxy[3] = y2;
+	vswr_mode(vdi_h, MD_TRANS);
+	vsf_interior(vdi_h, FIS_PATTERN);
+	vsf_style(vdi_h, 4);
+	vsf_color(vdi_h, 0);
+	vsf_perimeter(vdi_h, 0);
+	vr_recfl(vdi_h, pxy);
+	vsf_interior(vdi_h, FIS_SOLID);
+	vswr_mode(vdi_h, MD_REPLACE);
+}
+
+static void draw_button(const toolbar *t, int b)
+{
+	short x = t->bx[b], y = t->by, w = t->bw[b], h = t->bh, p[10];
+	const char *l = tb_label(b);
+
+	fill(0, x, y, (short) (x + w - 1), (short) (y + h - 1));
+	vswr_mode(vdi_h, MD_REPLACE);
+	vsl_color(vdi_h, 1);
+	vsl_type(vdi_h, 1);
+	p[0] = p[6] = p[8] = x;
+	p[1] = p[3] = p[9] = y;
+	p[2] = p[4] = (short) (x + w - 1);
+	p[5] = p[7] = (short) (y + h - 1);
+	v_pline(vdi_h, 5, p);
+	switch (tb_glyph(b))
+	{
+	case TB_ARROW_LEFT: draw_arrow(x, y, w, h, -1); break;
+	case TB_ARROW_RIGHT: draw_arrow(x, y, w, h, 1); break;
+	case TB_HOUSE: draw_house(x, y, w, h); break;
+	default:
+		vswr_mode(vdi_h, MD_TRANS);
+		vst_color(vdi_h, 1);
+		vst_effects(vdi_h, 0);
+		text_at((short) (x + (w - (short) strlen(l) * cw) / 2), (short) (y + 1), l, (long) strlen(l));
+	}
+	if (!bar_enabled(b))
+		dim((short) (x + 1), (short) (y + 1), (short) (x + w - 2), (short) (y + h - 2));
+}
+
+/* the toolbar within one rectangle (screen coordinates) */
+static void draw_bar(short cx, short cy, short cw_, short ch_)
+{
+	toolbar t;
+	short clip[4], p[4];
+	int b;
+
+	bar(&t);
+	clip[0] = cx;
+	clip[1] = cy;
+	clip[2] = (short) (cx + cw_ - 1);
+	clip[3] = (short) (cy + ch_ - 1);
+	vs_clip(vdi_h, 1, clip);
+	fill(0, t.x, t.y, (short) (t.x + t.w - 1), (short) (t.y + t.h - 1));
+	font_sys_push();
+	for (b = 0; b < TB_COUNT; b++)
+		if (t.bw[b] > 0)
+			draw_button(&t, b);
+	font_sys_pop();
+	vswr_mode(vdi_h, MD_REPLACE);
+	vsl_color(vdi_h, 1);
+	p[0] = t.x;
+	p[2] = (short) (t.x + t.w - 1);
+	p[1] = p[3] = (short) (t.y + t.h - 1);
+	v_pline(vdi_h, 2, p);
+	vs_clip(vdi_h, 0, clip);
+}
+
+/* the work area within one rectangle: the toolbar, the page */
+static void draw_rect(short cx, short cy, short cw_, short ch_)
+{
+	short x, y, w, h, ix = cx, iy = cy, iw = cw_, ih = ch_;
+
+	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);
+	if (intersect(&ix, &iy, &iw, &ih, x, y, w, tb_height(sys_ch)))
+		draw_bar(ix, iy, iw, ih);
+	work_area(&x, &y, &w, &h);
+	ix = cx;
+	iy = cy;
+	iw = cw_;
+	ih = ch_;
+	if (h > 0 && intersect(&ix, &iy, &iw, &ih, x, y, w, h))
+		draw_page(ix, iy, iw, ih);
 }
 
 int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short w2, short h2)
@@ -409,7 +597,7 @@ static void redraw_all(void)
 
 	if (cur->icon)                      /* nothing of the page shows */
 		return;
-	work_area(&x, &y, &w, &h);
+	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);   /* the toolbar too */
 	clamp_scroll();
 	set_sliders();
 	redraw(x, y, w, h);
@@ -657,8 +845,10 @@ static void open_window(void)
 		return;
 	}
 	cols = (short) (cur->view.doc && cur->view.doc->width ? cur->view.doc->width : 75);
-	wind_calc(WC_BORDER, WKIND, 0, 0, (short) (cols * cw + 2 * MARGIN), (short) (desk_h * 3 / 4),
-		&x, &y, &w, &h);
+	w = (short) (cols * cw + 2 * MARGIN);
+	if (w < tb_full_width(sys_cw))         /* room for every button */
+		w = tb_full_width(sys_cw);
+	wind_calc(WC_BORDER, WKIND, 0, 0, w, (short) (desk_h * 3 / 4), &x, &y, &w, &h);
 	if (w > desk_w)
 		w = desk_w;
 	if (h > desk_h)
@@ -850,6 +1040,8 @@ static int nav_target(int cmd)
 	switch (cmd)
 	{
 	case CMD_BACK: return VIEW_BACK;
+	case CMD_FORWARD: return VIEW_FORWARD;
+	case CMD_SEEALSO: return VIEW_SEEALSO;
 	case CMD_HOME: return VIEW_HOME;
 	case CMD_INDEX: return VIEW_INDEX;
 	case CMD_TOC: return VIEW_TOC;
@@ -1081,6 +1273,8 @@ static void clip_command(int cmd)
 	update_info();
 }
 
+static void seealso_here(void);
+
 static void command(int cmd)
 {
 	int target = nav_target(cmd), rc;
@@ -1121,6 +1315,9 @@ static void command(int cmd)
 			app_bookmark_remove(bm_find(&bookmarks, cur->view.doc->path,
 				cur->view.doc->entries[cur->view.page->num].name));
 		return;
+	case CMD_SEEALSO:
+		seealso_here();
+		return;
 	case CMD_FONT:
 		font_dialog();
 		return;
@@ -1156,7 +1353,8 @@ static void command(int cmd)
 		return;
 	viewer_top();
 	graf_mouse(BUSYBEE, NULL);
-	rc = target == VIEW_BACK ? view_back(&cur->view) : view_relative(&cur->view, target);
+	rc = target == VIEW_BACK ? view_back(&cur->view) : target == VIEW_FORWARD ? view_forward(&cur->view) :
+		view_relative(&cur->view, target);
 	graf_mouse(ARROW, NULL);
 	after(rc);
 }
@@ -1314,8 +1512,8 @@ static void key(short kstate, short kreturn)
 	{
 		switch (scan)
 		{
-		case 0x61:                     /* Undo */
-			command(CMD_BACK);
+		case 0x61:                     /* Undo; with Shift, forward again */
+			command(shift ? CMD_FORWARD : CMD_BACK);
 			return;
 		case 0x62:                     /* Help */
 			command(CMD_HELP);
@@ -1372,6 +1570,7 @@ static void context_menu(short x, short y)
 		int cmd;
 	} all[] = {
 		{ "  Back                  Undo", CMD_BACK },
+		{ "  Forward             \x01Undo", CMD_FORWARD },
 		{ "  Link in new window \x01Return", CMD_LINKWIN },
 		{ "-", CMD_NONE },
 		{ "  Main page            ^Home", CMD_HOME },
@@ -1419,11 +1618,391 @@ static void context_menu(short x, short y)
 	command(cmds[r]);
 }
 
+/* ---------------------------------------------------------------- */
+/* the toolbar's buttons, menus and tooltips                         */
+
+/* a menu line: the text, then its shortcut on the right */
+static void menu_line(char *buf, size_t n, const char *text, const char *key)
+{
+	snprintf(buf, n, "  %-20s%6s ", text, key != NULL ? key : "");
+}
+
+/* the history, back (dir < 0) or forward (dir > 0), nearest first */
+#define HIST_SHOWN 12
+static void history_menu(int dir, short x, short y)
+{
+	static char lines[HIST_SHOWN][48];
+	const char *lab[HIST_SHOWN], *t;
+	short n = 0, r;
+	char num[8];
+	int rc;
+
+	while (n < HIST_SHOWN && (t = view_jump_title(&cur->view, dir * (n + 1))) != NULL)
+	{
+		snprintf(lines[n], sizeof(lines[n]), "  %.40s ", t);
+		lab[n] = lines[n];
+		n++;
+	}
+	if (n == 0)
+		return;
+	log_event("menu", dir < 0 ? "back-history" : "forward-history", NULL);
+	r = popup(x, y, lab, n);
+	if (r < 0)
+		return;
+	sprintf(num, "%d", dir * (r + 1));
+	log_event("history", num, NULL);
+	graf_mouse(BUSYBEE, NULL);
+	rc = view_jump(&cur->view, dir * (r + 1));
+	graf_mouse(ARROW, NULL);
+	after(rc);
+}
+
+/* See also: the page's @xref entries */
+static void seealso_menu(short x, short y)
+{
+	static char lines[16][48];
+	const char *lab[16];
+	char label[44];
+	short n, r;
+	int rc;
+
+	for (n = 0; n < 16 && (unsigned int) n < view_xref_count(&cur->view); n++)
+	{
+		view_xref_label(&cur->view, (unsigned int) n, label, sizeof(label));
+		snprintf(lines[n], sizeof(lines[n]), "  %s ", label);
+		lab[n] = lines[n];
+	}
+	if (n == 0)
+		return;
+	log_event("menu", "see-also", NULL);
+	r = popup(x, y, lab, n);
+	if (r < 0)
+		return;
+	view_xref_label(&cur->view, (unsigned int) r, label, sizeof(label));
+	log_event("see-also", label, NULL);
+	graf_mouse(BUSYBEE, NULL);
+	rc = view_xref_follow(&cur->view, (unsigned int) r);
+	graf_mouse(ARROW, NULL);
+	after(rc);
+}
+
+/* Navigate > See also...: under the toolbar's button, or on the page */
+static void seealso_here(void)
+{
+	toolbar t;
+	short x, y, w, h;
+
+	if (cur->h <= 0 || cur->icon || !view_can(&cur->view, VIEW_SEEALSO))
+		return;
+	viewer_top();
+	bar(&t);
+	if (t.bw[TB_SEEALSO] > 0)
+	{
+		seealso_menu(t.bx[TB_SEEALSO], (short) (t.by + t.bh));
+		return;
+	}
+	work_area(&x, &y, &w, &h);
+	seealso_menu((short) (x + 2 * cw), (short) (y + ch));
+}
+
+/* the Bookmarks button: add, remove, then the bookmarks */
+static void bookmarks_menu(short x, short y)
+{
+	static char lines[3 + BM_MAX][48];
+	const char *lab[3 + BM_MAX];
+	int cmds[3 + BM_MAX];
+	short n = 0, r;
+	unsigned int i;
+
+	menu_line(lines[n] + 1, sizeof(lines[n]) - 1, "Add bookmark", "^D");
+	lines[n][0] = '~';
+	lab[n] = cur->view.page != NULL && page_bookmark() < 0 && bookmarks.n < BM_MAX ? lines[n] + 1 : lines[n];
+	cmds[n++] = CMD_BM_ADD;
+	menu_line(lines[n] + 1, sizeof(lines[n]) - 1, "Remove bookmark", NULL);
+	lines[n][0] = '~';
+	lab[n] = page_bookmark() >= 0 ? lines[n] + 1 : lines[n];
+	cmds[n++] = CMD_BM_REMOVE;
+	if (bookmarks.n > 0)
+	{
+		lab[n] = "-";
+		cmds[n++] = CMD_NONE;
+	}
+	for (i = 0; i < bookmarks.n && i < BM_MAX; i++)
+	{
+		snprintf(lines[n], sizeof(lines[n]), "  %.40s ", bookmarks.b[i].title);
+		lab[n] = lines[n];
+		cmds[n++] = CMD_BM0 + (int) i;
+	}
+	log_event("menu", "bookmarks", NULL);
+	r = popup(x, y, lab, n);
+	if (r < 0 || cmds[r] == CMD_NONE)
+		return;
+	log_event("menu", menu_command_name(cmds[r]), NULL);
+	command(cmds[r]);
+}
+
+/*
+ * The menu button: what the menu bar has besides navigating (the
+ * buttons do that), About first.  The accessory has no menu bar; this is
+ * where it finds these (the guidelines, 1 and 3.1).
+ */
+static void bar_menu(short x, short y)
+{
+	static const struct
+	{
+		const char *text, *key;
+		int cmd;
+	} all[] = {
+		{ "About EHypView...", NULL, CMD_ABOUT },
+		{ "-", NULL, CMD_NONE },
+		{ "New window", "^N", CMD_NEWWIN },
+		{ "Open hypertext...", "^O", CMD_OPEN },
+		{ "Library and search", "^L", CMD_LIBRARY },
+		{ "-", NULL, CMD_NONE },
+		{ "Copy page", "^C", CMD_COPY },
+		{ "Add bookmark", "^D", CMD_BM_ADD },
+		{ "-", NULL, CMD_NONE },
+		{ "Font...", "\x01^F", CMD_FONT },
+		{ "Larger text", "^+", CMD_LARGER },
+		{ "Smaller text", "^-", CMD_SMALLER },
+		{ "-", NULL, CMD_NONE },
+		{ "Close window", "^W", CMD_CLOSE },
+		{ "Quit", "^Q", CMD_QUIT }
+	};
+	enum { N = sizeof(all) / sizeof(all[0]) };
+	static char lines[N][48];
+	const char *lab[N];
+	short i, r;
+
+	for (i = 0; i < N; i++)
+	{
+		int c = all[i].cmd, grey;
+
+		if (c == CMD_NONE)
+		{
+			lab[i] = "-";
+			continue;
+		}
+		grey = (c == CMD_NEWWIN && viewer_windows() >= MAX_VIEWERS) ||
+			(c == CMD_COPY && cur->view.page == NULL) ||
+			(c == CMD_BM_ADD && (cur->view.page == NULL || page_bookmark() >= 0 || bookmarks.n >= BM_MAX));
+		lines[i][0] = '~';
+		menu_line(lines[i] + 1, sizeof(lines[i]) - 1, all[i].text, all[i].key);
+		lab[i] = grey ? lines[i] : lines[i] + 1;
+	}
+	log_event("menu", "toolbar", NULL);
+	r = popup(x, y, lab, N);
+	if (r < 0 || all[r].cmd == CMD_NONE)
+		return;
+	log_event("menu", menu_command_name(all[r].cmd), NULL);
+	command(all[r].cmd);
+}
+
+/* tooltips: a button's, after the mouse rests on it for a second */
+static struct
+{
+	short win;                         /* the window it is in, or -1 */
+	int b;                             /* the button under the mouse, -1 */
+	unsigned long since;               /* when the mouse came there (200 Hz) */
+	short done;                        /* shown, or clicked: not again there */
+	short shown, x, y, w, h;           /* what it covers */
+} tip = { -1, -1, 0, 0, 0, 0, 0, 0, 0 };
+
+static void tip_hide(void)
+{
+	viewer *keep = cur, *v;
+
+	if (!tip.shown)
+		return;
+	tip.shown = 0;
+	v = viewer_of(tip.win);
+	if (v != NULL && !v->icon)
+	{
+		cur = v;
+		redraw(tip.x, tip.y, tip.w, tip.h);
+		cur = keep;
+	}
+}
+
+static void tip_show(const toolbar *t, int b)
+{
+	const char *text = tb_tip(b);
+	short n = (short) strlen(text), wx, wy, ww, wh, clip[4];
+
+	wind_get(cur->h, WF_WORKXYWH, &wx, &wy, &ww, &wh);
+	font_sys_push();
+	tip.w = (short) ((n + 2) * cw);
+	tip.h = (short) (ch + 4);
+	tip.x = t->bx[b];
+	tip.y = (short) (t->by + t->bh + 3);
+	if (tip.x + tip.w > wx + ww)
+		tip.x = (short) (wx + ww - tip.w);
+	if (tip.x < wx)
+		tip.x = wx;
+	wind_update(BEG_UPDATE);
+	graf_mouse(M_OFF, NULL);
+	clip[0] = wx;
+	clip[1] = wy;
+	clip[2] = (short) (wx + ww - 1);
+	clip[3] = (short) (wy + wh - 1);
+	vs_clip(vdi_h, 1, clip);
+	fill(1, tip.x, tip.y, (short) (tip.x + tip.w - 1), (short) (tip.y + tip.h - 1));
+	fill(0, (short) (tip.x + 1), (short) (tip.y + 1), (short) (tip.x + tip.w - 2), (short) (tip.y + tip.h - 2));
+	vswr_mode(vdi_h, MD_TRANS);
+	vst_color(vdi_h, 1);
+	vst_effects(vdi_h, 0);
+	text_at((short) (tip.x + cw), (short) (tip.y + 2), text, n);
+	vs_clip(vdi_h, 0, clip);
+	graf_mouse(M_ON, NULL);
+	wind_update(END_UPDATE);
+	font_sys_pop();
+	tip.shown = 1;
+	tip.done = 1;
+	log_event("tip", tb_name(b), NULL);
+}
+
+/* after each event and timer tick: where the mouse rests */
+static void tip_check(void)
+{
+	short top = top_window(), mx, my, mb, ks;
+	viewer *v = viewer_of(top), *keep = cur;
+	toolbar t;
+	int b = -1;
+
+	if (v != NULL && !v->icon)
+	{
+		graf_mkstate(&mx, &my, &mb, &ks);
+		cur = v;
+		bar(&t);
+		if (mb == 0 && wind_find(mx, my) == top)
+			b = tb_hit(&t, mx, my);
+		cur = keep;
+	}
+	if (b != tip.b || top != tip.win)
+	{
+		tip_hide();
+		tip.b = b;
+		tip.win = top;
+		tip.since = tos_hz200();
+		tip.done = 0;
+		return;
+	}
+	if (b >= 0 && !tip.done && tos_hz200() - tip.since >= 200)
+	{
+		cur = v;
+		tip_show(&t, b);
+		cur = keep;
+	}
+}
+
+/* a button held down: shown pressed while the mouse is on it; 1 when
+   let go there */
+static int bar_press(const toolbar *t, int b)
+{
+	short x = t->bx[b], y = t->by, w = t->bw[b], h = t->bh, mx, my, mb, ks, in = 1, now, pxy[4];
+
+	pxy[0] = (short) (x + 1);
+	pxy[1] = (short) (y + 1);
+	pxy[2] = (short) (x + w - 2);
+	pxy[3] = (short) (y + h - 2);
+	if (top_window() != cur->h)            /* covered: no drawing on it */
+		return 1;
+	wind_update(BEG_UPDATE);
+	graf_mouse(M_OFF, NULL);
+	vswr_mode(vdi_h, MD_XOR);
+	vsf_interior(vdi_h, FIS_SOLID);
+	vsf_color(vdi_h, 1);
+	vr_recfl(vdi_h, pxy);
+	graf_mouse(M_ON, NULL);
+	for (;;)
+	{
+		graf_mkstate(&mx, &my, &mb, &ks);
+		now = (short) (mx >= x && mx < x + w && my >= y && my < y + h);
+		if (now != in)
+		{
+			graf_mouse(M_OFF, NULL);
+			vswr_mode(vdi_h, MD_XOR);
+			vr_recfl(vdi_h, pxy);
+			graf_mouse(M_ON, NULL);
+			in = now;
+		}
+		if (!(mb & 1))
+			break;
+		evnt_timer_(10);
+	}
+	if (in)
+	{
+		graf_mouse(M_OFF, NULL);
+		vswr_mode(vdi_h, MD_XOR);
+		vr_recfl(vdi_h, pxy);
+		graf_mouse(M_ON, NULL);
+	}
+	vswr_mode(vdi_h, MD_REPLACE);
+	wind_update(END_UPDATE);
+	return in;
+}
+
+/* a click on the toolbar: 0 when it was elsewhere */
+static int bar_click(short mx, short my, short button)
+{
+	toolbar t;
+	short x, y, w, h, px, py;
+	int b;
+
+	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);
+	if (my < y || my >= y + tb_height(sys_ch) || mx < x || mx >= x + w)
+		return 0;
+	tip_hide();
+	tip.done = 1;
+	bar(&t);
+	b = tb_hit(&t, mx, my);
+	if (b < 0)
+	{
+		if (button & 2)
+			context_menu(mx, my);
+		return 1;
+	}
+	px = t.bx[b];                          /* its menus open below it */
+	py = (short) (t.by + t.bh);
+	if (button & 2)
+	{
+		/* the right button: the history on Back and Forward, the
+		   bookmarks on Bookmarks, else the page's menu */
+		if ((b == TB_BACK || b == TB_FORWARD) && bar_enabled(b))
+			history_menu(b == TB_BACK ? -1 : 1, px, py);
+		else if (b == TB_BOOKMARKS)
+			bookmarks_menu(px, py);
+		else
+			context_menu(mx, my);
+		return 1;
+	}
+	if (!bar_enabled(b) || !bar_press(&t, b))
+		return 1;
+	log_event("toolbar", tb_name(b), NULL);
+	switch (b)
+	{
+	case TB_BACK: command(CMD_BACK); break;
+	case TB_FORWARD: command(CMD_FORWARD); break;
+	case TB_HOME: command(CMD_HOME); break;
+	case TB_PREV: command(CMD_PREV); break;
+	case TB_TOC: command(CMD_TOC); break;
+	case TB_NEXT: command(CMD_NEXT); break;
+	case TB_INDEX: command(CMD_INDEX); break;
+	case TB_SEEALSO: seealso_menu(px, py); break;
+	case TB_LIBRARY: command(CMD_LIBRARY); break;
+	case TB_BOOKMARKS: bookmarks_menu(px, py); break;
+	case TB_MENU: bar_menu(px, py); break;
+	}
+	return 1;
+}
+
 static void click(short mx, short my, short button, short kstate)
 {
 	short x, y, w, h;
 	long py, line, col, r;
 
+	if (bar_click(mx, my, button))
+		return;
 	if (button & 2)
 	{
 		/* on a link: it is the one the menu's "in a new window" takes */
@@ -1554,8 +2133,10 @@ static void viewer_message(short *msg)
 			wind_set(cur->h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
 		else if (msg[3] == cur->h)
 		{
-			w = msg[6] < 12 * cw ? (short) (12 * cw) : msg[6];
-			h = msg[7] < 6 * ch ? (short) (6 * ch) : msg[7];
+			/* at least the toolbar's Back, Forward and menu, and a few lines */
+			w = msg[6] < 16 * sys_cw ? (short) (16 * sys_cw) : msg[6];
+			w = w < 12 * cw ? (short) (12 * cw) : w;
+			h = msg[7] < 6 * ch + tb_height(sys_ch) ? (short) (6 * ch + tb_height(sys_ch)) : msg[7];
 			wind_set(cur->h, WF_CURRXYWH, msg[4], msg[5], w, h);
 			clamp_scroll();
 			set_sliders();
@@ -2122,12 +2703,14 @@ int main(void)
 		   while it runs */
 		int paused = is_acc && scanner != NULL && twin_prg() >= 0;
 		int busy = (scanner != NULL && !paused) || fts_busy;
+		/* a viewer in front: the mouse is looked at for tooltips */
+		int hover = viewer_of(top_window()) != NULL;
 
 		if (viewer_windows() > 0 || libwin_handle() > 0 || has_menu)
 			flags |= MU_KEYBD | MU_BUTTON;
-		if (busy || paused)
+		if (busy || paused || hover)
 			flags |= MU_TIMER;
-		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, busy ? 0 : 1000, msg, &ev);
+		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, busy ? 0 : hover ? 200 : 1000, msg, &ev);
 		if ((which & MU_MESAG) && !libwin_message(msg))
 			message(msg);
 		if ((which & MU_KEYBD) && crash_test(KEY_SCAN(ev.kreturn)))
@@ -2136,6 +2719,9 @@ int main(void)
 		{
 			short top = top_window();
 			viewer *tv = viewer_of(top);
+
+			tip_hide();
+			tip.done = 1;
 
 			if (top > 0 && ((tv != NULL && tv->icon) ||
 					(top == libwin_handle() && libwin_iconified())))
@@ -2174,6 +2760,7 @@ int main(void)
 			fts_busy = libwin_idle();
 		if (which & (MU_MESAG | MU_KEYBD | MU_BUTTON))
 			update_menu();
+		tip_check();
 	}
 
 	{

@@ -39,6 +39,8 @@ enum {
 	CMD_LINKWIN,                   /* the selected link in a new window */
 	CMD_BM_ADD,
 	CMD_BM_REMOVE,
+	CMD_FORWARD,                   /* forward again after Back */
+	CMD_SEEALSO,                   /* the page's @xref list, as a menu */
 	CMD_BM0,                       /* open bookmark 0 ... */
 	CMD_COUNT = CMD_BM0 + BM_MAX
 };
