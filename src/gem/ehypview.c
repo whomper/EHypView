@@ -1804,7 +1804,7 @@ static struct
 {
 	short win;                         /* the window it is in, or -1 */
 	int b;                             /* the button under the mouse, -1 */
-	unsigned long since;               /* when the mouse came there (200 Hz) */
+	unsigned long since;               /* when the mouse came there (ms) */
 	short done;                        /* shown, or clicked: not again there */
 	short shown, x, y, w, h;           /* what it covers */
 } tip = { -1, -1, 0, 0, 0, 0, 0, 0, 0 };
@@ -1884,11 +1884,13 @@ static void tip_check(void)
 		tip_hide();
 		tip.b = b;
 		tip.win = top;
-		tip.since = tos_hz200();
+		tip.since = tos_ms();
 		tip.done = 0;
 		return;
 	}
-	if (b >= 0 && !tip.done && tos_hz200() - tip.since >= 200)
+	/* a second, on any machine: tos_ms() corrects a _hz_200 that runs
+	   faster (312 Hz on a Falcon with its timer C set faster) */
+	if (b >= 0 && !tip.done && tos_ms() - tip.since >= 1000)
 	{
 		cur = v;
 		tip_show(&t, b);
