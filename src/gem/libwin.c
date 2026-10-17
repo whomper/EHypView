@@ -94,10 +94,11 @@ static void clamp(void)
 			lib.top = lib.sel;
 		else if (lib.sel >= lib.top + rows)
 			lib.top = lib.sel - rows + 1;
+		/* following the selection to the first row: its heading too
+		   (only then: scrolled, row 1 can be the top) */
+		if (lib.top == 1 && lib.sel < rows && lib.rows[0].kind == LIB_GROUP)
+			lib.top = 0;
 	}
-	/* show the heading above the first row */
-	if (lib.top == 1 && lib.nrows > 0 && lib.rows[0].kind == LIB_GROUP)
-		lib.top = 0;
 	if (lib.top > max)
 		lib.top = max;
 	if (lib.top < 0)
