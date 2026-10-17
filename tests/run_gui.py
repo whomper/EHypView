@@ -61,7 +61,7 @@ STEPS = [
     ([UNDO], ["page %s Start" % OTHER]),               # back
     # the library: 4 readable hypertexts (BROKEN.HYP is left out)
     ([("ctrl", L)], ["library 4"]),
-    (list("det"), ['search "det" 1']),                 # page names as you type
+    ([("type", "det")], ['search "det" 1']),                 # page names as you type
     ([RETURN], ["page %s Detail" % OTHER]),
     ([("ctrl", L)], ["library 4"]),
     # Esc clears no text (the guidelines, 3.5): the search is still "det",
@@ -69,7 +69,7 @@ STEPS = [
     ([ESC], []),
     ([BACKSPACE], ['search "de" *']),
     ([BACKSPACE, BACKSPACE], ['search "" 4']),
-    (list("beside"), ['search "beside" 0']),
+    ([("type", "beside")], ['search "beside" 0']),
     ([RETURN], ['fulltext-start "beside"', 'fulltext "beside" 1']),
     ([RETURN], ["page %s Main" % IMAGES]),             # the full-text hit
     ([("ctrl", I)], ["page %s Index" % IMAGES]),       # hcp made an index
@@ -108,7 +108,7 @@ STEPS = [
 # (and with the 8 x 8 font and a bookmark kept in EHYPVIEW.INF)
 LIBRARY_START = [
     ([], ["font System font 8", "library 0", "index 5 guides"]),
-    (list("zweite"), ['search "zweite" 1']),
+    ([("type", "zweite")], ['search "zweite" 1']),
     ([RETURN], ["page %s Second" % BASIC]),
     ([("ctrl", L)], ["library 4"]),
     ([BACKSPACE] * 6, ['search "" 4']),                # "zweite", taken out
@@ -263,6 +263,22 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             time.sleep(0.2)
         return False
 
+    def type_text(text):
+        """into the library's search, a letter at a time: each waits for
+        the search it makes, and goes again if the emulator lost it"""
+        for i, ch in enumerate(text):
+            want = 'search "%s" *' % text[:i + 1]
+            for _ in range(3):
+                send("hatari-event keypress %s" % ch)
+                deadline = time.time() + 3
+                while time.time() < deadline:
+                    if any(matches(ev, want) for ev in events()[len(seen):]):
+                        break
+                    time.sleep(0.1)
+                else:
+                    continue                # not taken: once more
+                break
+
     ok = True
     try:
         for n, (keys, expect) in enumerate(steps):
@@ -277,6 +293,8 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
                     mouse.move(k[1], k[2])
                     mouse.xdo("click", "--repeat", "2", "--delay", "80", "1")
                     time.sleep(2)
+                elif isinstance(k, tuple) and k[0] == "type":
+                    type_text(k[1])
                 elif isinstance(k, tuple) and k[0] == "wait":
                     time.sleep(k[1])
                 elif isinstance(k, tuple) and k[0] == "hover":      # rest there
@@ -393,7 +411,7 @@ MOUSE_STEPS = [
     ([("click", 320, 300)], []),                            # a click closes it
     ([tb(TB_LIBRARY)], ["toolbar library", "library 4"]),
     ([("wait", 1)], []),                                    # (a picture of it)
-    (list("sec"), ['search "sec" *']),
+    ([("type", "sec")], ['search "sec" *']),
     ([BACKSPACE] * 3, ['search "" 4']),
     ([("ctrl", W)], ["closed library"]),
     # the page: links, the right button's menu, pop-ups
@@ -464,7 +482,7 @@ ACC_FASTRAM_STEPS = [
     ([], ["acc registered", "started *"]),
     # the desktop's Desk menu: the library, read once it is opened
     ([("wait", 6), ("click", 18, 8), ("click", 60, 64)], ["library 0", "index 5 guides"]),
-    (list("image"), ['search "image" 1']),
+    ([("type", "image")], ['search "image" 1']),
     ([RETURN], ["pictures 3 st-ram", "page %s Main" % IMAGES]),
 ]
 
