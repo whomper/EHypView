@@ -14,7 +14,10 @@ HOSTCHECK=$1
 HOSTFIXT=$2
 HDIR=$3
 TOP=$(cd "$(dirname "$0")/.." && pwd)
-OUT=$TOP/build/hatari-out
+# MACHINE: Hatari's options for the machine (by default a Falcon; the
+# Makefile runs an ST too, where a word read at an odd address faults)
+MACHINE=${MACHINE:---machine falcon --monitor vga --memsize 14}
+OUT=$TOP/build/hatari-out/$(echo "$MACHINE" | tr -c 'a-z0-9\n' '_')
 mkdir -p "$OUT"
 
 EMUTOS=${EMUTOS:-$(sh "$TOP/tests/emutos.sh")}
@@ -23,7 +26,7 @@ EMUTOS=${EMUTOS:-$(sh "$TOP/tests/emutos.sh")}
 
 rc=0
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout 300 hatari \
-	--tos "$EMUTOS" --machine falcon --monitor vga --memsize 14 \
+	--tos "$EMUTOS" $MACHINE \
 	--natfeats yes --fast-forward yes --sound off --confirm-quit no \
 	--statusbar no --log-level fatal \
 	--harddrive "$HDIR" --gemdos-drive C --auto 'C:\EHVCHECK.PRG' \
@@ -37,7 +40,7 @@ if [ ! -s "$OUT/atari.txt" ]; then
 	exit 1
 fi
 if diff -u "$OUT/host.txt" "$OUT/atari.txt"; then
-	echo "ok    Atari report matches host ($(wc -l < "$OUT/atari.txt") lines, Hatari exit $rc)"
+	echo "ok    Atari report matches host on $MACHINE ($(wc -l < "$OUT/atari.txt") lines, Hatari exit $rc)"
 else
 	echo "FAIL: Atari report differs from host"
 	exit 1

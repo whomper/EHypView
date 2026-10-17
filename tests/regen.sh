@@ -34,7 +34,7 @@ export HOME=${TMPDIR:-/tmp}/ehv-regen-home
 mkdir -p "$HOME/.hypview/guides"
 
 cd "$FIX/src"
-for src in basic other images big; do
+for src in basic other images big colour; do
 	"$HCP" -q -o "$FIX/$src.hyp" "$src.stg" >/dev/null
 	"$HCP" -q -c -o "$FIX/${src}_raw.hyp" "$src.stg" >/dev/null
 done

@@ -23,6 +23,7 @@ typedef struct {
 	const hyp_page *pg;           /* NULL: nothing laid out          */
 	long *line_y;                 /* top of text line l, page pixels */
 	long *gfx_y;                  /* top of the graphics of line l   */
+	long *gfx_at;                 /* top of graphic i                */
 	long height;                  /* below the last line             */
 	gimage *images;               /* one per page->gfx entry         */
 	unsigned short nimages;

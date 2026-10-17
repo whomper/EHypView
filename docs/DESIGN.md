@@ -60,14 +60,24 @@ interface**.
 5. **Faithful display.**
    - Graphics are placed on the character grid, so pages with graphics use a
      fixed-width layout.
-   - Colour images are shown at full depth on Falcon true colour, TT and
-     FireBee video; they are dithered only on monochrome screens.
+   - Pictures show in colour on any screen (src/gem/colour.c, pagedraw.c).
+     A HYP image has no palette: its pixel values are the standard TOS
+     colours in pen order. Each is drawn with the screen's nearest pen
+     (its palette read with vq_color), dithered between two pens (4 x 4
+     Bayer) where the screen has fewer than 16. In high and true colour the
+     pixels are written as the screen keeps them: the layout comes from
+     vq_scrninfo where the VDI has it (NVDI), else from VDI red, green and
+     blue drawn on one pixel and read back (TOS 4, EmuTOS). On mono
+     screens the hcp source's dither mask decides, or else brightness.
+     Where pixels are twice as tall as wide (ST medium), two rows make
+     one. Text colours (@{fg n}, @{bg n}) map the same way; text is never
+     drawn white unless it is white.
 
 ## Targets
 
 | Build | CPU | Systems |
 |---|---|---|
-| `atari` | 68020-60 | Falcon, TT; MiNT, MagiC, XaAES, or plain TOS |
+| `atari` | 68000 | ST, STE, TT, Falcon; MiNT, MagiC, XaAES, or plain TOS |
 | `firebee` | ColdFire 5475 | FireBee (FireTOS, MiNT) |
 
 - The main build is a regular GEM program (`EHYPVIEW.APP`).
@@ -103,7 +113,6 @@ atari/         plat_tos.c: the platform layer on GEMDOS (Dopendir/Fxattr
 common/        the AERA programs' shared code (git subtree of AERA-Atari):
                atari/ is the TOS runtime, tools/elf2tos.py the linker's
                last step; tools/sync-common.sh brings it up to date
-  (next) image.c   planar image -> VDI raster for any screen depth
   search.c     step-wise full-text search through every hypertext
 src/view/      without GEM, tested on the host:
   view.c       the viewer model: open, links, history back and forward,
@@ -117,7 +126,10 @@ src/gem/       the GEM program
                startup
   toolbar.c    the toolbar's buttons and layout (no AES calls; tested on
                the host)
-  pagedraw.c   a page laid out and drawn (the viewer's and a pop-up's)
+  pagedraw.c   a page laid out and drawn (the viewer's and a pop-up's),
+               its pictures converted for the screen
+  colour.c     standard colours, nearest pen, dither, true-colour pixels
+               (no AES calls; tested on the host)
   stmem.c      ST RAM for the pictures copied to the screen: a blitter
                can't read TT/Fast RAM (no AES calls; tested on the host)
   libwin.c     library window
@@ -210,8 +222,10 @@ Rules for `src/core`:
 - `make test`: unit tests plus golden tests on the host.
 - `make asan`: the same under AddressSanitizer and UBSan.
 - `make m68k-test`: the same suite compiled as big-endian 68020 code and run
-  under QEMU, to catch byte-order and alignment mistakes before they reach
-  real hardware.
+  under QEMU, to catch byte-order mistakes before they reach real hardware.
+  (QEMU's 68000 can't run Linux's libraries, which need a 68020; the 68000's
+  alignment faults are caught on an ST in Hatari: `make hatari-test` runs
+  the self-test on a 4 MB ST too.)
 - `make hatari-test` builds `EHVCHECK.PRG` for the Atari and runs it in
   Hatari as a Falcon with EmuTOS. The program scans a test folder, decodes
   every page and image, resolves links and saves, reloads and reuses the
@@ -250,6 +264,23 @@ Rules for `src/core`:
   button at a window's width, the least needed going first as it narrows),
   `tests/test_stmem.c` and `test_stmem_acc.c` the pictures' ST RAM (blocks
   apart and intact, joined when freed, the accessory's one block).
+- `make colour-test` opens `tests/fixtures/colour.hyp` (the 16 pens in
+  stripes, a picture with a dither mask, text in colours) in twelve modes:
+  the Falcon in 4, 16 and 256 colours, ST medium (set in Hatari's NVRAM)
+  and true colour (640 x 200 on RGB, and 320 x 480 on VGA), the TT in
+  medium, low and high, an ST of 1 MB in high and medium and of 4 MB in
+  medium (the accessory; the ST shows full colour as 0xEE). The viewer says where it drew each picture; every
+  pixel of them in the screenshot must be what the mode's palette shows:
+  the colour, the nearest the palette has, the Bayer dither with 4
+  colours, black or white by brightness or the mask on mono, two rows
+  made one in ST medium; and the text below must have its colours. In
+  320-wide modes the program won't run (guideline 5.2), so the accessory
+  is asked for the page by `ASKHELP.PRG`. Last, the front page of each
+  AERA program's help, from its latest release (guidelines 1.2, 4.3), on a
+  1 MB ST and a 1 MB Falcon (the program, and the accessory): both
+  pictures must load, and neither be blank. `tests/test_colour.c` checks
+  the colour rules on the host, also the vq_scrninfo layouts no emulator
+  offers (NVDI on a graphics card).
 - `tests/test_index.c` builds a real folder tree for the scanner and
   resolver tests: mixed-case names, a folder with spaces, a duplicate, a
   damaged file, a symbolic link loop, a REF beside a file and an ALL.REF

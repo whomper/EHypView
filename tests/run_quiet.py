@@ -40,7 +40,10 @@ MANY = os.path.join(HERE, "fixtures", "many")
 DISPLAY = ":98"
 LIMIT = 50
 CPU = os.environ.get("CPUCLOCK", "32")     # MHz
-GUIDES = 60
+# MACHINE: Hatari's options for another machine, e.g. an ST:
+# MACHINE="--machine st --monitor mono --memsize 4" CPUCLOCK=8
+MACHINE = os.environ.get("MACHINE", "--machine falcon --monitor vga --memsize 14").split()
+GUIDES = int(os.environ.get("QUIET_GUIDES", "60"))   # an ST: fewer (its accessory's heap is smaller)
 failed = 0
 
 
@@ -94,12 +97,12 @@ class Mouse:
         time.sleep(0.4)
 
 
-def boot(d, name, wanted, timeout=240):
+def boot(d, name, wanted, timeout=int(os.environ.get("QUIET_TIMEOUT", "240"))):
     """boot with drive C: = d, open the accessory, wait for the events
     wanted; the console's lines"""
     log_path = os.path.join(OUT, name + ".log")
     env = dict(os.environ, DISPLAY=DISPLAY, SDL_AUDIODRIVER="dummy")
-    args = ["hatari", "--tos", EMUTOS, "--machine", "falcon", "--monitor", "vga", "--memsize", "14",
+    args = ["hatari", "--tos", EMUTOS] + MACHINE + [
             "--natfeats", "yes", "--sound", "off", "--confirm-quit", "no", "--statusbar", "no",
             "--log-level", "fatal", "--harddrive", d, "--gemdos-drive", "C",
             "-w", "--borders", "no", "--zoom", "1", "--fast-forward", "no", "--cpuclock", CPU]
@@ -142,7 +145,7 @@ def help_boot(d, page):
     and the seconds from its request to the page (None: no page)"""
     log_path = os.path.join(OUT, "help.log")
     env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
-    args = ["hatari", "--tos", EMUTOS, "--machine", "falcon", "--monitor", "vga", "--memsize", "14",
+    args = ["hatari", "--tos", EMUTOS] + MACHINE + [
             "--natfeats", "yes", "--sound", "off", "--confirm-quit", "no", "--statusbar", "no",
             "--log-level", "fatal", "--harddrive", d, "--gemdos-drive", "C", "--fast-forward", "no",
             "--cpuclock", CPU, "--auto", r"C:\ASKHELP.PRG"]

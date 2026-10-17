@@ -42,7 +42,7 @@ HOST     = build/host
 CORE_OBJ = $(patsubst src/core/%.c,$(HOST)/%.o,$(CORE_SRC)) $(HOST)/view.o $(HOST)/library.o $(HOST)/fontpref.o $(HOST)/bookmark.o
 
 all: $(HOST)/hypdump $(HOST)/test_core $(HOST)/test_index $(HOST)/test_view $(HOST)/test_library \
-     $(HOST)/test_menu $(HOST)/test_toolbar $(HOST)/test_stmem $(HOST)/test_stmem_acc $(HOST)/test_fonts $(HOST)/test_bookmark
+     $(HOST)/test_menu $(HOST)/test_toolbar $(HOST)/test_colour $(HOST)/test_stmem $(HOST)/test_stmem_acc $(HOST)/test_fonts $(HOST)/test_bookmark
 
 $(HOST)/%.o: src/core/%.c src/core/*.h | $(HOST)
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -c -o $@ $<
@@ -83,6 +83,9 @@ $(HOST)/test_menu: tests/test_menu.c src/gem/menu.c src/gem/menu.h src/view/book
 $(HOST)/test_toolbar: tests/test_toolbar.c src/gem/toolbar.c src/gem/toolbar.h | $(HOST)
 	$(CC) -Isrc/gem $(WARN) $(CFLAGS) -o $@ tests/test_toolbar.c src/gem/toolbar.c
 
+$(HOST)/test_colour: tests/test_colour.c src/gem/colour.c src/gem/colour.h | $(HOST)
+	$(CC) -Isrc/gem $(WARN) $(CFLAGS) -o $@ tests/test_colour.c src/gem/colour.c
+
 # and the pictures' ST RAM, with malloc for GEMDOS (the program's, the accessory's)
 $(HOST)/test_stmem: tests/test_stmem.c src/gem/stmem.c src/gem/stmem.h | $(HOST)
 	$(CC) -Isrc/gem $(WARN) $(CFLAGS) -o $@ tests/test_stmem.c src/gem/stmem.c
@@ -99,6 +102,7 @@ test: all
 	$(HOST)/test_library tests/fixtures
 	$(HOST)/test_menu
 	$(HOST)/test_toolbar
+	$(HOST)/test_colour
 	$(HOST)/test_stmem
 	$(HOST)/test_stmem_acc
 	$(HOST)/test_fonts
@@ -113,7 +117,7 @@ asan:
 M68K_CC = m68k-linux-gnu-gcc
 M68K    = build/m68k-linux
 
-m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c src/gem/stmem.c common/ui/mbar.c tests/test_menu.c tests/test_toolbar.c tests/test_stmem.c tests/test_stmem_acc.c tests/test_fonts.c tests/test_bookmark.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
+m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c src/gem/colour.c src/gem/stmem.c common/ui/mbar.c tests/test_menu.c tests/test_toolbar.c tests/test_colour.c tests/test_stmem.c tests/test_stmem_acc.c tests/test_fonts.c tests/test_bookmark.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
 	mkdir -p $(M68K)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_core tests/test_core.c $(CORE_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_index tests/test_index.c $(CORE_SRC)
@@ -121,6 +125,7 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_library tests/test_library.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) -Isrc/gem -Isrc/view -Isrc/core -Icommon/ui -Icommon/atari $(WARN) -O2 -static -o $(M68K)/test_menu tests/test_menu.c src/gem/menu.c common/ui/mbar.c
 	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_toolbar tests/test_toolbar.c src/gem/toolbar.c
+	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_colour tests/test_colour.c src/gem/colour.c
 	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_stmem tests/test_stmem.c src/gem/stmem.c
 	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_stmem_acc tests/test_stmem_acc.c src/gem/stmem.c
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_fonts tests/test_fonts.c $(CORE_SRC) $(VIEW_SRC)
@@ -134,6 +139,7 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c
 	qemu-m68k-static $(M68K)/test_library tests/fixtures
 	qemu-m68k-static $(M68K)/test_menu
 	qemu-m68k-static $(M68K)/test_toolbar
+	qemu-m68k-static $(M68K)/test_colour
 	qemu-m68k-static $(M68K)/test_stmem
 	qemu-m68k-static $(M68K)/test_stmem_acc
 	qemu-m68k-static $(M68K)/test_fonts
@@ -151,7 +157,13 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c
 
 XCC      = m68k-linux-gnu-gcc
 GCCINC  := $(shell $(XCC) -print-file-name=include 2>/dev/null)
-XCPU    ?= -m68020-60
+# one build for every machine: ST, STE, TT and Falcon. A 68000 faults on
+# a word read at an odd address, and GCC 13 joins byte reads into one
+# (be32() in the HYP and REF readers, a struct's bytes) even with
+# -mstrict-align: its bswap pass, turned off here (as -fno-store-merging
+# does for stores; it says so in a note on every file).  Not with
+# -fno-expensive-optimizations: GCC 13 then miscompiles scan.c
+XCPU    ?= -m68000 -mstrict-align -fdisable-tree-bswap
 XFLAGS   = $(XCPU) $(XEXTRA) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin \
            -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-store-merging \
            -fno-asynchronous-unwind-tables -Wall -Wextra -Werror=implicit-function-declaration \
@@ -162,6 +174,8 @@ XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
 
 ATARI    = build/atari
 HATARI_DIR = build/hatari
+# the emulator tests' EmuTOS (tests/emutos.sh fetches it)
+EMUTOS     = build/emutos/etos512us-1.4.img
 RUNTIME  = crt0 nf libc tos plat_tos gem crash crash_s alert dialog bidi
 RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
@@ -212,7 +226,7 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
-           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o
+           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/colour.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
 # and the build never writes it. Every build shows it as it is in the
@@ -281,7 +295,7 @@ icons: tools/icon/make_icon.py tools/icon/make_rsc.py
 # drive EHYPVIEW.PRG in Hatari with the keyboard (screenshots in build/gui)
 gui-test: atari
 	sh tests/emutos.sh
-	python3 tests/run_gui.py $(HATARI_DIR) build/emutos/etos512us.img build/gui
+	python3 tests/run_gui.py $(HATARI_DIR) $(EMUTOS) build/gui
 
 # the accessory's quiet start (the AERA guidelines, 2.2), measured: a build
 # with -DAES_PROFILE=40 (common/atari/gem.c reports every stretch of 40 ms
@@ -292,12 +306,22 @@ quiet-test: atari
 	$(MAKE) ATARI=$(QUIET_DIR)/obj HATARI_DIR=$(QUIET_DIR) XEXTRA=-DAES_PROFILE=40 $(QUIET_DIR)/EHYPVIEW.ACC \
 		$(QUIET_DIR)/ASKHELP.PRG
 	sh tests/emutos.sh
-	python3 tests/run_quiet.py $(QUIET_DIR) build/emutos/etos512us.img build/quiet
+	python3 tests/run_quiet.py $(QUIET_DIR) $(EMUTOS) build/quiet
 
-# run EHVCHECK.PRG in Hatari (Falcon, EmuTOS) and compare with the host
+# pictures and text in colour in every screen mode: Falcon 4, 16, 256 and
+# true colour, ST medium, TT medium, low and high, checked pixel by pixel
+# (screenshots in build/colour)
+colour-test: atari $(HATARI_DIR)/ASKHELP.PRG
+	sh tests/emutos.sh
+	python3 tests/run_colour.py $(HATARI_DIR) $(EMUTOS) build/colour
+
+# run EHVCHECK.PRG in Hatari (a Falcon, then a 4 MB ST; EmuTOS) and compare
+# with the host
 hatari-test: atari $(HOST)/ehvcheck
 	$(call make_fixt,build/hostcheck)
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
+	MACHINE="--machine st --monitor mono --memsize 4" \
+		sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 
 # a release's files: each one in dist/, and all of them in
 # dist/EHYPVIEW-x.y.zip (the icons in icons/), for the release workflow
@@ -315,4 +339,4 @@ dist: atari
 clean:
 	rm -rf build binary dist
 
-.PHONY: icons all test asan m68k-test atari dist hatari-test gui-test quiet-test clean FORCE
+.PHONY: icons all test asan m68k-test atari dist hatari-test gui-test quiet-test colour-test clean FORCE

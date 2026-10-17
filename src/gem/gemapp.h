@@ -17,6 +17,7 @@
 /* ehypview.c */
 extern short ap_id, is_acc, quit_now;
 extern short vdi_h, cw, ch, planes, ncolors;  /* cw, ch: the text font's cell */
+extern short tall_pixels;                 /* twice as tall as wide (ST medium) */
 extern short sys_cw, sys_ch;              /* the system font's cell (menus, dialogs) */
 extern short desk_x, desk_y, desk_w, desk_h;
 extern ehv_index *idx;
