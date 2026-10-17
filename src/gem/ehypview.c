@@ -1140,7 +1140,11 @@ static void new_window(int follow)
 	v = viewer_new();
 	if (v == NULL)
 	{
-		alert(1, "[1][EHypView shows at most|six windows.|Close one first.][ OK ]");
+		char k[8];
+
+		log_event("alert", "six-windows", NULL);
+		sprintf(k, "%d", alert(1, "[1][EHypView shows at most|six windows.|Close one first.][ OK ]"));
+		log_event("alert-closed", "six-windows", k);
 		return;
 	}
 	graf_mouse(BUSYBEE, NULL);

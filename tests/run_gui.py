@@ -41,8 +41,13 @@ STEPS = [
     ([("ctrl", MINUS)], ["font System font 8"]),
     ([("ctrl", EQUALS)], ["font System font 16"]),
     ([("ctrl", EQUALS)], ["status No larger size"]),
+    # Esc and Undo cancel the font selector: the font stays (the guidelines, 3.5)
     ([("ctrl+shift", F)], ["dialog font"]),
-    ([LEFT, RETURN], ["font System font 8"]),          # 8 x 8, kept in EHYPVIEW.INF
+    ([LEFT, ESC], ["dialog-closed font cancel", "!font *"]),
+    ([("ctrl+shift", F)], ["dialog font"]),
+    ([LEFT, UNDO], ["dialog-closed font cancel", "!font *"]),
+    ([("ctrl+shift", F)], ["dialog font"]),
+    ([LEFT, RETURN], ["dialog-closed font ok", "font System font 8"]),   # 8 x 8, kept in EHYPVIEW.INF
     ([TAB], ["select 2"]),                             # first link
     ([RETURN], ["page %s Second" % BASIC]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
@@ -56,16 +61,33 @@ STEPS = [
     ([UNDO], ["page %s Start" % OTHER]),               # back
     # the library: 4 readable hypertexts (BROKEN.HYP is left out)
     ([("ctrl", L)], ["library 4"]),
-    (list("det"), ['search "det" 1']),                 # page names as you type
+    ([("type", "det")], ['search "det" 1']),                 # page names as you type
     ([RETURN], ["page %s Detail" % OTHER]),
     ([("ctrl", L)], ["library 4"]),
-    ([ESC], ['search "" 4']),
-    (list("beside"), ['search "beside" 0']),
+    # Esc clears no text (the guidelines, 3.5): the search is still "det",
+    # and Backspace takes it out a letter at a time
+    ([ESC], []),
+    ([BACKSPACE], ['search "de" *']),
+    ([BACKSPACE, BACKSPACE], ['search "" 4']),
+    ([("type", "beside")], ['search "beside" 0']),
     ([RETURN], ['fulltext-start "beside"', 'fulltext "beside" 1']),
     ([RETURN], ["page %s Main" % IMAGES]),             # the full-text hit
     ([("ctrl", I)], ["page %s Index" % IMAGES]),       # hcp made an index
     # several windows: the page in a new one; a bookmark of it
     ([("ctrl", N)], ["window new 2", "page %s Index" % IMAGES]),
+    # six at most; the alert that says so: Esc and Undo close it, no window more
+    ([("ctrl", N)], ["window new 3"]),
+    ([("ctrl", N)], ["window new 4"]),
+    ([("ctrl", N)], ["window new 5"]),
+    ([("ctrl", N)], ["window new 6"]),
+    ([("ctrl", N)], ["alert six-windows"]),
+    ([ESC], ["alert-closed six-windows 1", "!window new *"]),
+    ([("ctrl", N)], ["alert six-windows"]),
+    ([UNDO], ["alert-closed six-windows 1", "!window new *"]),
+    ([("ctrl", W)], ["closed viewer"]),
+    ([("ctrl", W)], ["closed viewer"]),
+    ([("ctrl", W)], ["closed viewer"]),
+    ([("ctrl", W)], ["closed viewer"]),
     ([("ctrl", D)], ["bookmark added *"]),
     ([("ctrl", D)], ["status This page is bookmarked already."]),
     ([("ctrl", W)], ["closed viewer"]),                # the first window stays
@@ -73,7 +95,8 @@ STEPS = [
     ([("ctrl", W)], ["closed viewer"]),
     ([("ctrl", W)], ["closed library"]),
     ([("ctrl", L)], ["library 4"]),
-    ([ESC], ['search "" 4']),                          # the search typed before, cleared:
+    ([BACKSPACE] * 6, ['search "" 4']),                # the search typed before, taken out:
+    ([ESC], []),                                       # Esc with none: nothing, the window stays
     ([RETURN], ["page %s Index" % IMAGES]),            # the bookmark, first in the library
     ([("ctrl", L)], ["library 4"]),
     ([DELETE], ["bookmark removed *"]),                # Delete removes it
@@ -85,10 +108,10 @@ STEPS = [
 # (and with the 8 x 8 font and a bookmark kept in EHYPVIEW.INF)
 LIBRARY_START = [
     ([], ["font System font 8", "library 0", "index 5 guides"]),
-    (list("zweite"), ['search "zweite" 1']),
+    ([("type", "zweite")], ['search "zweite" 1']),
     ([RETURN], ["page %s Second" % BASIC]),
     ([("ctrl", L)], ["library 4"]),
-    ([ESC], ['search "" 4']),
+    ([BACKSPACE] * 6, ['search "" 4']),                # "zweite", taken out
     ([RETURN], ["page %s Detail" % OTHER]),            # the bookmark, first in the library
     ([("ctrl", Q)], ["quit"]),
 ]
@@ -196,6 +219,11 @@ def accessory_smoke():
     return ok
 
 
+def absent(evs, expected):
+    """"!x": no event matching x among evs"""
+    return not any(matches(ev, expected[1:]) for ev in evs)
+
+
 def matches(ev, expected):
     if expected.endswith("*"):
         return ev.startswith(expected[:-1])
@@ -235,6 +263,22 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             time.sleep(0.2)
         return False
 
+    def type_text(text):
+        """into the library's search, a letter at a time: each waits for
+        the search it makes, and goes again if the emulator lost it"""
+        for i, ch in enumerate(text):
+            want = 'search "%s" *' % text[:i + 1]
+            for _ in range(3):
+                send("hatari-event keypress %s" % ch)
+                deadline = time.time() + 3
+                while time.time() < deadline:
+                    if any(matches(ev, want) for ev in events()[len(seen):]):
+                        break
+                    time.sleep(0.1)
+                else:
+                    continue                # not taken: once more
+                break
+
     ok = True
     try:
         for n, (keys, expect) in enumerate(steps):
@@ -249,6 +293,8 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
                     mouse.move(k[1], k[2])
                     mouse.xdo("click", "--repeat", "2", "--delay", "80", "1")
                     time.sleep(2)
+                elif isinstance(k, tuple) and k[0] == "type":
+                    type_text(k[1])
                 elif isinstance(k, tuple) and k[0] == "wait":
                     time.sleep(k[1])
                 elif isinstance(k, tuple) and k[0] == "hover":      # rest there
@@ -271,6 +317,15 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             if not expect:
                 time.sleep(1.0)
             for e in expect:
+                if e.startswith("!"):
+                    # nothing of the kind since the last event waited for
+                    time.sleep(1.5)
+                    if not absent(events()[len(seen):], e):
+                        print("FAIL  %s step %d: '%s' came" % (name, n, e[1:]))
+                        print("      events so far: %s" % events())
+                        ok = False
+                        break
+                    continue
                 if not wait_for(e):
                     print("FAIL  %s step %d: no '%s'" % (name, n, e))
                     print("      events so far: %s" % events())
@@ -356,8 +411,8 @@ MOUSE_STEPS = [
     ([("click", 320, 300)], []),                            # a click closes it
     ([tb(TB_LIBRARY)], ["toolbar library", "library 4"]),
     ([("wait", 1)], []),                                    # (a picture of it)
-    (list("sec"), ['search "sec" *']),
-    ([ESC], ['search "" 4']),
+    ([("type", "sec")], ['search "sec" *']),
+    ([BACKSPACE] * 3, ['search "" 4']),
     ([("ctrl", W)], ["closed library"]),
     # the page: links, the right button's menu, pop-ups
     ([("click", 120, 142)], ["page %s Second" % BASIC]),    # "to Second"
@@ -427,7 +482,7 @@ ACC_FASTRAM_STEPS = [
     ([], ["acc registered", "started *"]),
     # the desktop's Desk menu: the library, read once it is opened
     ([("wait", 6), ("click", 18, 8), ("click", 60, 64)], ["library 0", "index 5 guides"]),
-    (list("image"), ['search "image" 1']),
+    ([("type", "image")], ['search "image" 1']),
     ([RETURN], ["pictures 3 st-ram", "page %s Main" % IMAGES]),
 ]
 

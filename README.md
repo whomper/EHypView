@@ -151,9 +151,10 @@ page was asked for.
   hypertext in the background.
 - **Bookmarks** come first: all of them with an empty search, the ones whose title or page matches
   while typing.
-- **Keys:** Up/Down to choose, Return or a click to open (or to start the full-text search), Esc to
-  clear the search, Backspace to delete a letter, Delete to remove the bookmark chosen. ^V pastes into the search and ^X cuts it; ^C copies
-  the hypertext chosen.
+- **Keys:** Up/Down to choose, Return or a click to open (or to start the full-text search),
+  Backspace to delete a letter, Delete to remove the bookmark chosen. ^V pastes into the search and ^X
+  cuts it; ^C copies the hypertext chosen. Esc leaves the search as it is: it clears no text, in this
+  window or any dialog.
 
 ### Fonts
 
