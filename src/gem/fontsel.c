@@ -7,8 +7,8 @@
  * The font families are in a list on the left, the sizes of the chosen
  * one next to it, what kind of font it is below, and a sample.  The
  * system font comes in two sizes (8x8 and 8x16); with a GDOS (NVDI,
- * SpeedoGDOS, FontGDOS...) its fonts are listed too.  Hypertexts are laid
- * out in character cells, so only monospaced fonts can be chosen.  Each
+ * SpeedoGDOS, FontGDOS...) its monospaced fonts are listed too:
+ * hypertexts are laid out in character cells.  Each
  * font is measured once and the answer kept in EHYPVIEW.FNT, so the
  * selector opens quickly the next time even with hundreds of fonts.
  *
@@ -177,9 +177,20 @@ static int measure_mono(const FAM *f)
 		vqt_width(vdi_h, 'i') == vqt_width(vdi_h, 'm');
 }
 
+/* only the monospaced fonts, as ECal's and EMail's selectors list */
+static void keep_monospaced(void)
+{
+	short i, n = 1;
+
+	for (i = 1; i < nfam; i++)
+		if (fam[i].mono)
+			fam[n++] = fam[i];
+	nfam = n;
+}
+
 /*
- * Only monospaced fonts can be chosen.  Measuring means loading each
- * font, slow with hundreds of vector fonts: the answers are kept in
+ * Only monospaced fonts are listed.  Measuring means loading each font,
+ * slow with hundreds of vector fonts: the answers are kept in
  * EHYPVIEW.FNT ("1 Courier 10 Pitch", "0 Swiss 721") and only new fonts
  * are measured.
  */
@@ -213,7 +224,10 @@ static void measure_all(void)
 	}
 	free(known);
 	if (todo == 0)
+	{
+		keep_monospaced();
 		return;
+	}
 	busy(1);
 	for (i = 1; i < nfam; i++)
 		if (fam[i].mono < 0)
@@ -227,6 +241,7 @@ static void measure_all(void)
 		pf_save(fnt_path, out, len);
 		free(out);
 	}
+	keep_monospaced();
 	set_font(cur_id, cur_pt);
 }
 

@@ -164,7 +164,7 @@ page was asked for.
 **View > Font...** (⇧^F) chooses the font for the text, with the same font selector as ECal and EMail.
 You get the system font in 8×8 or 8×16 and, with NVDI, SpeedoGDOS or another GDOS, every monospaced GDOS
 font (bitmap, Speedo, TrueType, Type 1). Hypertexts are laid out in character cells, so proportional
-fonts are shown but can't be picked. ^+ and ^- change the size. A font dropped on a window from a font
+fonts aren't listed. ^+ and ^- change the size. A font dropped on a window from a font
 selector (the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and the list of which
 fonts are monospaced in `EHYPVIEW.FNT`.
 
