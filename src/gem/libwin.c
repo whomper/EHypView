@@ -116,7 +116,7 @@ static void update_info(void)
 	if (lib_h <= 0)
 		return;
 	if (scanning())
-		snprintf(lib_info, sizeof(lib_info), " Looking for hypertexts... %lu found", scan_found());
+		snprintf(lib_info, sizeof(lib_info), " %s", index_busy());
 	else if (lib.fts != NULL)
 		snprintf(lib_info, sizeof(lib_info), " %s", lib.note);
 	else if (lib.query[0] != '\0')
@@ -788,7 +788,7 @@ int libwin_idle(void)
 	if (!lib_ready || lib.fts == NULL || ehv_fts_done(lib.fts))
 		return 0;
 	ehv_fts_hits(lib.fts, &before);
-	r = lib_fulltext_step(&lib, 4);
+	r = lib_fulltext_step(&lib, 1);       /* a page: the caller goes on for a slice */
 	ehv_fts_hits(lib.fts, &after);
 	if (r != 0 || after != before)
 	{

@@ -27,6 +27,8 @@
 #include "inf.h"
 #include "charset.h"
 #include "scan.h"
+#include "libjob.h"
+#include "resolve.h"
 #include "view.h"
 #include "bookmark.h"
 #include "gemapp.h"
@@ -44,6 +46,7 @@
 #include "clip.h"
 #include "dd.h"
 #include "twin.h"
+#include "bgwork.h"
 #include "version.h"
 
 #define VA_START   0x4711
@@ -90,9 +93,21 @@ static ehv_bookmarks bookmarks;        /* EHYPVIEW.INF's BOOKMARKn */
 static unsigned int bm_written;        /* how many BOOKMARKn lines it has */
 static short menu_scr_w, menu_scr_h;   /* for building the menu bar again */
 
-static ehv_scan *scanner;
-static ref_db *allref;
+/*
+ * The library's index: read from EHYPVIEW.IDX, then checked against the
+ * folders, all in short steps between events (libjob.h, bgwork.h; the
+ * AERA guidelines, 2.2).  The accessory starts on it when it is first
+ * opened or asked for a page, or as START= in EHYPVIEW.INF says.
+ */
+static ehv_libjob *job;
+static int job_over;                  /* done for this run (or failed) */
+static int woken;                     /* opened, or asked for a page, once */
+static int index_news;                /* the windows to show the index anew */
+static long start_when = BG_OPENED;   /* START=: EHypView's default */
 static char cache_path[200];
+static void wake(void);
+static int needs_index(const char *args);
+static void job_wait_index(void);
 static char start_dir[160];           /* where the program started: CRASH.LOG */
 static char home_dir[160];            /* FOLDER=: EHYPVIEW.IDX and .FNT */
 static char settings_path[40];        /* X:\EHYPVIEW.INF, the boot drive's root */
@@ -621,15 +636,12 @@ static void restore(void)
 
 static void update_info(void)
 {
-	const ehv_scan_status *st = scanner ? ehv_scan_status_get(scanner) : NULL;
-
 	if (cur->h <= 0)
 		return;
 	if (cur->view.status[0] != '\0')
 		snprintf(cur->info, sizeof(cur->info), " %s", cur->view.status);
-	else if (st != NULL)
-		snprintf(cur->info, sizeof(cur->info), " Looking for hypertexts... %lu found",
-			st->opened + st->reused);
+	else if (scanning())
+		snprintf(cur->info, sizeof(cur->info), " %s", index_busy());
 	else if (cur->view.page != NULL)
 		snprintf(cur->info, sizeof(cur->info), " %s", cur->view.doc->path);
 	else
@@ -2050,6 +2062,9 @@ static void click(short mx, short my, short button, short kstate)
    the page */
 static void show_request(const char *args)
 {
+	wake();
+	if (needs_index(args))
+		job_wait_index();
 	if ((args == NULL || args[0] == '\0') && cur->view.page == NULL)
 	{
 		libwin_open();             /* nothing asked, nothing shown: the library */
@@ -2181,7 +2196,9 @@ static void viewer_message(short *msg)
 		}
 		if (msg[4] == menu_id && screen_check("EHypView", ehv_ui_scr_w))	/* not in ST low */
 		{
+			aes_profile_tag("opening");
 			av_init("EHYPVIEW|ST-GUIDE");	/* a desktop started since */
+			wake();
 			font_check();
 			bookmarks_load();
 			pick_current();
@@ -2263,7 +2280,10 @@ static void viewer_message(short *msg)
 			{
 			case DD_FILES:
 				if (av_arg(d.data, path, sizeof(path)))
+				{
+					wake();
 					viewer_show(path, NULL, 0);
+				}
 				break;
 			case DD_NONE:
 				{
@@ -2421,10 +2441,16 @@ static void find_home(void)
 		if (f == NULL || atari_casecmp(f, home_dir) != 0)
 			settings_put("FOLDER", home_dir, "where EHypView keeps its files (EHYPVIEW.IDX, the library; "
 				     "EHYPVIEW.FNT, the fonts measured): the program writes the folder it was started from");
+		if (inf == NULL || inf_get(inf, "START") == NULL)
+			settings_put("START", "opened", "when the accessory looks through the library: opened (when "
+				     "first opened or asked for a page), now (at boot), or seconds after boot");
 		inf_free(inf);
 		return;
 	}
 	inf = inf_load(settings_path, NULL);
+	f = inf != NULL ? inf_get(inf, "START") : NULL;
+	if (f != NULL)
+		start_when = bg_parse(f);
 	f = inf != NULL ? inf_get(inf, "FOLDER") : NULL;
 	if (f != NULL && f[0] != '\0' && strlen(f) < sizeof(home_dir) &&
 	    (strlen(f) <= 3 || (pf_stat(f, &st) == 0 && st.is_dir)))
@@ -2443,86 +2469,171 @@ static inf_file *read_inf(void)
 	return inf_load(path, NULL);
 }
 
-static void start_index(const inf_file *inf)
+/* the job starts: the folders to look in, from ST-GUIDE.INF */
+static void job_begin(void)
 {
+	inf_file *inf;
 	char **roots;
-	unsigned int n = ehv_default_roots(inf, &roots);
-	const char *ref = inf ? inf_get(inf, "REF") : NULL;
+	unsigned int n;
 	char *p;
 
+	if (job != NULL || job_over)
+		return;
+	inf = read_inf();
+	n = ehv_default_roots(inf, &roots);
 	p = fs_join(home_dir, "EHYPVIEW.IDX");
 	if (p != NULL)
 	{
 		strncpy(cache_path, p, sizeof(cache_path) - 1);
 		free(p);
 	}
-	if (ref != NULL)
-		allref = ref_open(ref, NULL);
-	idx = ehv_index_load(cache_path);
-	set_index_everywhere();
-	scanner = ehv_scan_begin((const char *const *) roots, n, idx);
+	job = ehv_libjob_begin(cache_path, (const char *const *) roots, n, inf ? inf_get(inf, "REF") : NULL);
 	inf_free_list(roots, n);
+	inf_free(inf);
+	if (job == NULL)
+		job_over = 1;
+	aes_profile_tag("index");
+}
+
+static void job_end(const char *how)
+{
+	ehv_libjob_free(job);
+	job = NULL;
+	job_over = 1;
+	log_event("index", how, NULL);
+	index_news = 1;
+}
+
+/* one short step of the job */
+static void job_step(void)
+{
+	int r;
+
+	if (job == NULL)
+		return;
+#ifdef AES_PROFILE
+	{
+		static const char *const tag[] = { "idx-load", "idx-scan", "idx-sort", "idx-save", "idx-done" };
+
+		aes_profile_tag(tag[ehv_libjob_phase(job)]);
+	}
+#endif
+	r = ehv_libjob_step(job);
+	if (r == EHV_JOB_INDEX)
+	{
+		char num[16];
+
+		/* the one before (if any) isn't read by the job any more */
+		ehv_index_free(idx);
+		idx = ehv_libjob_take(job);
+		set_index_everywhere();
+		sprintf(num, "%lu", idx->nguides);
+		log_event("index", num, "guides");
+		index_news = 1;
+	} else if (r == EHV_JOB_DONE)
+	{
+		job_end(ehv_libjob_unchanged(job) ? "unchanged" : ehv_libjob_saved(job) ? "saved" : "not saved");
+	} else if (r == EHV_JOB_FAILED)
+	{
+		job_end("failed");
+	} else
+	{
+		/* progress, now and then */
+		static unsigned long last;
+		unsigned long n = scan_found();
+
+		if (n != last && n % 8 == 0)
+		{
+			last = n;
+			index_news = 1;
+		}
+	}
+}
+
+/* there is work for the job now or later (bgwork.h decides when) */
+static int job_pending(void)
+{
+	return job != NULL || (!job_over && (woken || start_when != BG_OPENED));
+}
+
+/* a request that can't be answered without the index (a page name,
+   *:\X.HYP): the index read now, with the busy bee, since the user
+   asked; the rest goes on in the background */
+static void job_wait_index(void)
+{
+	if (idx != NULL)
+		return;
+	job_begin();
+	if (job == NULL)
+		return;
+	graf_mouse(BUSYBEE, NULL);
+	while (job != NULL && idx == NULL)
+		job_step();
+	aes_profile_tag("asked");          /* not background work: the user waits */
+	graf_mouse(ARROW, NULL);
+}
+
+/* whether a request needs the index: not when it names a file that is
+   there (as the AERA programs' Help keys do) */
+static int needs_index(const char *args)
+{
+	char **argv;
+	unsigned int argc;
+	int r = 0;
+
+	if (args == NULL || args[0] == '\0')
+		return 0;
+	argc = ehv_split_args(args, &argv);
+	if (argc > 0)
+	{
+		const char *f = argv[0];
+		pf_info st;
+
+		r = !(fs_has_ext(f, ".hyp") && !(f[0] == '*' && f[1] == ':') && fs_has_dir(f) &&
+		      pf_stat(f, &st) == 0 && !st.is_dir);
+	}
+	inf_free_list(argv, argc);
+	return r;
+}
+
+/*
+ * Opened, or asked for a page, the first time: the font chosen (a GDOS
+ * font loads now), and the index may be read (START=opened).
+ */
+static void wake(void)
+{
+	if (woken)
+		return;
+	woken = 1;
+	bg_opened();
+	font_wake();
+	log_font();
 }
 
 int scanning(void)
 {
-	return scanner != NULL;
+	return job != NULL && (idx == NULL || ehv_libjob_phase(job) == EHV_JOB_SCANNING);
 }
 
 unsigned long scan_found(void)
 {
-	const ehv_scan_status *st;
+	const ehv_scan_status *st = job != NULL ? ehv_libjob_scan_status(job) : NULL;
 
-	if (scanner == NULL)
-		return 0;
-	st = ehv_scan_status_get(scanner);
-	return st->opened + st->reused;
+	return st != NULL ? st->opened + st->reused : 0;
 }
 
-/* a little more scanning; called when there is nothing else to do */
-static void scan_some(void)
+const char *index_busy(void)
 {
-	int r;
+	static char s[48];
 
-	if (scanner == NULL)
-		return;
-	r = ehv_scan_step(scanner, 4);
-	if (r == 0)
-	{
-		static unsigned long last;
-		const ehv_scan_status *st = ehv_scan_status_get(scanner);
-
-		if (st->opened + st->reused != last)
-		{
-			last = st->opened + st->reused;
-			info_everywhere();
-			libwin_index_changed();
-		}
-		return;
-	}
-	if (r == 1)
-	{
-		ehv_index *fresh = ehv_scan_finish(scanner, allref);
-
-		scanner = NULL;
-		if (fresh != NULL)
-		{
-			char num[16];
-
-			ehv_index_free(idx);
-			idx = fresh;
-			set_index_everywhere();
-			ehv_index_save(idx, cache_path);
-			sprintf(num, "%lu", idx->nguides);
-			log_event("index", num, "guides");
-		}
-	} else
-	{
-		ehv_scan_abort(scanner);
-		scanner = NULL;
-	}
-	info_everywhere();
-	libwin_index_changed();
+	if (job == NULL)
+		return "";
+	if (ehv_libjob_phase(job) == EHV_JOB_LOADING)
+		return "Reading the library...";
+	if (ehv_libjob_phase(job) != EHV_JOB_SCANNING)
+		return "Sorting the library...";
+	snprintf(s, sizeof(s), "Looking for hypertexts... %lu found", scan_found());
+	return s;
 }
 
 /* ---------------------------------------------------------------- */
@@ -2545,21 +2656,26 @@ static const char *command_line(void)
 static void acc_heap(void)
 {
 	long st = (long) Mxalloc(-1L, 0), avail, want;
+	long tt = (long) Mxalloc(-1L, 1);      /* Fast RAM; -32: TOS 1.x, none */
 	void *p;
 
-	/* first the pictures' ST RAM (stmem.h): an eighth of what is free
-	   there, 32 to 256 KB; TOS 1.x has no Mxalloc, and only ST RAM */
+	/* first the pictures' ST RAM (stmem.h): a sixteenth of what is free
+	   there, 64 to 128 KB (a page's pictures; the rest is the screen's
+	   and the programs'); TOS 1.x has no Mxalloc, and only ST RAM */
 	if (st == -32)
 		st = (long) Malloc(-1L);
-	st /= 8;
-	if (st > 256L * 1024)
-		st = 256L * 1024;
-	if (st < 32L * 1024)
-		st = 32L * 1024;
+	st /= 16;
+	if (st > 128L * 1024)
+		st = 128L * 1024;
+	if (st < 64L * 1024)
+		st = 64L * 1024;
 	stmem_reserve(st);
 
+	/* then the heap: a third of the largest block, or a quarter when
+	   there is no Fast RAM (it all comes out of ST RAM then), at most
+	   2 MB */
 	avail = (long) Malloc(-1L);
-	want = avail / 3;
+	want = tt > 0 ? avail / 3 : avail / 4;
 
 	if (want > 2L * 1024 * 1024)
 		want = 2L * 1024 * 1024;
@@ -2610,6 +2726,7 @@ int main(void)
 	AEVENT ev;
 	inf_file *inf;
 	int fts_busy = 0;
+	unsigned long t0 = tos_hz200();       /* not tos_ms(): it measures the clock first */
 
 	is_acc = _is_acc;
 	ap_id = appl_init();
@@ -2659,8 +2776,11 @@ int main(void)
 	av_init("EHYPVIEW|ST-GUIDE");
 
 	find_home();
-	font_init(home_dir, settings_path);
-	log_font();
+	/* the accessory: nothing more before its first event call (the AERA
+	   guidelines, 2.2): no GDOS fonts, no index, until it is opened */
+	font_init(home_dir, settings_path, is_acc);
+	if (!is_acc)
+		log_font();
 	{
 		int i;
 
@@ -2669,12 +2789,18 @@ int main(void)
 	}
 	viewers[0].used = 1;
 	view_init(&cur->view, NULL);
-	inf = read_inf();
-	start_index(inf);
+	bg_init(is_acc ? start_when : BG_NOW);
+	inf = NULL;
+	if (!is_acc)
+	{
+		woken = 1;                     /* the user started it */
+		bg_opened();
+		inf = read_inf();
+		bookmarks_load();
+	}
 
 	menu_scr_w = screen_w;
 	menu_scr_h = screen_h;
-	bookmarks_load();
 	if (!is_acc && menu_build(&menu, &bookmarks, sys_cw, sys_ch, screen_w, screen_h) == 0)
 	{
 		memset(menu_on, -1, sizeof(menu_on));
@@ -2689,6 +2815,8 @@ int main(void)
 
 		if (def == NULL && inf != NULL)
 			def = inf_get(inf, "HYPTOP");
+		if (needs_index(args[0] != '\0' ? args : def))
+			job_wait_index();
 		graf_mouse(BUSYBEE, NULL);
 		if (args[0] != '\0')
 			view_request(&cur->view, args);
@@ -2712,21 +2840,42 @@ int main(void)
 	inf_free(inf);
 	crash_offer("EHypView", "next to EHYPVIEW.PRG");
 
+	{
+		char num[16];
+
+		/* the time to the first event call, for the tests */
+		sprintf(num, "%lu", (tos_hz200() - t0) * 5);
+		log_event("started", num, "ms");
+	}
+	aes_profile_tag("idle");
 	while (!quit_now)
 	{
 		short flags = MU_MESAG, which;
-		/* the accessory leaves the library's index to EHYPVIEW.PRG
-		   while it runs */
-		int paused = is_acc && scanner != NULL && twin_prg() >= 0;
-		int busy = (scanner != NULL && !paused) || fts_busy;
+		int pending = job_pending();
+		/* opened and waiting for the library: read it on, whatever the
+		   mouse does (the user waits for it) */
+		int urgent = job != NULL && idx == NULL && woken;
 		/* a viewer in front: the mouse is looked at for tooltips */
 		int hover = viewer_of(top_window()) != NULL;
+		unsigned long t;
 
 		if (viewer_windows() > 0 || libwin_handle() > 0 || has_menu)
 			flags |= MU_KEYBD | MU_BUTTON;
-		if (busy || paused || hover)
+		/* 50 ms while work waits (bgwork.h), 200 for the tooltips, else
+		   a second; the full-text search asked for goes on at once in
+		   the program, every 50 ms in the accessory (no timer of 0) */
+		t = bg_timer(pending, hover ? 200 : 1000);
+		if (urgent || index_news || (fts_busy && is_acc))
+			t = BG_PACE;
+		else if (fts_busy)
+			t = 0;
+		if (pending || hover || fts_busy || index_news)
 			flags |= MU_TIMER;
-		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, busy ? 0 : hover ? 200 : 1000, msg, &ev);
+		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, t, msg, &ev);
+		/* what holds the machine until the next event call, for the
+		   AESGAP lines of an -DAES_PROFILE build */
+		aes_profile_tag(which & (MU_MESAG | MU_KEYBD | MU_BUTTON) ? "event" : "idle");
+		bg_tick();
 		if ((which & MU_MESAG) && !libwin_message(msg))
 			message(msg);
 		if ((which & MU_KEYBD) && crash_test(KEY_SCAN(ev.kreturn)))
@@ -2766,14 +2915,36 @@ int main(void)
 			else if (h == libwin_handle() && h > 0)
 				libwin_click(ev.mx, ev.my);
 		}
-		if (which & MU_TIMER)
+		/* the index, in a slice (bgwork.h): not while the user works, nor
+		   while EHYPVIEW.PRG runs (it has the index to itself) */
+		if (index_news && which == MU_TIMER)
 		{
-			if (!paused)
-				scan_some();
-			fts_busy = libwin_idle();
+			/* the windows show the new index (or progress): a turn of
+			   its own, the job's slice in the next */
+			aes_profile_tag("drawing");
+			index_news = 0;
+			info_everywhere();
+			libwin_index_changed();
+		} else if (which == MU_TIMER && job_pending() && (bg_may_work() || (urgent && twin_prg() < 0)))
+		{
+			/* a slice (bgwork.h), ending a little early: the step that
+			   starts last may take a while on a 16 MHz machine, and one
+			   that opens a file or reads a folder begins a slice */
+			unsigned long t1 = tos_ms();
+
+			job_begin();
+			bg_begin();
+			do
+				job_step();
+			while (job != NULL && bg_more() && tos_ms() - t1 < 35 && !ehv_libjob_next_is_big(job));
 		}
-		else if (fts_busy == 0)
-			fts_busy = libwin_idle();
+		if ((which & MU_TIMER) || fts_busy == 0)
+		{
+			bg_begin();
+			do
+				fts_busy = libwin_idle();
+			while (fts_busy && bg_more());
+		}
 		if (which & (MU_MESAG | MU_KEYBD | MU_BUTTON))
 			update_menu();
 		tip_check();
@@ -2808,9 +2979,8 @@ int main(void)
 				viewer_drop(&viewers[i]);
 	}
 	bm_free(&bookmarks);
-	ehv_scan_abort(scanner);
+	ehv_libjob_free(job);
 	ehv_index_free(idx);
-	ref_close(allref);
 	crash_remove();
 	av_exit();
 	v_clsvwk(vdi_h);

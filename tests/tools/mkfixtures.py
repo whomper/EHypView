@@ -185,8 +185,29 @@ def big_text():
             + body + '\n@endnode\n\n@node "Other"\nOther page.\n@endnode\n')
 
 
+def many_text():
+    """one guide of a large library: 112 pages, each with a keyword, and an
+    alias on every fifth (tests/run_quiet.py copies it 60 times: 6,720
+    pages, 14,880 names)"""
+    w = ("alpha beta gamma delta window menu dialog resource object tree string icon "
+         "desk file path drive memory screen font colour").split()
+    name = lambda p: "Main" if p == 0 else "%s_%s_%d" % (w[p % len(w)], w[(p * 7) % len(w)], p)
+    out = ['@if VERSION >= 6', '@os Atari', '@charset atarist', '@inputenc atarist', '@endif',
+           '@database "EHypView many pages"', '@subject "Test/Many"', '@options "+z -s"', '@width 75', '']
+    for p in range(112):
+        out += ['@node "%s"' % name(p), '@keywords "kw_%d"' % p]
+        if p % 5 == 0:
+            out.append('@alias "Alias %d"' % p)
+        out += [" ".join(w[(p + k + j) % len(w)] for j in range(10)) for k in range(6)]
+        if p + 1 < 112:
+            out.append('See also @{"the next page" link "%s"}' % name(p + 1))
+        out += ['@endnode', '']
+    return "\n".join(out)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    write_stg("many.stg", many_text())
     write_stg("basic.stg", BASIC)
     write_stg("other.stg", OTHER)
     write_stg("images.stg", IMAGES)

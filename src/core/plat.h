@@ -60,4 +60,7 @@ char *pf_load(const char *path, unsigned long *len);
    then renamed over it; pf_load finishes a save cut short in between */
 int pf_save(const char *path, const void *data, unsigned long len);
 
+/* where pf_save() writes first, before renaming (malloc'ed): EHYPVIEW.IN$ */
+char *pf_tmp_name(const char *path);
+
 #endif

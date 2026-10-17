@@ -70,6 +70,11 @@ typedef struct {
 	/* ALL.REF modules whose hypertext was not found */
 	const char **orphans;
 	unsigned long norphans;
+
+	/* ALL.REF as merged, to see whether it changed (NULL: none) */
+	const char *allref_path;
+	unsigned long allref_size, allref_mtime;
+	int old_file;             /* loaded from a version 1 cache file */
 } ehv_index;
 
 ehv_index *ehv_index_new(void);
@@ -79,12 +84,26 @@ void ehv_index_free(ehv_index *idx);
 int ehv_index_finish(ehv_index *idx);
 
 /*
+ * The same in steps, for a program that must answer events meanwhile
+ * (the AERA guidelines, 2.2): each unit of budget is a few hundred
+ * moves.  1 = done, 0 = more to do, -1 = out of memory (the tables are
+ * then incomplete: finish again).  Free with ehv_index_finish_abort().
+ */
+typedef struct ehv_finish ehv_finish;
+ehv_finish *ehv_index_finish_begin(ehv_index *idx);
+int ehv_index_finish_some(ehv_finish *f, unsigned int budget);
+void ehv_index_finish_abort(ehv_finish *f);
+
+/*
  * Merge aliases and labels from ALL.REF (or any REF file) into guides
  * that have no .REF file of their own.  Modules naming a hypertext that
  * is not in the index are listed in idx->orphans.  Call before
  * ehv_index_finish().
  */
 int ehv_index_merge_ref(ehv_index *idx, const ref_db *db);
+
+/* the same, `budget` modules at a time from *next: 1 = done, 0 = more */
+int ehv_index_merge_ref_some(ehv_index *idx, const ref_db *db, unsigned long *next, unsigned int budget);
 
 /* guide with exactly this path, or -1 */
 long ehv_index_find_path(const ehv_index *idx, const char *path);
@@ -123,13 +142,30 @@ unsigned long ehv_index_suggest_guides(const ehv_index *idx, const char *file,
 unsigned int ehv_similarity(const char *a, const char *b, unsigned int limit);
 
 /*
- * Cache file.  Save writes "path.tmp" and renames it.  Load returns NULL
- * if the file is missing, damaged or from another version - the caller
- * then simply scans.
+ * Cache file.  Save writes pf_tmp_name(path) and renames it.  Load
+ * returns NULL if the file is missing, damaged or from another version -
+ * the caller then simply scans.  Version 2 keeps the sorted tables, so a
+ * load sorts nothing; a version 1 file is loaded and sorted (old_file).
  */
-#define EHV_CACHE_VERSION 1
+#define EHV_CACHE_VERSION 2
 int ehv_index_save(const ehv_index *idx, const char *path);
 ehv_index *ehv_index_load(const char *path);
+
+/*
+ * Both in steps (a unit of budget: 16 KB of the file, or a few lines,
+ * guides or table lines): 1 = done, 0 = more, -1 = failed.  The index
+ * saved must stay as it is until the saver is done or aborted.
+ */
+typedef struct ehv_saver ehv_saver;
+ehv_saver *ehv_index_save_begin(const ehv_index *idx, const char *path);
+int ehv_index_save_some(ehv_saver *v, unsigned int budget);
+void ehv_index_save_abort(ehv_saver *v);
+
+typedef struct ehv_loader ehv_loader;
+ehv_loader *ehv_index_load_begin(const char *path);    /* NULL: no file */
+int ehv_index_load_some(ehv_loader *l, unsigned int budget);
+ehv_index *ehv_index_load_take(ehv_loader *l);          /* after 1; frees l */
+void ehv_index_load_abort(ehv_loader *l);
 
 /* --- building (used by the scanner and the cache loader) ----------- */
 
@@ -137,6 +173,10 @@ ehv_index *ehv_index_load(const char *path);
 long ehv_index_add_guide(ehv_index *idx, const ehv_guide *g);
 int ehv_index_add_sym(ehv_index *idx, unsigned long guide, unsigned char kind,
                       unsigned short line, const char *name, const char *node, int from_ref);
+
+/* room for this many guides and symbols, so that adding them copies
+   nothing (-1: out of memory; the index is as it was) */
+int ehv_index_reserve(ehv_index *idx, unsigned long nguides, unsigned long nsyms);
 
 /* copy a guide with its symbols from another index */
 long ehv_index_copy_guide(ehv_index *idx, const ehv_index *from, unsigned long g);

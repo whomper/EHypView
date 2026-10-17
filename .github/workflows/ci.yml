@@ -37,6 +37,8 @@ jobs:
         run: make hatari-test
       - name: Drive the viewer in Hatari with the keyboard and mouse
         run: make gui-test
+      - name: The accessory's quiet start, measured in Hatari
+        run: make quiet-test
       - name: The build changed no tracked file
         run: |
           git status --porcelain

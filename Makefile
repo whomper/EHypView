@@ -13,6 +13,8 @@
 #                   its report with the host build's (needs hatari)
 #   make gui-test   drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
 #                   (needs Xvfb and xdotool for the mouse)
+#   make quiet-test the accessory's start and indexing measured in Hatari:
+#                   no stretch over 50 ms between event calls
 #   make icons      draw the icon again: src/gem/icon*.h, docs/icon*.png and
 #                   icons/EHYPVIEW.RSC (needs python3-pil for the PNGs)
 #   make dist       a release's files in dist/: each file, and EHYPVIEW-x.y.zip
@@ -32,7 +34,7 @@ XCFLAGS  = -O2 -fomit-frame-pointer
 CORE_PORT = src/core/lh5.c src/core/hypfile.c src/core/page.c src/core/charset.c \
             src/core/ref.c src/core/inf.c src/core/pool.c src/core/fsys.c \
             src/core/index.c src/core/scan.c src/core/resolve.c src/core/plat.c \
-            src/core/search.c
+            src/core/search.c src/core/libjob.c
 CORE_SRC  = $(CORE_PORT) src/core/plat_posix.c
 VIEW_SRC  = src/view/view.c src/view/library.c src/view/fontpref.c src/view/bookmark.c
 
@@ -150,7 +152,7 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c
 XCC      = m68k-linux-gnu-gcc
 GCCINC  := $(shell $(XCC) -print-file-name=include 2>/dev/null)
 XCPU    ?= -m68020-60
-XFLAGS   = $(XCPU) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin \
+XFLAGS   = $(XCPU) $(XEXTRA) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin \
            -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-store-merging \
            -fno-asynchronous-unwind-tables -Wall -Wextra -Werror=implicit-function-declaration \
            -DEHV_TOS -nostdinc -isystem $(GCCINC) -Icommon/atari/include -Icommon/atari -Isrc/core \
@@ -196,13 +198,21 @@ $(ATARI)/ehvcheck.o: tests/ehvcheck.c $(XHDRS) | $(ATARI)
 $(ATARI):
 	mkdir -p $@
 
+$(ATARI)/askhelp.o: tests/askhelp.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -c -o $@ $<
+$(ATARI)/askhelp.elf: $(RT_OBJ) $(ATARI)/askhelp.o common/atari/link.ld
+	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(ATARI)/askhelp.o -lgcc
+$(HATARI_DIR)/ASKHELP.PRG: $(ATARI)/askhelp.elf common/tools/elf2tos.py
+	mkdir -p $(HATARI_DIR)
+	python3 common/tools/elf2tos.py $< $@
+
 $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
-           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o
+           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
 # and the build never writes it. Every build shows it as it is in the
@@ -273,6 +283,17 @@ gui-test: atari
 	sh tests/emutos.sh
 	python3 tests/run_gui.py $(HATARI_DIR) build/emutos/etos512us.img build/gui
 
+# the accessory's quiet start (the AERA guidelines, 2.2), measured: a build
+# with -DAES_PROFILE=40 (common/atari/gem.c reports every stretch of 40 ms
+# or more between event calls) booted with a library of 60 hypertexts,
+# 6,720 pages (needs hatari, Xvfb and xdotool)
+QUIET_DIR = build/aprof
+quiet-test: atari
+	$(MAKE) ATARI=$(QUIET_DIR)/obj HATARI_DIR=$(QUIET_DIR) XEXTRA=-DAES_PROFILE=40 $(QUIET_DIR)/EHYPVIEW.ACC \
+		$(QUIET_DIR)/ASKHELP.PRG
+	sh tests/emutos.sh
+	python3 tests/run_quiet.py $(QUIET_DIR) build/emutos/etos512us.img build/quiet
+
 # run EHVCHECK.PRG in Hatari (Falcon, EmuTOS) and compare with the host
 hatari-test: atari $(HOST)/ehvcheck
 	$(call make_fixt,build/hostcheck)
@@ -294,4 +315,4 @@ dist: atari
 clean:
 	rm -rf build binary dist
 
-.PHONY: icons all test asan m68k-test atari dist hatari-test gui-test clean FORCE
+.PHONY: icons all test asan m68k-test atari dist hatari-test gui-test quiet-test clean FORCE

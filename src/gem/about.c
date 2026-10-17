@@ -29,7 +29,7 @@ static void status_line(char *buf, size_t size)
 	else
 		snprintf(fontdesc, sizeof(fontdesc), "%s %d pt", font_name(), font_point());
 	if (scanning())
-		snprintf(buf, size, "Indexing: %lu found", scan_found());
+		snprintf(buf, size, "%s", index_busy());
 	else if (idx != NULL)
 		snprintf(buf, size, "%lu hypertext%s", idx->nguides, idx->nguides == 1 ? "" : "s");
 	else

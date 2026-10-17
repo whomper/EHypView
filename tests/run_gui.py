@@ -160,7 +160,9 @@ def have_display():
 
 
 def accessory_smoke():
-    """Boot with EHYPVIEW.ACC in the root: it must register and index."""
+    """Boot with EHYPVIEW.ACC in the root and START=now in EHYPVIEW.INF: it
+    must register and index in the background (by default, START=opened,
+    it waits until it is opened: tests/run_quiet.py)."""
     import shutil
     if os.path.exists(ACC_DIR):
         shutil.rmtree(ACC_DIR)
@@ -168,6 +170,8 @@ def accessory_smoke():
     shutil.copy(os.path.join(HDIR, "EHYPVIEW.ACC"), ACC_DIR)
     with open(os.path.join(ACC_DIR, "ST-GUIDE.INF"), "w") as f:
         f.write("PATHS=C:\\FIXT\r\nREF=C:\\FIXT\\ALL.REF\r\n")
+    with open(os.path.join(ACC_DIR, "EHYPVIEW.INF"), "w") as f:
+        f.write("START=now\r\n")
     fifo = os.path.join(OUT, "acc.fifo")
     log_path = os.path.join(OUT, "acc.log")
     hatari = start_hatari(ACC_DIR, None, fifo, log_path)
@@ -394,12 +398,13 @@ MOUSE_STEPS = [
 
 
 # EHYPVIEW.PRG and EHYPVIEW.ACC (the AERA guidelines, 2.3, 6.1), under
-# EmuTOS: the accessory indexes at boot; the program, started from the
+# EmuTOS: the accessory starts quietly (nothing read until it is opened);
+# the program, started from the
 # desktop (C:\\EHV\\EHYPVIEW.PRG), writes C:\\EHYPVIEW.INF with FOLDER=; the
 # accessory chosen meanwhile hands it to the program; the program makes
 # the text smaller and quits; the accessory, opened, takes the new size
 TWIN_STEPS = [
-    ([], ["acc registered", "index 5 guides"]),
+    ([], ["acc registered", "started *"]),
     ([("dclick", 195, 40), ("dclick", 60, 158), ("dclick", 60, 158)],    # DISK C, EHV, the program
      ["menu shown", "library 0", "index 5 guides"]),
     ([item(DESK, 2)], ["acc to the program"]),                          # the accessory, in the Desk menu
@@ -419,8 +424,9 @@ FASTRAM_STEPS = [
     ([("ctrl", Q)], ["quit"]),
 ]
 ACC_FASTRAM_STEPS = [
-    ([], ["acc registered", "index 5 guides"]),
-    ([("wait", 6), ("click", 18, 8), ("click", 60, 64)], ["library 4"]),   # the desktop's Desk menu
+    ([], ["acc registered", "started *"]),
+    # the desktop's Desk menu: the library, read once it is opened
+    ([("wait", 6), ("click", 18, 8), ("click", 60, 64)], ["library 0", "index 5 guides"]),
     (list("image"), ['search "image" 1']),
     ([RETURN], ["pictures 3 st-ram", "page %s Main" % IMAGES]),
 ]

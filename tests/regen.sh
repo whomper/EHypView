@@ -38,6 +38,11 @@ for src in basic other images big; do
 	"$HCP" -q -o "$FIX/$src.hyp" "$src.stg" >/dev/null
 	"$HCP" -q -c -o "$FIX/${src}_raw.hyp" "$src.stg" >/dev/null
 done
+# a guide of a large library (tests/run_quiet.py), in a folder of its own
+# so that the golden files below leave it out
+mkdir -p "$FIX/many"
+"$HCP" -q -o "$FIX/many/many.hyp" many.stg >/dev/null
+mv -f "$FIX/many.ref" "$FIX/src/many.ref" "$FIX/many/" 2>/dev/null || true
 mv -f "$FIX/src/"*.ref "$FIX/" 2>/dev/null || true
 rm -f "$FIX/"*_raw.ref
 python3 "$TOP/tests/tools/mkencrypted.py" "$FIX/basic_raw.hyp" "$FIX/basic_enc.hyp"

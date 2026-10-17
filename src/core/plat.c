@@ -45,7 +45,7 @@ int pf_read_at(int h, unsigned long off, void *buf, unsigned long n)
    (EHYPVIEW.IN$; '~' when it is '$' already), NAME.$$$ without one. An
    8.3 name, as TOS's FAT wants: there EHYPVIEW.INF.tmp is EHYPVIEW.INF
    itself, so the old file went and the new one with it */
-static char *tmp_name(const char *path)
+char *pf_tmp_name(const char *path)
 {
 	const char *base = path, *dot = NULL, *p;
 	size_t n = strlen(path);
@@ -83,7 +83,7 @@ char *pf_load(const char *path, unsigned long *len)
 	if (pf_stat(path, &info) != 0)
 	{
 		/* a save cut short after the old file went: the new one is whole */
-		char *tmp = tmp_name(path);
+		char *tmp = pf_tmp_name(path);
 		int ok = tmp != NULL && pf_stat(tmp, &info) == 0 && pf_rename(tmp, path) == 0;
 
 		free(tmp);
@@ -111,7 +111,7 @@ char *pf_load(const char *path, unsigned long *len)
 
 int pf_save(const char *path, const void *data, unsigned long len)
 {
-	char *tmp = tmp_name(path);
+	char *tmp = pf_tmp_name(path);
 	const unsigned char *p = data;
 	unsigned long left = len;
 	int h, ok = 1;

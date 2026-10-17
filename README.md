@@ -54,8 +54,9 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
    - the folders in `PATHS` and `HYPFOLD`, and the folder of `REF`, from `ST-GUIDE.INF`
    - `\GUIDES` and `\GEMSYS\GUIDES` on every drive from C: on
 
-   The scan runs in the background each time EHypView starts. Its index (`EHYPVIEW.IDX`) has the
-   hypertexts ready at once, and only new or changed files are read again.
+   EHypView looks through these folders in the background, in short steps that pause while you use
+   the mouse or keyboard. Its index (`EHYPVIEW.IDX`) has the hypertexts ready without reading them
+   again: only new or changed files are read, and when nothing changed nothing is written.
 4. Press ^L for the library, Help for the hypertext's help page, and the right mouse button for a menu.
 
 **Needs:** a 68020 or better: a TT or a Falcon (the programs are built for the 68020 to 68060; the
@@ -169,7 +170,14 @@ fonts are monospaced in `EHYPVIEW.FNT`.
   **File > Quit** (^Q).
 - **The accessory** has no menu bar: **About EHypView...** is in the right button's menu. Its entry in
   the Desk menu (**EHypView**) opens the viewer, or the library when no page is shown. It takes its
-  memory when it loads: a third of the largest free block, at most 2 MB.
+  memory when it loads: a third of the largest free block (a quarter when there is no TT RAM), at
+  most 2 MB, and 64 to 128 KB of ST RAM for the pictures.
+- **A quiet start.** At boot the accessory only registers and takes its memory; it reads nothing.
+  It reads its index and looks through the library the first time you open it, or a program asks it
+  for a page (`START=opened` in `EHYPVIEW.INF`). `START=now` starts at boot, and a number, that many
+  seconds after it. Either way it works in short steps between events, never holding the machine for
+  long, and waits while you use the mouse or keyboard. A help request naming a file (as the AERA
+  programs' Help keys do) is answered at once, without the index.
 - **With both installed,** they never work at once. While `EHYPVIEW.PRG` runs, **EHypView** in the
   Desk menu brings the program's window to the front, and a font chosen in the program is the
   accessory's too the next time it opens. Under MagiC or MiNT, where the accessory runs beside the
@@ -200,6 +208,8 @@ fonts are monospaced in `EHYPVIEW.FNT`.
 - **`FOLDER=`** in it names EHypView's folder, which holds the index of the hypertexts
   (`EHYPVIEW.IDX`) and `EHYPVIEW.FNT`. `EHYPVIEW.PRG` uses the folder it was started from and writes
   it into `FOLDER=`; the accessory uses `FOLDER=`, or the root while there is none.
+- **`START=`** says when the accessory starts on its library: `opened` (the first time it is opened
+  or asked for a page; the program writes this when there is none), `now`, or seconds after boot.
 
 ### The desktop icon
 
@@ -287,6 +297,7 @@ make m68k-test    # the suite as big-endian 68020 code under QEMU
 make hatari-test  # EHVCHECK.PRG in Hatari as a Falcon with EmuTOS (apt install hatari)
 make gui-test     # drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
                   # (apt install hatari xvfb xdotool; screenshots in build/gui)
+make quiet-test   # the accessory's start and indexing measured in Hatari
 ```
 
 - **`make test`** runs the unit tests (`tests/test_*.c`: the core, the scanner and index on a real
@@ -305,6 +316,11 @@ make gui-test     # drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
   selector, the accessory, and the program and accessory side by side. The mouse run (Xvfb and
   xdotool; skipped without them) clicks links, the right button, the menus and the About box. The
   viewer reports what it does through NatFeats, and each step waits for it.
+- **`make quiet-test`** boots a Falcon (32 MHz) with the accessory, built with `-DAES_PROFILE`, and a
+  library of 60 hypertexts and 6,720 pages, opens it from the Desk menu and boots again. Nothing may
+  be read before it is opened, no stretch between its event calls while it reads and indexes may last
+  more than 50 ms, and the second boot must find nothing changed and write nothing
+  (`tests/run_quiet.py`; the guidelines' 2.2, "A quiet start").
 
 Both Hatari rigs fetch EmuTOS 1.3 into `build/emutos` the first time (`tests/emutos.sh`).
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all of the above on every push, and checks
