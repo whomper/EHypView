@@ -64,23 +64,31 @@ def ring():
 # each mode's palette by pen, as EmuTOS sets it (the TT's light colours,
 # 4 bits a gun), or None: true colour, or mono
 FOUR = [0xFFFFFF, 0xFF0000, 0x00FF00, 0x000000]
+# the ST's shifter has 3 bits a gun: the same pens, shown 0xEE at full
+ST4 = (FOUR, [0xEEEEEE, 0xEE0000, 0x00EE00, 0x000000])
 TT16 = [0xFFFFFF, 0xFF0000, 0x00FF00, 0xFFFF00, 0x0000FF, 0xFF00FF, 0x00FFFF, 0xAAAAAA,
         0x666666, 0xFF9999, 0x99FF99, 0xFFFF99, 0x9999FF, 0xFF99FF, 0x99FFFF, 0x000000]
 
-FALCON = ["--machine", "falcon", "--monitor", "vga"]
-TT = ["--machine", "tt", "--monitor", "vga"]
-# name, Hatari's options, the Falcon's video mode (NVRAM), palette,
+FALCON = ["--machine", "falcon", "--monitor", "vga", "--memsize", "14"]
+TT = ["--machine", "tt", "--monitor", "vga", "--memsize", "14"]
+ST = ["--machine", "st"]
+# name, Hatari's options, the Falcon's video mode (NVRAM), palette (or
+# the palette the VDI gives and the colours the screen shows for it),
 # the program or the accessory
 MODES = [
     ("falcon-4", FALCON, 0x0019, FOUR, "prg"),
     ("falcon-16", FALCON, 0x001A, STD, "prg"),
     ("falcon-256", FALCON, 0x001B, STD + ring()[:239] + [0x000000], "prg"),
     ("falcon-stmedium", FALCON, 0x0099, FOUR, "prg"),
-    ("falcon-truecolour", ["--machine", "falcon", "--monitor", "rgb"], 0x002C, None, "prg"),
+    ("falcon-truecolour", ["--machine", "falcon", "--monitor", "rgb", "--memsize", "14"], 0x002C, None, "prg"),
     ("falcon-vga-truecolour", FALCON, 0x0014, None, "acc"),
     ("tt-medium", TT + ["--tos-res", "ttmed"], None, TT16, "prg"),
     ("tt-low", TT + ["--tos-res", "ttlow"], None, TT16 + ring()[:239] + [0x000000], "acc"),
-    ("tt-high", ["--machine", "tt", "--monitor", "mono"], None, None, "prg"),
+    ("tt-high", ["--machine", "tt", "--monitor", "mono", "--memsize", "14"], None, None, "prg"),
+    # the 68000: an ST of 1 MB in high and medium, and the accessory in 4 MB
+    ("st-high-1mb", ST + ["--monitor", "mono", "--memsize", "1"], None, None, "prg"),
+    ("st-medium-1mb", ST + ["--monitor", "rgb", "--tos-res", "med", "--memsize", "1"], None, ST4, "prg"),
+    ("st-medium-4mb", ST + ["--monitor", "rgb", "--tos-res", "med", "--memsize", "4"], None, ST4, "acc"),
 ]
 
 # Hatari's NVRAM (bytes 14-63) as it writes it, with the Falcon's video
@@ -180,27 +188,29 @@ def read_bmp(path):
     return w, h, px
 
 
-def make_drive(d, how):
+def make_drive(d, how, hyp):
     if os.path.exists(d):
         shutil.rmtree(d)
     os.makedirs(d)
-    shutil.copy(FIXTURE, os.path.join(d, "COLOUR.HYP"))
+    name = os.path.basename(hyp).upper()
+    shutil.copy(hyp, os.path.join(d, name))
     if how == "prg":
         shutil.copy(os.path.join(HDIR, "EHYPVIEW.PRG"), d)
         with open(os.path.join(d, "ST-GUIDE.INF"), "w") as f:
-            f.write("DEFHYP=C:\\COLOUR.HYP\r\n")
+            f.write("DEFHYP=C:\\%s\r\n" % name)
     else:
         shutil.copy(os.path.join(HDIR, "EHYPVIEW.ACC"), d)
         shutil.copy(os.path.join(HDIR, "ASKHELP.PRG"), d)
         with open(os.path.join(d, "ASKHELP.TXT"), "w") as f:
-            f.write("C:\\COLOUR.HYP Main\r\n")
+            f.write("C:\\%s Main\r\n" % name)
+    return r"page C:\%s Main" % name
 
 
-def boot(name, opts, vmode, how):
+def boot(name, opts, vmode, how, hyp=FIXTURE, npics=2):
     """the console's lines and the screenshot's path (None: no page)"""
     work = os.path.join(OUT, name)
     drive = os.path.join(work, "c")
-    make_drive(drive, how)
+    page = make_drive(drive, how, hyp)
     home = os.path.join(work, "home")
     os.makedirs(os.path.join(home, ".config", "hatari"), exist_ok=True)
     nvram = bytearray(NVRAM)
@@ -217,7 +227,7 @@ def boot(name, opts, vmode, how):
         if os.path.exists(p):
             os.remove(p)
     env = dict(os.environ, HOME=home, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
-    args = ["hatari", "--tos", EMUTOS, "--memsize", "14", "--natfeats", "yes", "--sound", "off",
+    args = ["hatari", "--tos", EMUTOS, "--natfeats", "yes", "--sound", "off",
             "--confirm-quit", "no", "--statusbar", "no", "--log-level", "fatal", "--borders", "no",
             "--harddrive", drive, "--gemdos-drive", "C", "--cmd-fifo", fifo, "--fast-forward", "yes",
             "--auto", r"C:\EHYPVIEW.PRG" if how == "prg" else r"C:\ASKHELP.PRG"] + opts
@@ -230,7 +240,7 @@ def boot(name, opts, vmode, how):
         end = time.time() + 120
         while time.time() < end:
             evs = [l[4:] for l in lines() if l.startswith("EHV ")]
-            if PAGE in evs and len([e for e in evs if e.startswith("picture ")]) >= 2:
+            if page in evs and len([e for e in evs if e.startswith("picture ")]) >= npics:
                 break
             if h.poll() is not None:
                 break
@@ -256,6 +266,9 @@ def boot(name, opts, vmode, how):
 
 
 def run_mode(name, opts, vmode, pal, how):
+    shown = pal
+    if isinstance(pal, tuple):
+        pal, shown = pal
     out, shot = boot(name, opts, vmode, how)
     evs = [l[4:] for l in out if l.startswith("EHV ")]
     scr = next((e.split()[1:] for e in evs if e.startswith("screen ")), None)
@@ -295,7 +308,7 @@ def run_mode(name, opts, vmode, pal, how):
         if pal is None:
             return c, 8                                  # true colour
         a, b, t = pick(pal, c, len(pal) < 16)
-        return pal[b if t > BAYER[iy & 3][ix & 3] else a], 0
+        return shown[b if t > BAYER[iy & 3][ix & 3] else a], 0
 
     def pens_at(picture, ix, iy):
         """the image's pens behind output pixel (ix, iy)"""
@@ -336,11 +349,57 @@ def run_mode(name, opts, vmode, pal, how):
         for label, n, bg in (("red", 2, 0), ("green", 3, 0), ("blue", 4, 0), ("light grey", 8, 0),
                              ("yellow behind", 6, 1), ("black behind", 1, 1)):
             i = text_pen(p, STD[VDI_PEN[n]], bg)
-            want[label] = p[i]
+            want[label] = (shown if pal is not None else p)[i]
     tol = 8 if pal is None and planes > 1 else 0
     missing = [l for l, c in want.items() if not near(c, tol)]
     check(not missing, "%s: the text's colours (%s)%s" % (
         name, ", ".join("%s %06X" % (l, c) for l, c in want.items()), "" if not missing else ": missing " + ", ".join(missing)))
+
+
+# the family's help front pages (guidelines 4.3: a banner and a window
+# picture), from each program's latest release (guidelines 1.2), on the
+# smallest machines: they must show both pictures
+APPS = [("EMail", "EMAIL.HYP"), ("EContact", "ECONTACT.HYP"), ("EFTP", "EFTP.HYP"), ("ECal", "ECAL.HYP")]
+SMALL = [
+    ("st-1mb", ST + ["--monitor", "mono", "--memsize", "1"], None, "prg"),
+    ("falcon-1mb", ["--machine", "falcon", "--monitor", "vga", "--memsize", "1"], 0x001A, "prg"),
+    ("falcon-1mb-acc", ["--machine", "falcon", "--monitor", "vga", "--memsize", "1"], 0x001A, "acc"),
+]
+
+
+def front_pages():
+    helps = os.path.join(OUT, "help")
+    os.makedirs(helps, exist_ok=True)
+    tool = os.path.join(HERE, "..", "common", "tools", "getrelease.py")
+    for app, hyp in APPS:
+        path = os.path.join(helps, hyp)
+        got = subprocess.run([sys.executable, tool, app, helps, hyp], capture_output=True, text=True)
+        if got.returncode != 0 or not os.path.exists(path):
+            check(False, "%s's help: fetched from its release (%s)" % (app, (got.stderr or got.stdout).strip()[-200:]))
+            continue
+        with open(os.path.join(helps, app.upper() + ".VERSION")) as f:
+            version = f.read().strip()
+        for name, opts, vmode, how in SMALL:
+            out, shot = boot("%s-%s" % (app.lower(), name), opts, vmode, how, path)
+            evs = [l[4:] for l in out if l.startswith("EHV ")]
+            pics = [e.split()[1:] for e in evs if e.startswith("picture ")]
+            shown = any(e.startswith("pictures 2 ") for e in evs)
+            blank = []
+            if shown and shot is not None and len(pics) >= 2:
+                scr = next(e.split()[1:] for e in evs if e.startswith("screen "))
+                W, H = map(int, scr[0].split("x"))
+                sw, sh, px = read_bmp(shot)
+                for pos, size in pics[-2:]:
+                    x0, y0 = map(int, pos.split(","))
+                    w, h = map(int, size.split("x"))
+                    seen = set(px(min(sw - 1, (x0 + x) * sw // W), min(sh - 1, (y0 + y) * sh // H))
+                               for y in range(0, h, 3) for x in range(0, w, 3))
+                    if len(seen) < 2:
+                        blank.append(size)
+            check(shown and not blank and shot is not None,
+                  "%s %s's front page on %s (%s): both pictures%s" % (
+                      app, version, name, how, "" if shown and not blank else
+                      (": blank " + ", ".join(blank) if blank else ": not loaded")))
 
 
 def main():
@@ -353,6 +412,8 @@ def main():
         if only and m[0] not in only.split(","):
             continue
         run_mode(*m)
+    if not only or "front" in only.split(","):
+        front_pages()
     print("%d failed" % failed)
     return 1 if failed else 0
 

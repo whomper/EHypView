@@ -49,7 +49,14 @@ int main(void)
 		appl_write(id, 16, msg);
 		nf_debug("ASK sent\n");
 	}
-	evnt_timer_(30000);                 /* the request stays readable */
+	/* the request stays readable, and the accessory's window open (TOS
+	   closes it when the program in front ends): ten minutes */
+	{
+		int i;
+
+		for (i = 0; i < 20; i++)
+			evnt_timer_(30000);
+	}
 	appl_exit();
 	return 0;
 }
