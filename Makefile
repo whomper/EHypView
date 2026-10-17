@@ -162,7 +162,7 @@ XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
 
 ATARI    = build/atari
 HATARI_DIR = build/hatari
-RUNTIME  = crt0 nf libc tos plat_tos gem crash crash_s alert bidi
+RUNTIME  = crt0 nf libc tos plat_tos gem crash crash_s alert dialog bidi
 RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
 XHDRS    = $(wildcard src/core/*.h common/atari/*.h common/atari/include/*.h common/ui/*.h)

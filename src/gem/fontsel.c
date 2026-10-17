@@ -989,6 +989,7 @@ void font_dialog(void)
 	form_dial(FMD_FINISH, x, y, w, h);
 	wind_update(2);                      /* END_MCTRL */
 	wind_update(END_UPDATE);
+	log_event("dialog-closed", "font", ok ? "ok" : "cancel");
 	if (ok)
 	{
 		strcpy(pref.name, fam[lf.sel].name);

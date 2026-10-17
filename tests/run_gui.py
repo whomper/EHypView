@@ -41,8 +41,13 @@ STEPS = [
     ([("ctrl", MINUS)], ["font System font 8"]),
     ([("ctrl", EQUALS)], ["font System font 16"]),
     ([("ctrl", EQUALS)], ["status No larger size"]),
+    # Esc and Undo cancel the font selector: the font stays (the guidelines, 3.5)
     ([("ctrl+shift", F)], ["dialog font"]),
-    ([LEFT, RETURN], ["font System font 8"]),          # 8 x 8, kept in EHYPVIEW.INF
+    ([LEFT, ESC], ["dialog-closed font cancel", "!font *"]),
+    ([("ctrl+shift", F)], ["dialog font"]),
+    ([LEFT, UNDO], ["dialog-closed font cancel", "!font *"]),
+    ([("ctrl+shift", F)], ["dialog font"]),
+    ([LEFT, RETURN], ["dialog-closed font ok", "font System font 8"]),   # 8 x 8, kept in EHYPVIEW.INF
     ([TAB], ["select 2"]),                             # first link
     ([RETURN], ["page %s Second" % BASIC]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
@@ -70,6 +75,19 @@ STEPS = [
     ([("ctrl", I)], ["page %s Index" % IMAGES]),       # hcp made an index
     # several windows: the page in a new one; a bookmark of it
     ([("ctrl", N)], ["window new 2", "page %s Index" % IMAGES]),
+    # six at most; the alert that says so: Esc and Undo close it, no window more
+    ([("ctrl", N)], ["window new 3"]),
+    ([("ctrl", N)], ["window new 4"]),
+    ([("ctrl", N)], ["window new 5"]),
+    ([("ctrl", N)], ["window new 6"]),
+    ([("ctrl", N)], ["alert six-windows"]),
+    ([ESC], ["alert-closed six-windows 1", "!window new *"]),
+    ([("ctrl", N)], ["alert six-windows"]),
+    ([UNDO], ["alert-closed six-windows 1", "!window new *"]),
+    ([("ctrl", W)], ["closed viewer"]),
+    ([("ctrl", W)], ["closed viewer"]),
+    ([("ctrl", W)], ["closed viewer"]),
+    ([("ctrl", W)], ["closed viewer"]),
     ([("ctrl", D)], ["bookmark added *"]),
     ([("ctrl", D)], ["status This page is bookmarked already."]),
     ([("ctrl", W)], ["closed viewer"]),                # the first window stays
@@ -201,6 +219,11 @@ def accessory_smoke():
     return ok
 
 
+def absent(evs, expected):
+    """"!x": no event matching x among evs"""
+    return not any(matches(ev, expected[1:]) for ev in evs)
+
+
 def matches(ev, expected):
     if expected.endswith("*"):
         return ev.startswith(expected[:-1])
@@ -276,6 +299,15 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             if not expect:
                 time.sleep(1.0)
             for e in expect:
+                if e.startswith("!"):
+                    # nothing of the kind since the last event waited for
+                    time.sleep(1.5)
+                    if not absent(events()[len(seen):], e):
+                        print("FAIL  %s step %d: '%s' came" % (name, n, e[1:]))
+                        print("      events so far: %s" % events())
+                        ok = False
+                        break
+                    continue
                 if not wait_for(e):
                     print("FAIL  %s step %d: no '%s'" % (name, n, e))
                     print("      events so far: %s" % events())
