@@ -49,8 +49,13 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - **A release** carries `EHYPVIEW.PRG`, `EHYPVIEW.ACC` and the icon (`make atari` copies the
   programs to `binary/`; the icons are committed in `icons/`). The first release was 1.0.
 - Before pushing: `make test`, `make asan`, `make m68k-test`,
-  `make hatari-test`, `make gui-test` and `make quiet-test` (the last two
-  need hatari, Xvfb and xdotool), and `make atari` with no warnings.
+  `make hatari-test`, `make gui-test`, `make quiet-test` (these two
+  need hatari, Xvfb and xdotool) and `make colour-test`, and `make atari`
+  with no warnings.
+- Pictures and text colours go through src/gem/colour.c (no VDI; tested on
+  the host). `make colour-test` checks them pixel by pixel in nine screen
+  modes; in TT low and the Falcon's 320-wide true colour only the
+  accessory runs (guideline 5.2), asked by tests/askhelp.c.
 - The accessory starts quietly (guideline 2.2): nothing but set-up before
   its first event call, and the index (src/core/libjob.c) in short steps
   through common/ui/bgwork.c. `make quiet-test` measures it with an

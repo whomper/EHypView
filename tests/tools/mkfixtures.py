@@ -165,6 +165,25 @@ After the big image.
 @endnode
 """
 
+# pictures and text in colour: every standard pen, a picture with a
+# dither mask for mono screens, and @{fg}/@{bg} (tests/run_colour.py)
+COLOUR = r"""@if VERSION >= 6
+@os Atari
+@charset atarist
+@inputenc atarist
+@endif
+@database "EHypView colour test"
+@subject "Test/EHypView"
+@options "-a +z -s"
+
+@node "Main"
+@limage "palette.img" 1
+@limage "dither.img" 1 %0111100001111111
+@{fg 2}Red@{fg 1} @{fg 3}Green@{fg 1} @{fg 4}Blue@{fg 1} @{fg 8}Light grey@{fg 1} plain
+@{bg 6}Yellow behind@{bg 0} @{bg 1}@{fg 0}White on black@{fg 1}@{bg 0} plain
+@endnode
+"""
+
 WORDS = ("atari falcon tt firebee gem aes vdi window menu dialog resource "
          "hypertext page link node index search reference compiler viewer "
          "accessory desktop font bitmap colour palette plane screen memory "
@@ -212,6 +231,7 @@ def main():
     write_stg("other.stg", OTHER)
     write_stg("images.stg", IMAGES)
     write_stg("big.stg", big_text())
+    write_stg("colour.stg", COLOUR)
 
     write_img("small.img", 32, 16, 4,
               lambda x, y: (x // 4 + y // 2) & 15)
@@ -220,6 +240,13 @@ def main():
     # 640x400, 16 colours = 128000 bytes: larger than 64 KB on purpose
     write_img("big.img", 640, 400, 4,
               lambda x, y: ((x // 16) ^ (y // 16)) & 15 if (x + y) % 7 else noise[(x * 31 + y) & 4095])
+
+    # pens 0-15 in stripes of 16 pixels
+    write_img("palette.img", 256, 32, 4, lambda x, y: x // 16)
+    # above, pens 0-15 in columns of 8; below, white and black in a
+    # checkerboard (two rows made one: grey)
+    write_img("dither.img", 128, 32, 4,
+              lambda x, y: x // 8 if y < 16 else 15 * ((x + y) & 1))
 
 
 if __name__ == "__main__":

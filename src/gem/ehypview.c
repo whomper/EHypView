@@ -62,6 +62,7 @@ extern short _is_acc;              /* crt0.S */
 
 short ap_id, is_acc, quit_now;
 short vdi_h, cw, ch, planes, ncolors;
+short tall_pixels;
 short sys_cw, sys_ch;
 short desk_x, desk_y, desk_w, desk_h;
 ehv_index *idx;
@@ -2757,8 +2758,17 @@ int main(void)
 	ehv_ui_scr_w = screen_w;
 	ehv_ui_scr_h = screen_h;
 	ncolors = work_out[13];
+	tall_pixels = work_out[4] >= work_out[3] * 3 / 2;	/* pixel height, width (microns) */
 	vq_extnd(vdi_h, 1, work_out);
 	planes = work_out[4];
+	{
+		/* for the tests (tests/run_colour.py) */
+		char size[16], depth[24];
+
+		sprintf(size, "%dx%d", screen_w, screen_h);
+		sprintf(depth, "%d%s", planes, tall_pixels ? " tall" : "");
+		log_event("screen", size, depth);
+	}
 	vst_alignment(vdi_h, 0, 5);
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	if (!is_acc && !screen_check("EHypView", screen_w))	/* not in ST low */

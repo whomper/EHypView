@@ -1,0 +1,5 @@
+    # type          offset  packed    size  name
+    0 node             218     110     132  Main
+    1 node             328      14      14  Index
+    2 image            342      46    4104  palette.img
+    3 image            388      60    2056  dither.img

@@ -19,6 +19,9 @@ and is the help viewer your other programs open when you press Help.
   Installed under the name programs look for, `ST-GUIDE.ACC`, it is found by all of them, and it reads
   the `ST-GUIDE.INF` they share.
 - **Pages as they were written:** styled text, links, lines, boxes and images, with unlimited history.
+  Pictures and coloured text show in colour in every mode: 4, 16 and 256 colours, high and true
+  colour, and black and white on a mono screen. Where the screen has too few colours they are
+  dithered, and in ST medium pictures keep their shape.
 - **A toolbar:** Back and Forward (with the history on the right button), the main page, the page
   before and after, Contents, Index, See also, the library and bookmarks, each with a tooltip.
 - **Several windows and bookmarks:** open a link in a new window (⇧-click) or the page in another
@@ -299,6 +302,7 @@ make hatari-test  # EHVCHECK.PRG in Hatari as a Falcon with EmuTOS (apt install 
 make gui-test     # drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
                   # (apt install hatari xvfb xdotool; screenshots in build/gui)
 make quiet-test   # the accessory's start and indexing measured in Hatari
+make colour-test  # pictures and coloured text in every screen mode, pixel by pixel
 ```
 
 - **`make test`** runs the unit tests (`tests/test_*.c`: the core, the scanner and index on a real
@@ -323,7 +327,13 @@ make quiet-test   # the accessory's start and indexing measured in Hatari
   more than 50 ms, and the second boot must find nothing changed and write nothing
   (`tests/run_quiet.py`; the guidelines' 2.2, "A quiet start").
 
-Both Hatari rigs fetch EmuTOS 1.3 into `build/emutos` the first time (`tests/emutos.sh`).
+- **`make colour-test`** opens a page of pictures and coloured text in nine screen modes: the Falcon in
+  4, 16 and 256 colours, ST medium and true colour, the TT in medium, low and high, each in Hatari. It
+  checks every pixel of the pictures, and the text's colours, against what the mode's palette should
+  show (`tests/run_colour.py`; screenshots in `build/colour`).
+
+The Hatari rigs fetch EmuTOS 1.4 (the first with true colour on the Falcon) into `build/emutos` the
+first time (`tests/emutos.sh`).
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all of the above on every push, and checks
 that the build changed no tracked file.
 

@@ -60,8 +60,18 @@ interface**.
 5. **Faithful display.**
    - Graphics are placed on the character grid, so pages with graphics use a
      fixed-width layout.
-   - Colour images are shown at full depth on Falcon true colour, TT and
-     FireBee video; they are dithered only on monochrome screens.
+   - Pictures show in colour on any screen (src/gem/colour.c, pagedraw.c).
+     A HYP image has no palette: its pixel values are the standard TOS
+     colours in pen order. Each is drawn with the screen's nearest pen
+     (its palette read with vq_color), dithered between two pens (4 x 4
+     Bayer) where the screen has fewer than 16. In high and true colour the
+     pixels are written as the screen keeps them: the layout comes from
+     vq_scrninfo where the VDI has it (NVDI), else from VDI red, green and
+     blue drawn on one pixel and read back (TOS 4, EmuTOS). On mono
+     screens the hcp source's dither mask decides, or else brightness.
+     Where pixels are twice as tall as wide (ST medium), two rows make
+     one. Text colours (@{fg n}, @{bg n}) map the same way; text is never
+     drawn white unless it is white.
 
 ## Targets
 
@@ -103,7 +113,6 @@ atari/         plat_tos.c: the platform layer on GEMDOS (Dopendir/Fxattr
 common/        the AERA programs' shared code (git subtree of AERA-Atari):
                atari/ is the TOS runtime, tools/elf2tos.py the linker's
                last step; tools/sync-common.sh brings it up to date
-  (next) image.c   planar image -> VDI raster for any screen depth
   search.c     step-wise full-text search through every hypertext
 src/view/      without GEM, tested on the host:
   view.c       the viewer model: open, links, history back and forward,
@@ -117,7 +126,10 @@ src/gem/       the GEM program
                startup
   toolbar.c    the toolbar's buttons and layout (no AES calls; tested on
                the host)
-  pagedraw.c   a page laid out and drawn (the viewer's and a pop-up's)
+  pagedraw.c   a page laid out and drawn (the viewer's and a pop-up's),
+               its pictures converted for the screen
+  colour.c     standard colours, nearest pen, dither, true-colour pixels
+               (no AES calls; tested on the host)
   stmem.c      ST RAM for the pictures copied to the screen: a blitter
                can't read TT/Fast RAM (no AES calls; tested on the host)
   libwin.c     library window
@@ -250,6 +262,19 @@ Rules for `src/core`:
   button at a window's width, the least needed going first as it narrows),
   `tests/test_stmem.c` and `test_stmem_acc.c` the pictures' ST RAM (blocks
   apart and intact, joined when freed, the accessory's one block).
+- `make colour-test` opens `tests/fixtures/colour.hyp` (the 16 pens in
+  stripes, a picture with a dither mask, text in colours) in nine modes:
+  the Falcon in 4, 16 and 256 colours, ST medium (set in Hatari's NVRAM)
+  and true colour (640 x 200 on RGB, and 320 x 480 on VGA), the TT in
+  medium, low and high. The viewer says where it drew each picture; every
+  pixel of them in the screenshot must be what the mode's palette shows:
+  the colour, the nearest the palette has, the Bayer dither with 4
+  colours, black or white by brightness or the mask on mono, two rows
+  made one in ST medium; and the text below must have its colours. In
+  320-wide modes the program won't run (guideline 5.2), so the accessory
+  is asked for the page by `ASKHELP.PRG`. `tests/test_colour.c` checks
+  the colour rules on the host, also the vq_scrninfo layouts no emulator
+  offers (NVDI on a graphics card).
 - `tests/test_index.c` builds a real folder tree for the scanner and
   resolver tests: mixed-case names, a folder with spaces, a duplicate, a
   damaged file, a symbolic link loop, a REF beside a file and an ALL.REF

@@ -39,6 +39,8 @@ jobs:
         run: make gui-test
       - name: The accessory's quiet start, measured in Hatari
         run: make quiet-test
+      - name: Pictures and coloured text in every screen mode, in Hatari
+        run: make colour-test
       - name: The build changed no tracked file
         run: |
           git status --porcelain

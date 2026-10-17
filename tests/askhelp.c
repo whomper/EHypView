@@ -6,7 +6,9 @@
  * a page.  tests/run_quiet.py starts it after a boot with the accessory:
  * the page must come at once, before the accessory has read its index
  * (a full path needs none).  It says on the emulator's console (NatFeats)
- * when it asked.
+ * when it asked.  tests/run_colour.py puts another request in
+ * C:\ASKHELP.TXT (a line: path and page), for the accessory in modes the
+ * program won't run in.
  */
 #include <string.h>
 #include "tos.h"
@@ -14,12 +16,24 @@
 
 #define VA_START 0x4711
 
-static char request[] = "C:\\GUIDES\\G000.HYP Main";
+static char request[128] = "C:\\GUIDES\\G000.HYP Main";
 
 int main(void)
 {
 	short msg[8], id, me = appl_init();
+	long fh = Fopen("C:\\ASKHELP.TXT", 0);
 
+	if (fh >= 0)
+	{
+		long n = Fread((short) fh, sizeof(request) - 1, request);
+		int i;
+
+		request[n > 0 ? n : 0] = '\0';
+		for (i = 0; request[i] != '\0'; i++)
+			if (request[i] == '\r' || request[i] == '\n')
+				request[i] = '\0';
+		Fclose((short) fh);
+	}
 	evnt_timer_(1000);
 	id = appl_find("EHYPVIEW");
 	if (id < 0)

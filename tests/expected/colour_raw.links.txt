@@ -1,0 +1,5 @@
+[Main] lines=2 width=34
+  image x=1 y=0 w=1 h=0 image=2 limage
+  image x=1 y=0 w=1 h=0 image=3 limage dither=$ff16
+[Index] lines=1 width=12
+  line 0: link "Main" -> node Main
