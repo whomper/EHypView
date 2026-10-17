@@ -227,7 +227,9 @@ Rules for `src/core`:
   alignment faults are caught on an ST in Hatari: `make hatari-test` runs
   the self-test on a 4 MB ST too.)
 - `make hatari-test` builds `EHVCHECK.PRG` for the Atari and runs it in
-  Hatari as a Falcon with EmuTOS. The program scans a test folder, decodes
+  Hatari on the family's Falcon:16 and ST:mono
+  (common/tools/machines.py: the same machines in every app's rigs, with
+  EmuTOS 1.4 or Erez's own TOS). The program scans a test folder, decodes
   every page and image, resolves links and saves, reloads and reuses the
   cache, all through GEMDOS. Its report must match the same program built
   for the host, line for line. The program reports through NatFeats and

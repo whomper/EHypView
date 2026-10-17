@@ -7,9 +7,9 @@
 #   make asan       the same, with AddressSanitizer/UBSan
 #   make m68k-test  run the suite on big-endian 68020 code under QEMU
 #                   (needs gcc-m68k-linux-gnu and qemu-user-static)
-#   make atari      build the Atari programs (68020-60: Falcon, TT) into
+#   make atari      build the Atari programs (68000: ST, STE, TT, Falcon) into
 #                   build/hatari and binary/ (needs gcc-m68k-linux-gnu)
-#   make hatari-test run EHVCHECK.PRG in Hatari (Falcon, EmuTOS) and compare
+#   make hatari-test run EHVCHECK.PRG in Hatari (Falcon:16, ST:mono) and compare
 #                   its report with the host build's (needs hatari)
 #   make gui-test   drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
 #                   (needs Xvfb and xdotool for the mouse)
@@ -174,8 +174,6 @@ XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
 
 ATARI    = build/atari
 HATARI_DIR = build/hatari
-# the emulator tests' EmuTOS (tests/emutos.sh fetches it)
-EMUTOS     = build/emutos/etos512us-1.4.img
 RUNTIME  = crt0 nf libc tos plat_tos gem crash crash_s alert dialog bidi
 RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
@@ -294,8 +292,7 @@ icons: tools/icon/make_icon.py tools/icon/make_rsc.py
 
 # drive EHYPVIEW.PRG in Hatari with the keyboard (screenshots in build/gui)
 gui-test: atari
-	sh tests/emutos.sh
-	python3 tests/run_gui.py $(HATARI_DIR) $(EMUTOS) build/gui
+	python3 tests/run_gui.py $(HATARI_DIR) build/gui
 
 # the accessory's quiet start (the AERA guidelines, 2.2), measured: a build
 # with -DAES_PROFILE=40 (common/atari/gem.c reports every stretch of 40 ms
@@ -305,23 +302,20 @@ QUIET_DIR = build/aprof
 quiet-test: atari
 	$(MAKE) ATARI=$(QUIET_DIR)/obj HATARI_DIR=$(QUIET_DIR) XEXTRA=-DAES_PROFILE=40 $(QUIET_DIR)/EHYPVIEW.ACC \
 		$(QUIET_DIR)/ASKHELP.PRG
-	sh tests/emutos.sh
-	python3 tests/run_quiet.py $(QUIET_DIR) $(EMUTOS) build/quiet
+	python3 tests/run_quiet.py $(QUIET_DIR) build/quiet
 
 # pictures and text in colour in every screen mode: Falcon 4, 16, 256 and
 # true colour, ST medium, TT medium, low and high, checked pixel by pixel
 # (screenshots in build/colour)
 colour-test: atari $(HATARI_DIR)/ASKHELP.PRG
-	sh tests/emutos.sh
-	python3 tests/run_colour.py $(HATARI_DIR) $(EMUTOS) build/colour
+	python3 tests/run_colour.py $(HATARI_DIR) build/colour
 
-# run EHVCHECK.PRG in Hatari (a Falcon, then a 4 MB ST; EmuTOS) and compare
-# with the host
+# run EHVCHECK.PRG in Hatari (the family's Falcon:16, then ST:mono;
+# common/tools/machines.py) and compare with the host
 hatari-test: atari $(HOST)/ehvcheck
 	$(call make_fixt,build/hostcheck)
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
-	MACHINE="--machine st --monitor mono --memsize 4" \
-		sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
+	MACHINE=ST:mono sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 
 # a release's files: each one in dist/, and all of them in
 # dist/EHYPVIEW-x.y.zip (the icons in icons/), for the release workflow
