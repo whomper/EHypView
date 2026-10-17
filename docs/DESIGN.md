@@ -77,7 +77,7 @@ interface**.
 
 | Build | CPU | Systems |
 |---|---|---|
-| `atari` | 68020-60 | Falcon, TT; MiNT, MagiC, XaAES, or plain TOS |
+| `atari` | 68000 | ST, STE, TT, Falcon; MiNT, MagiC, XaAES, or plain TOS |
 | `firebee` | ColdFire 5475 | FireBee (FireTOS, MiNT) |
 
 - The main build is a regular GEM program (`EHYPVIEW.APP`).
@@ -222,8 +222,10 @@ Rules for `src/core`:
 - `make test`: unit tests plus golden tests on the host.
 - `make asan`: the same under AddressSanitizer and UBSan.
 - `make m68k-test`: the same suite compiled as big-endian 68020 code and run
-  under QEMU, to catch byte-order and alignment mistakes before they reach
-  real hardware.
+  under QEMU, to catch byte-order mistakes before they reach real hardware.
+  (QEMU's 68000 can't run Linux's libraries, which need a 68020; the 68000's
+  alignment faults are caught on an ST in Hatari: `make hatari-test` runs
+  the self-test on a 4 MB ST too.)
 - `make hatari-test` builds `EHVCHECK.PRG` for the Atari and runs it in
   Hatari as a Falcon with EmuTOS. The program scans a test folder, decodes
   every page and image, resolves links and saves, reloads and reuses the
@@ -263,16 +265,20 @@ Rules for `src/core`:
   `tests/test_stmem.c` and `test_stmem_acc.c` the pictures' ST RAM (blocks
   apart and intact, joined when freed, the accessory's one block).
 - `make colour-test` opens `tests/fixtures/colour.hyp` (the 16 pens in
-  stripes, a picture with a dither mask, text in colours) in nine modes:
+  stripes, a picture with a dither mask, text in colours) in twelve modes:
   the Falcon in 4, 16 and 256 colours, ST medium (set in Hatari's NVRAM)
   and true colour (640 x 200 on RGB, and 320 x 480 on VGA), the TT in
-  medium, low and high. The viewer says where it drew each picture; every
+  medium, low and high, an ST of 1 MB in high and medium and of 4 MB in
+  medium (the accessory; the ST shows full colour as 0xEE). The viewer says where it drew each picture; every
   pixel of them in the screenshot must be what the mode's palette shows:
   the colour, the nearest the palette has, the Bayer dither with 4
   colours, black or white by brightness or the mask on mono, two rows
   made one in ST medium; and the text below must have its colours. In
   320-wide modes the program won't run (guideline 5.2), so the accessory
-  is asked for the page by `ASKHELP.PRG`. `tests/test_colour.c` checks
+  is asked for the page by `ASKHELP.PRG`. Last, the front page of each
+  AERA program's help, from its latest release (guidelines 1.2, 4.3), on a
+  1 MB ST and a 1 MB Falcon (the program, and the accessory): both
+  pictures must load, and neither be blank. `tests/test_colour.c` checks
   the colour rules on the host, also the vq_scrninfo layouts no emulator
   offers (NVDI on a graphics card).
 - `tests/test_index.c` builds a real folder tree for the scanner and

@@ -157,7 +157,13 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c
 
 XCC      = m68k-linux-gnu-gcc
 GCCINC  := $(shell $(XCC) -print-file-name=include 2>/dev/null)
-XCPU    ?= -m68020-60
+# one build for every machine: ST, STE, TT and Falcon. A 68000 faults on
+# a word read at an odd address, and GCC 13 joins byte reads into one
+# (be32() in the HYP and REF readers, a struct's bytes) even with
+# -mstrict-align: its bswap pass, turned off here (as -fno-store-merging
+# does for stores; it says so in a note on every file).  Not with
+# -fno-expensive-optimizations: GCC 13 then miscompiles scan.c
+XCPU    ?= -m68000 -mstrict-align -fdisable-tree-bswap
 XFLAGS   = $(XCPU) $(XEXTRA) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin \
            -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-store-merging \
            -fno-asynchronous-unwind-tables -Wall -Wextra -Werror=implicit-function-declaration \
@@ -309,10 +315,13 @@ colour-test: atari $(HATARI_DIR)/ASKHELP.PRG
 	sh tests/emutos.sh
 	python3 tests/run_colour.py $(HATARI_DIR) $(EMUTOS) build/colour
 
-# run EHVCHECK.PRG in Hatari (Falcon, EmuTOS) and compare with the host
+# run EHVCHECK.PRG in Hatari (a Falcon, then a 4 MB ST; EmuTOS) and compare
+# with the host
 hatari-test: atari $(HOST)/ehvcheck
 	$(call make_fixt,build/hostcheck)
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
+	MACHINE="--machine st --monitor mono --memsize 4" \
+		sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 
 # a release's files: each one in dist/, and all of them in
 # dist/EHYPVIEW-x.y.zip (the icons in icons/), for the release workflow

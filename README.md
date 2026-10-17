@@ -62,10 +62,10 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
    again: only new or changed files are read, and when nothing changed nothing is written.
 4. Press ^L for the library, Help for the hypertext's help page, and the right mouse button for a menu.
 
-**Needs:** a 68020 or better: a TT or a Falcon (the programs are built for the 68020 to 68060; the
-FireBee's own ColdFire build is still to come, see the [roadmap](docs/DESIGN.md#roadmap)); TOS,
-EmuTOS, MagiC, or MiNT (MultiTOS, XaAES, N.AES); a screen 640 pixels wide or more. NVDI, SpeedoGDOS or
-another GDOS is optional, for more fonts.
+**Needs:** any ST, STE, TT or Falcon, with 1 MB or more (one build for all of them; the FireBee's
+own ColdFire build is still to come, see the [roadmap](docs/DESIGN.md#roadmap)); TOS, EmuTOS, MagiC,
+or MiNT (MultiTOS, XaAES, N.AES); a screen 640 pixels wide or more. NVDI, SpeedoGDOS or another GDOS
+is optional, for more fonts.
 
 ## Using the viewer
 
@@ -234,8 +234,10 @@ make dist      # dist/: a release's files, each on its own and in EHYPVIEW-x.y.z
 make icons     # draw the icon again (tools/icon/; python3-pil for the PNGs)
 ```
 
-The Atari programs are built the same way as ECal: with Ubuntu's stock m68k compiler, for the 68020 to
-68060, and no MiNTLib. `common/atari/` holds a small freestanding runtime (start-up code, libc, GEMDOS
+The Atari programs are built the same way as ECal: with Ubuntu's stock m68k compiler, for the 68000
+(so the same files run on every ST, TT and Falcon), and no MiNTLib. GCC 13 joins byte reads into word
+reads even for the 68000, which faults on an odd address, so the build turns that pass off
+(`-fdisable-tree-bswap`, see the Makefile). `common/atari/` holds a small freestanding runtime (start-up code, libc, GEMDOS
 file access, AES/VDI bindings), and `common/tools/elf2tos.py` writes the TOS program file. `common/` is
 the AERA programs' shared code, a copy of [AERA-Atari](https://github.com/whomper/AERA-Atari)'s
 `common/` folder: change it there and bring the copy up to date with `tools/sync-common.sh`.
@@ -296,9 +298,10 @@ the published description.
 ```sh
 make test         # unit and golden tests on this computer
 make asan         # the same with AddressSanitizer and UBSan
-make m68k-test    # the suite as big-endian 68020 code under QEMU
+make m68k-test    # the suite as big-endian 68020 code under QEMU (Linux's libraries need a
+                  # 68020; the 68000 is tested in Hatari, on an ST)
                   # (apt install gcc-m68k-linux-gnu qemu-user-static)
-make hatari-test  # EHVCHECK.PRG in Hatari as a Falcon with EmuTOS (apt install hatari)
+make hatari-test  # EHVCHECK.PRG in Hatari, a Falcon and an ST, with EmuTOS (apt install hatari)
 make gui-test     # drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
                   # (apt install hatari xvfb xdotool; screenshots in build/gui)
 make quiet-test   # the accessory's start and indexing measured in Hatari
@@ -311,7 +314,8 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   independent implementation, and their links, index and header the reviewed files in
   `tests/expected/`.
 - **`make m68k-test`** catches byte-order and alignment mistakes before they reach real hardware.
-- **`make hatari-test`** runs `EHVCHECK.PRG`, a self-test, not part of the viewer. It exercises the
+- **`make hatari-test`** runs `EHVCHECK.PRG`, a self-test, not part of the viewer, on a Falcon and on
+  a 4 MB ST (whose 68000 faults on a word read at an odd address). It exercises the
   core through GEMDOS on a test folder: scanning, every page and image, links, and the cache. Its
   report must match the same program built for this computer, line for line. To run it on a real
   Atari, copy `build/hatari/` (the program and its `FIXT` folder) to a drive and start
@@ -327,10 +331,12 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   more than 50 ms, and the second boot must find nothing changed and write nothing
   (`tests/run_quiet.py`; the guidelines' 2.2, "A quiet start").
 
-- **`make colour-test`** opens a page of pictures and coloured text in nine screen modes: the Falcon in
-  4, 16 and 256 colours, ST medium and true colour, the TT in medium, low and high, each in Hatari. It
-  checks every pixel of the pictures, and the text's colours, against what the mode's palette should
-  show (`tests/run_colour.py`; screenshots in `build/colour`).
+- **`make colour-test`** opens a page of pictures and coloured text in twelve screen modes: the Falcon
+  in 4, 16 and 256 colours, ST medium and true colour, the TT in medium, low and high, and an ST of 1
+  and 4 MB in high and medium, each in Hatari. It checks every pixel of the pictures, and the text's
+  colours, against what the mode's palette should show. Then it opens the front page of each AERA
+  program's help, from its latest release (`common/tools/getrelease.py`), on a 1 MB ST and a 1 MB
+  Falcon: both pictures must show (`tests/run_colour.py`; screenshots in `build/colour`).
 
 The Hatari rigs fetch EmuTOS 1.4 (the first with true colour on the Falcon) into `build/emutos` the
 first time (`tests/emutos.sh`).

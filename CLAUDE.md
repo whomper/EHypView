@@ -30,6 +30,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   A build must leave every tracked file unchanged and shows the version in `VERSION` as it is (there is
   no `-dev` label). Don't commit built programs, help files or certificates (`binary/`, `dist/`). Never reuse a number.
 - **Only formal releases leave the build machine.** Erez gets vX.Y releases made by the Release workflow from `main`, nothing else: no test builds, no CI artifacts, no builds from a branch. Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, roll back with a release: revert on `main`, release the next number, and say in the bad release's notes that it is withdrawn and which one to use.
+- **Testing with another AERA program uses its latest release**, what Erez runs, never a build of its
+  `main`: `common/tools/getrelease.py APP DIR FILE...` fetches it. Only for a change both programs are
+  still making, test against the other's `main` at a named commit, say so, and test again against its
+  release when it is out.
 - **Every new source file starts with the SPDX line and copyright** (see any `.c` file); a generator
   writes them into the files it makes.
 - **The name** reads "AERA | Erez Yaary" wherever it is given: copyright lines
@@ -52,10 +56,18 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `make hatari-test`, `make gui-test`, `make quiet-test` (these two
   need hatari, Xvfb and xdotool) and `make colour-test`, and `make atari`
   with no warnings.
+- One build, for the 68000, runs on every ST, STE, TT and Falcon. GCC 13
+  joins byte reads into word reads, which fault on a 68000 at an odd
+  address: keep `-fdisable-tree-bswap` (with `-fno-store-merging`) in
+  XCPU/XFLAGS (never `-fno-expensive-optimizations`: GCC 13 miscompiles
+  scan.c with it), and run `make hatari-test`, which runs the self-test
+  on an ST too. Code an ST runs per pixel or per byte avoids 32-bit multiplies
+  and long shifts (tos.c does those in software).
 - Pictures and text colours go through src/gem/colour.c (no VDI; tested on
-  the host). `make colour-test` checks them pixel by pixel in nine screen
-  modes; in TT low and the Falcon's 320-wide true colour only the
-  accessory runs (guideline 5.2), asked by tests/askhelp.c.
+  the host). `make colour-test` checks them pixel by pixel in twelve screen
+  modes, the ST's too, and the family's help front pages (from their
+  releases) on 1 MB machines; in TT low and the Falcon's 320-wide true
+  colour only the accessory runs (guideline 5.2), asked by tests/askhelp.c.
 - The accessory starts quietly (guideline 2.2): nothing but set-up before
   its first event call, and the index (src/core/libjob.c) in short steps
   through common/ui/bgwork.c. `make quiet-test` measures it with an

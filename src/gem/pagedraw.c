@@ -183,23 +183,82 @@ static short text_colour(unsigned short n, int bg)
 /* ---------------------------------------------------------------- */
 /* pictures                                                          */
 
-/* the pixel value at x of the rows at row and next (bytes into each
-   plane); pairs: both, as one key */
-static unsigned short key_at(const unsigned char *std, unsigned long plane, unsigned short np,
-                             unsigned long row, unsigned long next, unsigned short x, int pairs)
-{
-	unsigned long at = x >> 3;
-	unsigned char bit = (unsigned char) (0x80 >> (x & 7));
-	unsigned short v1 = 0, v2 = 0, i;
+/* a plane's byte spread out: its 8 pixels' bits, 4 bits apart, the first
+   pixel at the top (bits 28-31) */
+static unsigned long spread[256];
 
-	for (i = 0; i < np; i++)
+static void make_spread(void)
+{
+	unsigned short b, k;
+
+	for (b = 0; b < 256; b++)
+		for (spread[b] = 0, k = 0; k < 8; k++)
+			if (b & (0x80 >> k))
+				spread[b] |= 1UL << (28 - 4 * k);
+}
+
+/* 8 pixel values, 4 bits each, of planes first.. (at most 4) of the bytes
+   at off */
+static inline unsigned long nibbles(unsigned char *const *pl, unsigned short first, unsigned short np,
+                             unsigned long off)
+{
+	unsigned char *const *p = pl + first;
+	unsigned long v = 0;
+
+	switch (np - first)
 	{
-		if (std[plane * i + row + at] & bit)
-			v1 |= (unsigned short) (1 << i);
-		if (pairs && (std[plane * i + next + at] & bit))
-			v2 |= (unsigned short) (1 << i);
+	default: v = spread[p[3][off]] << 3;   /* fall through */
+	case 3: v |= spread[p[2][off]] << 2;   /* fall through */
+	case 2: v |= spread[p[1][off]] << 1;   /* fall through */
+	case 1: v |= spread[p[0][off]];
 	}
-	return pairs ? (unsigned short) (v1 << 4 | v2) : v1;
+	return v;
+}
+
+/* the pixel values of nbytes * 8 pixels of the rows at row and next
+   (bytes into each plane pl[i]); pairs: both, as one key each.  Eight
+   pixels at a time through spread[], two to a byte of the result (the
+   Atari is big-endian): a 68000 tests bits, and shifts far, slowly */
+static void row_keys(unsigned char *const *pl, unsigned short np, unsigned long row, unsigned long next,
+                     unsigned short nbytes, int pairs, unsigned char *keys)
+{
+	union {
+		unsigned long l;
+		unsigned char b[4];
+	} lo, hi;
+	unsigned short bx, k;
+
+	for (bx = 0; bx < nbytes; bx++)
+	{
+		lo.l = nibbles(pl, 0, np, row + bx);
+		if (pairs)
+			hi.l = nibbles(pl, 0, np, next + bx);  /* the row below */
+		else if (np > 4)
+			hi.l = nibbles(pl, 4, np, row + bx);   /* planes 4-7 */
+		else
+		{
+			for (k = 0; k < 4; k++)
+			{
+				*keys++ = (unsigned char) (lo.b[k] >> 4);
+				*keys++ = (unsigned char) (lo.b[k] & 15);
+			}
+			continue;
+		}
+		for (k = 0; k < 4; k++)
+		{
+			unsigned char a = lo.b[k], b = hi.b[k];
+
+			if (pairs)
+			{
+				*keys++ = (unsigned char) ((a & 0xF0) | b >> 4);
+				*keys++ = (unsigned char) ((a & 15) << 4 | (b & 15));
+			} else
+			{
+				*keys++ = (unsigned char) ((b & 0xF0) | a >> 4);
+				*keys++ = (unsigned char) ((b & 15) << 4 | (a & 15));
+			}
+		}
+	}
 }
 
 /*
@@ -219,6 +278,7 @@ static void load_image(hyp_doc *doc, const hyp_gfx *g, gimage *im)
 	int i, halve, same, pairs;
 	cpick *pick;
 	unsigned long *dev = NULL;
+	unsigned char *pl[8], *kbuf, (*pens)[256] = NULL;
 	MFDB src;
 
 	memset(im, 0, sizeof(*im));
@@ -271,6 +331,12 @@ static void load_image(hyp_doc *doc, const hyp_gfx *g, gimage *im)
 	}
 	free(data);
 
+	if (spread[0x80] == 0)
+		make_spread();
+	for (i = 0; i < np; i++)
+		pl[i] = std + plane * (unsigned long) i;
+	kbuf = malloc(wdw * 16);                 /* a row's pixel values */
+
 	/* how each pixel value (or, two rows made one, each pair of them up
 	   to 16 colours; above, the upper row's) is drawn */
 	halve = tall_pixels && h > 1;
@@ -281,6 +347,7 @@ static void load_image(hyp_doc *doc, const hyp_gfx *g, gimage *im)
 		dev = malloc(keys * sizeof(unsigned long));
 	if (pick == NULL || (scr.bytes && dev == NULL))
 	{
+		free(kbuf);
 		free(pick);
 		free(dev);
 		free(std);
@@ -341,21 +408,28 @@ static void load_image(hyp_doc *doc, const hyp_gfx *g, gimage *im)
 		unsigned short x, y;
 
 		im->form.fd_addr = o;
-		if (o != NULL)
+		if (o != NULL && kbuf != NULL)
 			for (y = 0; y < oh; y++)
 			{
 				unsigned long row = (unsigned long) (halve ? 2 * y : y) * wdw * 2;
 				unsigned long next = halve && 2 * y + 1 < h ? row + wdw * 2 : row;
 
+				row_keys(pl, np, row, next, (unsigned short) (wdw * 2), pairs, kbuf);
 				for (x = 0; x < wdw * 16; x++)
 				{
-					unsigned long px = x < w ? dev[key_at(std, plane, np, row, next, x, pairs)] : 0;
+					unsigned long px = x < w ? dev[kbuf[x]] : 0;
 					short b;
 
 					for (b = scr.bytes; b-- > 0;)
 						*o++ = (unsigned char) (px >> (8 * b));
 				}
 			}
+		else if (o != NULL)
+		{
+			st_free(o);
+			im->form.fd_addr = NULL;
+		}
+		free(kbuf);
 		free(dev);
 		free(pick);
 		free(std);
@@ -367,6 +441,7 @@ static void load_image(hyp_doc *doc, const hyp_gfx *g, gimage *im)
 	if (same)
 	{
 		/* the screen's pens are the image's: its planes as they are */
+		free(kbuf);
 		out = realloc(std, plane * planes);
 		if (out == NULL)
 		{
@@ -378,31 +453,75 @@ static void load_image(hyp_doc *doc, const hyp_gfx *g, gimage *im)
 	} else
 	{
 		unsigned short x, y;
+		unsigned char *opl[8];
 
 		out = calloc(1, oplane * planes);
-		if (out == NULL)
+		if (out == NULL || kbuf == NULL)
 		{
+			free(out);
+			free(kbuf);
 			free(pick);
 			free(std);
 			return;
 		}
+		for (i = 0; i < planes; i++)
+			opl[i] = out + oplane * (unsigned long) i;
+		/* each key's pen at each place in the Bayer matrix (a table, as
+		   the rest: an ST does each pixel in a few instructions) */
+		pens = planes <= 4 ? malloc(16 * 256) : NULL;
+		if (pens != NULL)
+			for (i = 0; i < 16; i++)
+				for (k = 0; k < keys; k++)
+					pens[i][k] = pick[k].t > colour_bayer[i >> 2][i & 3] ? pick[k].b : pick[k].a;
 		for (y = 0; y < oh; y++)
 		{
 			unsigned long row = (unsigned long) (halve ? 2 * y : y) * wdw * 2;
 			unsigned long next = halve && 2 * y + 1 < h ? row + wdw * 2 : row;
+			unsigned long at = (unsigned long) y * wdw * 2;
+			unsigned short bx;
 
-			for (x = 0; x < w; x++)
+			row_keys(pl, np, row, next, (unsigned short) (wdw * 2), pairs, kbuf);
+			if (pens != NULL)
 			{
-				const cpick *pk = &pick[key_at(std, plane, np, row, next, x, pairs)];
-				unsigned short pen = COLOUR_AT(pk, x, y);
-				unsigned long at = (unsigned long) y * wdw * 2 + (x >> 3);
-				unsigned char bit = (unsigned char) (0x80 >> (x & 7));
+				/* up to 4 planes: 4 pixels' pens in a word, then each
+				   plane's 4 bits gathered from it */
+				const unsigned char *t0 = pens[(y & 3) * 4], *t1 = t0 + 256, *t2 = t1 + 256, *t3 = t2 + 256;
+				const unsigned char *kb = kbuf;
 
+				for (bx = 0; bx < wdw * 2; bx++, kb += 8)
+				{
+					unsigned short hi = (unsigned short) (t0[kb[0]] << 12 | t1[kb[1]] << 8 | t2[kb[2]] << 4 | t3[kb[3]]);
+					unsigned short lo = (unsigned short) (t0[kb[4]] << 12 | t1[kb[5]] << 8 | t2[kb[6]] << 4 | t3[kb[7]]);
+
+					for (i = 0; i < planes; i++, hi >>= 1, lo >>= 1)
+					{
+						unsigned short a = hi & 0x1111, b = lo & 0x1111;
+
+						a = (unsigned short) ((a | a >> 3 | a >> 6 | a >> 9) & 15);
+						b = (unsigned short) ((b | b >> 3 | b >> 6 | b >> 9) & 15);
+						opl[i][at + bx] = (unsigned char) (a << 4 | b);
+					}
+				}
+				continue;
+			}
+			for (bx = 0, x = 0; bx < wdw * 2; bx++)
+			{
+				unsigned char ob[8] = { 0, 0, 0, 0, 0, 0, 0, 0 }, m;
+
+				for (m = 0x80; m != 0 && x < w; m >>= 1, x++)
+				{
+					unsigned short pen = COLOUR_AT(&pick[kbuf[x]], x, y);
+
+					for (i = 0; i < planes; i++)
+						if (pen & (1 << i))
+							ob[i] |= m;
+				}
 				for (i = 0; i < planes; i++)
-					if (pen & (1 << i))
-						out[oplane * (unsigned long) i + at] |= bit;
+					opl[i][at + bx] = ob[i];
 			}
 		}
+		free(pens);
+		free(kbuf);
 		free(std);
 	}
 	free(pick);
