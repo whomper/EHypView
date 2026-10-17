@@ -162,6 +162,8 @@ XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
 
 ATARI    = build/atari
 HATARI_DIR = build/hatari
+# the emulator tests' EmuTOS (tests/emutos.sh fetches it)
+EMUTOS     = build/emutos/etos512us-1.4.img
 RUNTIME  = crt0 nf libc tos plat_tos gem crash crash_s alert dialog bidi
 RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
@@ -281,7 +283,7 @@ icons: tools/icon/make_icon.py tools/icon/make_rsc.py
 # drive EHYPVIEW.PRG in Hatari with the keyboard (screenshots in build/gui)
 gui-test: atari
 	sh tests/emutos.sh
-	python3 tests/run_gui.py $(HATARI_DIR) build/emutos/etos512us.img build/gui
+	python3 tests/run_gui.py $(HATARI_DIR) $(EMUTOS) build/gui
 
 # the accessory's quiet start (the AERA guidelines, 2.2), measured: a build
 # with -DAES_PROFILE=40 (common/atari/gem.c reports every stretch of 40 ms
@@ -292,7 +294,7 @@ quiet-test: atari
 	$(MAKE) ATARI=$(QUIET_DIR)/obj HATARI_DIR=$(QUIET_DIR) XEXTRA=-DAES_PROFILE=40 $(QUIET_DIR)/EHYPVIEW.ACC \
 		$(QUIET_DIR)/ASKHELP.PRG
 	sh tests/emutos.sh
-	python3 tests/run_quiet.py $(QUIET_DIR) build/emutos/etos512us.img build/quiet
+	python3 tests/run_quiet.py $(QUIET_DIR) $(EMUTOS) build/quiet
 
 # run EHVCHECK.PRG in Hatari (Falcon, EmuTOS) and compare with the host
 hatari-test: atari $(HOST)/ehvcheck
