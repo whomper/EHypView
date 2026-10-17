@@ -2208,7 +2208,7 @@ static void viewer_message(short *msg)
 			bookmarks_load();
 			pick_current();
 			if (cur->view.page != NULL)
-				open_window();
+			open_window();
 			else
 				libwin_open();
 		}
@@ -2365,7 +2365,7 @@ static void bookmarks_load(void)
 			bm_written = i + 1;
 	}
 	if (inf != NULL)
-		inf_free(inf);
+	inf_free(inf);
 	libwin_bookmarks(&bookmarks);
 	menu_rebuild();
 }
@@ -2678,17 +2678,27 @@ static void acc_heap(void)
 
 	/* then the heap: a third of the largest block, or a quarter when
 	   there is no Fast RAM (it all comes out of ST RAM then), at most
-	   2 MB */
+	   2 MB; on a small machine 96 KB (a page and its pictures being
+	   converted), but never more than half: the programs started later
+	   need the rest */
 	avail = (long) Malloc(-1L);
 	want = tt > 0 ? avail / 3 : avail / 4;
 
 	if (want > 2L * 1024 * 1024)
 		want = 2L * 1024 * 1024;
-	if (want < 64L * 1024)
-		want = avail - 16L * 1024;
+	if (want < 96L * 1024)
+		want = avail / 2 < 96L * 1024 ? avail / 2 : 96L * 1024;
 	p = want > 0 ? Malloc(want) : NULL;
 	if ((long) p > 0)
 		heap_add(p, (size_t) want);
+	{
+		/* for the tests: what it took, and what it left the programs */
+		char a[48], b[24];
+
+		sprintf(a, "pictures %ldK heap %ldK", st / 1024, (long) p > 0 ? want / 1024 : 0L);
+		sprintf(b, "free %ldK", (long) Malloc(-1L) / 1024);
+		log_event("acc-memory", a, b);
+	}
 }
 
 /*

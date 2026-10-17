@@ -8,14 +8,17 @@
  * block that fits, joining free neighbours on the way, and splits it;
  * st_free() marks a block free.  Pictures are few and come and go with
  * pages, so a walk is quick enough.
+ *
+ * Where GEMDOS has no block left (a 1 MB machine, the program's heap
+ * having taken the rest), the heap's own memory does when it is ST RAM,
+ * as it all is without TT or Fast RAM.
  */
 #include <stddef.h>
+#include <stdlib.h>
 #include "stmem.h"
 
 #ifdef EHV_TOS
 #include "tos.h"
-#else
-#include <stdlib.h>                    /* the host's tests */
 #endif
 
 #define MAX_AREAS 6                    /* GEMDOS blocks: TOS's pool is small */
@@ -113,6 +116,30 @@ static void *fit(area *a, long need)
 	return NULL;
 }
 
+/* n bytes from the heap, if they are ST RAM */
+static void *from_heap(long n)
+{
+	void *p = malloc((size_t) n);
+
+	if (p != NULL && !st_ram_addr(p))
+	{
+		free(p);
+		p = NULL;
+	}
+	return p;
+}
+
+/* the area p is in, or NULL: from the heap */
+static area *area_of(const void *p)
+{
+	int i;
+
+	for (i = 0; i < nareas; i++)
+		if ((const char *) p > areas[i].base && (const char *) p < areas[i].base + areas[i].size)
+			return &areas[i];
+	return NULL;
+}
+
 void *st_alloc(long n)
 {
 	long need, grow;
@@ -126,13 +153,13 @@ void *st_alloc(long n)
 		if ((p = fit(&areas[i], need)) != NULL)
 			return p;
 	if (fixed)
-		return NULL;
+		return from_heap(n);           /* the accessory: its own heap */
 	/* a new area: as big as all before it, at least the first size */
 	grow = taken > FIRST ? taken : FIRST;
 	if (grow < need)
 		grow = need;
 	if (!add_area(grow) && !add_area(need))
-		return NULL;
+		return from_heap(n);
 	return fit(&areas[nareas - 1], need);
 }
 
@@ -142,6 +169,11 @@ void st_free(void *p)
 
 	if (p == NULL)
 		return;
+	if (area_of(p) == NULL)
+	{
+		free(p);                       /* from_heap() */
+		return;
+	}
 	b = (blk *) ((char *) p - HDR);
 	if (b->used)
 	{
