@@ -59,7 +59,11 @@ STEPS = [
     (list("det"), ['search "det" 1']),                 # page names as you type
     ([RETURN], ["page %s Detail" % OTHER]),
     ([("ctrl", L)], ["library 4"]),
-    ([ESC], ['search "" 4']),
+    # Esc clears no text (the guidelines, 3.5): the search is still "det",
+    # and Backspace takes it out a letter at a time
+    ([ESC], []),
+    ([BACKSPACE], ['search "de" *']),
+    ([BACKSPACE, BACKSPACE], ['search "" 4']),
     (list("beside"), ['search "beside" 0']),
     ([RETURN], ['fulltext-start "beside"', 'fulltext "beside" 1']),
     ([RETURN], ["page %s Main" % IMAGES]),             # the full-text hit
@@ -73,7 +77,8 @@ STEPS = [
     ([("ctrl", W)], ["closed viewer"]),
     ([("ctrl", W)], ["closed library"]),
     ([("ctrl", L)], ["library 4"]),
-    ([ESC], ['search "" 4']),                          # the search typed before, cleared:
+    ([BACKSPACE] * 6, ['search "" 4']),                # the search typed before, taken out:
+    ([ESC], []),                                       # Esc with none: nothing, the window stays
     ([RETURN], ["page %s Index" % IMAGES]),            # the bookmark, first in the library
     ([("ctrl", L)], ["library 4"]),
     ([DELETE], ["bookmark removed *"]),                # Delete removes it
@@ -88,7 +93,7 @@ LIBRARY_START = [
     (list("zweite"), ['search "zweite" 1']),
     ([RETURN], ["page %s Second" % BASIC]),
     ([("ctrl", L)], ["library 4"]),
-    ([ESC], ['search "" 4']),
+    ([BACKSPACE] * 6, ['search "" 4']),                # "zweite", taken out
     ([RETURN], ["page %s Detail" % OTHER]),            # the bookmark, first in the library
     ([("ctrl", Q)], ["quit"]),
 ]
@@ -357,7 +362,7 @@ MOUSE_STEPS = [
     ([tb(TB_LIBRARY)], ["toolbar library", "library 4"]),
     ([("wait", 1)], []),                                    # (a picture of it)
     (list("sec"), ['search "sec" *']),
-    ([ESC], ['search "" 4']),
+    ([BACKSPACE] * 3, ['search "" 4']),
     ([("ctrl", W)], ["closed library"]),
     # the page: links, the right button's menu, pop-ups
     ([("click", 120, 142)], ["page %s Second" % BASIC]),    # "to Second"

@@ -4,7 +4,8 @@
  * EHypView - the library window: every hypertext found, and one search
  * box.  Typing goes into the search line at the top; Up/Down choose a
  * row; Return (or a click) opens it in the viewer, or starts the
- * full-text search; Esc clears the search.
+ * full-text search.  Backspace and ^X take text out of the search; Esc
+ * clears no text (the AERA guidelines, 3.5).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -627,9 +628,8 @@ void libwin_key(short kstate, short kreturn)
 		if (lib_selected_bookmark(&lib) >= 0)
 			app_bookmark_remove(lib_selected_bookmark(&lib));
 		return;
-	case 0x01:                             /* Esc */
-		if (n > 0)
-			set_query("");
+	case 0x01:                             /* Esc: nothing (the guidelines,
+	                                          3.5: Esc clears no text) */
 		return;
 	case 0x0e:                             /* Backspace */
 		if (n > 0)
