@@ -222,7 +222,7 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
-           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o \
+           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/settings.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/colour.o
 
@@ -290,6 +290,26 @@ icons: tools/icon/make_icon.py tools/icon/make_rsc.py
 	python3 tools/icon/make_icon.py >/dev/null
 	cd tools/icon && python3 make_rsc.py
 
+# the help file, EHYPVIEW.HYP, from docs/GUIDE.md with the family's front
+# page (docs/front.json, common/tools/helpfront.py), and EHYPVIEW.REF, the
+# pages' names for ST-Guide's index. Needs hcp (github.com/th-otto/hypview;
+# common/tools/build-hcp.sh builds it): `make help HCP=/path/to/hcp`.
+# EHypView's own reader then reads every page of it (hypdump)
+HCP     ?= hcp
+help: binary/EHYPVIEW.HYP
+binary/EHYPVIEW.HYP: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help/WINDOW.IMG \
+                     common/help/EHYPVIEW.IMG common/tools/helpfront.py common/tools/gemimg.py $(HOST)/hypdump
+	mkdir -p build/help binary
+	python3 tools/mkhelp.py docs/GUIDE.md VERSION build/help/EHYPVIEW.STG
+	python3 common/tools/helpfront.py page docs/front.json build/help/EHYPVIEW.STG build/help/EHYPVIEW.STG
+	$(HCP) -q -o $@ build/help/EHYPVIEW.STG >/dev/null
+	test -s binary/EHYPVIEW.REF
+	$(HOST)/hypdump check $@ >/dev/null
+
+# the help file says the program's version (when it was made)
+HYPCHECK = grep -q "EHYPVIEW.HYP $$(cat VERSION)" binary/EHYPVIEW.HYP || \
+	  { echo "binary/EHYPVIEW.HYP isn't version $$(cat VERSION): make help"; exit 1; }
+
 # drive EHYPVIEW.PRG in Hatari with the keyboard (screenshots in build/gui)
 gui-test: atari
 	python3 tests/run_gui.py $(HATARI_DIR) build/gui
@@ -319,9 +339,10 @@ hatari-test: atari $(HOST)/ehvcheck
 
 # a release's files: each one in dist/, and all of them in
 # dist/EHYPVIEW-x.y.zip (the icons in icons/), for the release workflow
-DIST    := binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC
+DIST    := binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPVIEW.HYP binary/EHYPVIEW.REF
 ICONS   := icons/EHYPVIEW.RSC icons/EHYPVIEW.ICN icons/EHYPVWMK.ICN
-dist: atari
+dist: atari help
+	@$(HYPCHECK)
 	rm -rf dist
 	mkdir -p dist/zip/icons
 	cp $(DIST) $(ICONS) dist/
@@ -333,4 +354,4 @@ dist: atari
 clean:
 	rm -rf build binary dist
 
-.PHONY: icons all test asan m68k-test atari dist hatari-test gui-test quiet-test colour-test clean FORCE
+.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test colour-test clean FORCE

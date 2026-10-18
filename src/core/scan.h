@@ -85,11 +85,12 @@ ehv_index *ehv_scan_all(const char *const *roots, unsigned int nroots,
                         const ehv_index *previous, const ref_db *allref);
 
 /*
- * The folders to scan for an existing ST-Guide setup: PATHS, HYPFOLD and
- * the folder of REF from ST-GUIDE.INF (inf may be NULL), then the usual
- * places *:\GUIDES and *:\GEMSYS\GUIDES.  Duplicates are removed.
- * Free with inf_free_list().
+ * The folders to scan: own, EHypView's PATHS from EHYPVIEW.INF (a list as
+ * inf_split_list() takes, may be NULL), then for an existing ST-Guide
+ * setup PATHS, HYPFOLD and the folder of REF from ST-GUIDE.INF (inf may
+ * be NULL), then the usual places *:\GUIDES and *:\GEMSYS\GUIDES.
+ * Duplicates are removed.  Free with inf_free_list().
  */
-unsigned int ehv_default_roots(const inf_file *inf, char ***roots);
+unsigned int ehv_default_roots(const inf_file *inf, const char *own, char ***roots);
 
 #endif

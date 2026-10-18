@@ -8,9 +8,9 @@ and is the help viewer your other programs open when you press Help.
 
 **Highlights**
 
-- **Finds every hypertext by itself:** the folders named in `ST-GUIDE.INF`, and `\GUIDES` and
-  `\GEMSYS\GUIDES` on every drive, with all their subfolders, scanned in the background and kept in an
-  index. There is no `ALL.REF` to maintain (yours is still read).
+- **Finds every hypertext by itself:** the folders named in `ST-GUIDE.INF` or in its own Settings, and
+  `\GUIDES` and `\GEMSYS\GUIDES` on every drive, with all their subfolders, scanned in the background
+  and kept in an index. There is no `ALL.REF` to maintain (yours is still read).
 - **A library with one search box:** every hypertext found, grouped by subject. Typing finds page
   names, aliases and keywords at once; Return searches the full text of every page of every hypertext.
 - **Links that lead somewhere:** into any hypertext in the index, wherever it is. One that leads nowhere
@@ -29,9 +29,10 @@ and is the help viewer your other programs open when you press Help.
 - **Your choice of font:** the system font, or any monospaced GDOS font with NVDI or SpeedoGDOS, in any
   size, changed at any time.
 - **Modern but Atari:** a program with a menu bar or a desk accessory, a shortcut for every menu item,
-  a right-click menu, drag and drop, the clipboard and iconify.
+  a right-click menu, a Settings dialog, drag and drop, the clipboard and iconify.
+- **Its own guide:** `EHYPVIEW.HYP`, with the AERA programs' front page, from **Help > EHypView guide**.
 
-![EHypView on a Falcon: the library lists the AERA programs' guides by subject (EMail, EContact, ECal) over the viewer, which shows a page of ECal's guide under its toolbar](docs/screenshot.png)
+![EHypView on a Falcon: the library lists the AERA programs' guides by subject (EMail, EFTP, EContact, ECal, EHypView) over the viewer, which shows a page of EHypView's own guide under its toolbar](docs/screenshot.png)
 
 ## Getting started
 
@@ -42,6 +43,7 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
 |---|---|
 | `EHYPVIEW.PRG` | the viewer as a program, with a menu bar |
 | `EHYPVIEW.ACC` | the same viewer as a desk accessory (one program under two names) |
+| `EHYPVIEW.HYP`, `EHYPVIEW.REF` | the user guide (and its index for ST-Guide) |
 | `EHYPVIEW.RSC`, `EHYPVIEW.ICN`, `EHYPVWMK.ICN` | the desktop icon, in the zip's `icons/` folder (see [The desktop icon](#the-desktop-icon)) |
 | `EHYPVIEW-x.y.zip` | all of them |
 
@@ -54,8 +56,12 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
    place of any accessory with that name): that is the name programs look for when you press Help.
 3. Keep your hypertexts (each `.HYP` with its `.REF`) where EHypView looks for them, including all
    subfolders:
+   - the folders you add in **Options > Settings...** (`PATHS` in `EHYPVIEW.INF`)
    - the folders in `PATHS` and `HYPFOLD`, and the folder of `REF`, from `ST-GUIDE.INF`
    - `\GUIDES` and `\GEMSYS\GUIDES` on every drive from C: on
+
+   Copy `EHYPVIEW.HYP` and `EHYPVIEW.REF` into one of them too (or next to `EHYPVIEW.PRG`): **Help >
+   EHypView guide** opens it.
 
    EHypView looks through these folders in the background, in short steps that pause while you use
    the mouse or keyboard. Its index (`EHYPVIEW.IDX`) has the hypertexts ready without reading them
@@ -71,15 +77,15 @@ is optional, for more fonts.
 
 Click a link, or move to it with Tab and press Return. Links lead into any hypertext in the index, and
 when one leads nowhere, the window's info line says so and suggests the closest names. In the program,
-every menu item (**Desk**, **File**, **Edit**, **View**, **Navigate**, **Bookmarks**) has a keyboard
-shortcut, and items you can't use right now are greyed out. The right mouse button, or Insert, opens a
+every menu item (**EHypView**, **File**, **Edit**, **View**, **Navigate**, **Bookmarks**, **Options**,
+**Help**) has a keyboard shortcut, and items you can't use right now are greyed out. The right mouse button, or Insert, opens a
 menu with **Back** and **Forward** first (and, on a link, **Link in new window**), then the pages,
 **New window**, **Add bookmark**, **Copy page**, **Library and search**, **Font...**, and
 **About EHypView...** last.
 
 **The toolbar**, at the top of each viewer window, drawn like the other AERA programs' toolbars:
 
-![The viewer showing a page of ECal's guide, with the toolbar above it and the Back button's tooltip, "Back (Undo). Right button: the history"](docs/toolbar.png)
+![The viewer showing a page of EHypView's own guide, with the toolbar above it and the Back button's tooltip, "Back (Undo). Right button: the history"](docs/toolbar.png)
 
 | Button | What it does |
 |---|---|
@@ -90,7 +96,7 @@ menu with **Back** and **Forward** first (and, on a link, **Link in new window**
 | See also | the pages the page names with `@xref`, as a menu |
 | Library | the library: every hypertext found, and the search |
 | Bookmarks | add or remove this page, or go to a bookmark |
-| ≡ | a menu: **About EHypView...**, new window, open, library, copy, bookmark, fonts, close, quit; the accessory, which has no menu bar, finds them here |
+| ≡ | a menu: **About EHypView...**, new window, open, library, copy, bookmark, fonts, settings, the guide, close, quit; the accessory, which has no menu bar, finds them here |
 
 A button that can't be used on the page shown is greyed out, and each one says what it does when the
 mouse rests on it for a second. In a narrow window the least needed buttons (See also, Index, ...)
@@ -117,8 +123,10 @@ make room first; the ≡ menu and the keys still reach everything.
 | ^W or ^U / ^Q | close the top window / quit |
 | ⇧^F | choose the font |
 | ^+ / ^- (on the keypad, or ^= and ^-) | larger / smaller text |
+| ^, | settings |
 
-**Desk > About EHypView...** shows the version, the number of hypertexts found and the font in use.
+**EHypView > About EHypView...** (the first menu, where other programs have Desk) shows the version, the
+number of hypertexts found and the font in use.
 
 **Pop-ups** (links to a `@pnode`) open as a small framed box just below the link, over the page. A
 click on a link in the box follows it; any other click, or any key, closes the box and leaves the
@@ -168,11 +176,27 @@ fonts are shown but can't be picked. ^+ and ^- change the size. A font dropped o
 selector (the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and the list of which
 fonts are monospaced in `EHYPVIEW.FNT`.
 
+### Settings
+
+**Options > Settings...** (^,; in the accessory, the toolbar's ≡ menu) shows what `EHYPVIEW.INF` holds,
+on two pages, as EMail's and ECal's Settings do. OK keeps the changes; Cancel, Esc and Undo forget them.
+
+![The Settings dialog over the viewer: the General page, with when the accessory looks through the library and EHypView's folder](docs/settings.png)
+
+- **General:** when the accessory looks through the library (`START=`): when first opened, at start,
+  after a minute or after 5 minutes; and EHypView's folder (`FOLDER=`), where the index is kept.
+- **Library:** up to three more folders to look for hypertexts in, with their subfolders (`PATHS=`). A
+  folder that isn't there is asked about: **Keep** it (a drive put in later) or **Change** it. OK
+  with new folders looks through the library again.
+
+The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in the Bookmarks menu.
+
 ### Program and accessory
 
 - **The program** has a menu bar, and keeps running when its windows are closed, until you choose
   **File > Quit** (^Q).
-- **The accessory** has no menu bar: **About EHypView...** is in the right button's menu. Its entry in
+- **The accessory** has no menu bar: its commands are in the toolbar's ≡ menu, and **About
+  EHypView...** in the right button's menu too. Its entry in
   the Desk menu (**EHypView**) opens the viewer, or the library when no page is shown. It takes its
   memory when it loads: a third of the largest free block (a quarter when there is no TT RAM), at
   most 2 MB, and 64 to 128 KB of ST RAM for the pictures.
@@ -214,6 +238,10 @@ fonts are monospaced in `EHYPVIEW.FNT`.
   it into `FOLDER=`; the accessory uses `FOLDER=`, or the root while there is none.
 - **`START=`** says when the accessory starts on its library: `opened` (the first time it is opened
   or asked for a page; the program writes this when there is none), `now`, or seconds after boot.
+- **`PATHS=`** names more folders to look for hypertexts in, between `;`, as well as `ST-GUIDE.INF`'s.
+  `ST-GUIDE.INF` itself is ST-Guide's: EHypView reads it and never writes it.
+
+**Settings** changes `START=` and `PATHS=`.
 
 ### The desktop icon
 
@@ -230,6 +258,7 @@ sudo apt install gcc-m68k-linux-gnu zip   # Debian/Ubuntu; no MiNTLib needed
 make           # the host tools and tests in build/host, among them hypdump
 make atari     # build/hatari/: EHYPVIEW.PRG, EHYPVIEW.ACC, EHVCHECK.PRG;
                # binary/: EHYPVIEW.PRG, EHYPVIEW.ACC
+make help HCP=/path/to/hcp   # binary/EHYPVIEW.HYP and .REF from docs/GUIDE.md
 make dist      # dist/: a release's files, each on its own and in EHYPVIEW-x.y.zip
 make icons     # draw the icon again (tools/icon/; python3-pil for the PNGs)
 ```
@@ -241,6 +270,13 @@ reads even for the 68000, which faults on an odd address, so the build turns tha
 file access, AES/VDI bindings), and `common/tools/elf2tos.py` writes the TOS program file. `common/` is
 the AERA programs' shared code, a copy of [AERA-Atari](https://github.com/whomper/AERA-Atari)'s
 `common/` folder: change it there and bring the copy up to date with `tools/sync-common.sh`.
+
+**The guide.** `docs/GUIDE.md` is the source of `EHYPVIEW.HYP`: `tools/mkhelp.py` (EContact's and
+EMail's) makes ST-Guide's source from it, `common/tools/helpfront.py` gives it the AERA programs' front
+page from `docs/front.json`, and `hcp` compiles it; `common/tools/build-hcp.sh DIR` builds `hcp`. The
+front page's window picture, `docs/help/WINDOW.IMG`, is committed: when the viewer changes, take a
+Hatari screenshot of it and make the picture again with `common/tools/helpfront.py thumb` (the line is
+in CLAUDE.md). EHypView's own reader checks every page of the result (`hypdump check`).
 
 `build/host/hypdump` inspects any hypertext:
 
@@ -265,7 +301,8 @@ and `dist/` are what make builds; they are never committed, and a build changes 
 Builds between releases are never handed out: to try a change, release it. To release: `tools/bump.py`, commit and push, then **Actions > Release > Run
 workflow** on `main` with what is new.
 [`.github/workflows/release.yml`](.github/workflows/release.yml) tags the commit (`v1.1`), tests,
-builds the programs and publishes each file and the zip as a GitHub Release with those notes. Pushing
+builds the programs and the guide, and publishes each file and the zip as a GitHub Release with
+those notes. Pushing
 a tag `v1.1` made with `git tag -a` does the same, with the tag's message as the notes.
 
 ## Source
@@ -277,7 +314,7 @@ src/core/   the portable core, without GEM: .HYP files and LH5, pages, .REF and
 src/view/   the viewer and the library without GEM (links, history, search, the
             font setting), tested on this computer
 src/gem/    the GEM program: the viewer and library windows, drawing, the menu bar,
-            the font selector, the About box
+            the font selector, the Settings dialog, the About box
 atari/      plat_tos.c: the core's file access on GEMDOS, EHypView's own
 common/     the AERA programs' shared code (from AERA-Atari): the TOS runtime,
             AES/VDI, menu bar, About box, alerts, AV protocol, drag and drop,
@@ -285,8 +322,9 @@ common/     the AERA programs' shared code (from AERA-Atari): the TOS runtime,
 icons/      the desktop icon (RSC and ICN files), from tools/icon
 tests/      unit and golden tests, fixtures and their generators, EHVCHECK,
             the Hatari rigs
-tools/      hypdump, the icon generator, bump.py, sync-common.sh
-docs/       DESIGN.md, FORMAT.md, the icon pictures, the screenshots
+tools/      hypdump, the icon generator, mkhelp.py (the guide), bump.py, sync-common.sh
+docs/       GUIDE.md (the source of EHYPVIEW.HYP), front.json and help/ (its front
+            page), DESIGN.md, FORMAT.md, the icon pictures, the screenshots
 ```
 
 [docs/DESIGN.md](docs/DESIGN.md) has the goals, the design decisions, the architecture and the
@@ -322,8 +360,10 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   `EHVCHECK.PRG`.
 - **`make gui-test`** drives `EHYPVIEW.PRG` through Hatari's command FIFO: links (also into a
   hypertext three folders down), back, help, the library and both searches, fonts and the font
-  selector, the accessory, and the program and accessory side by side. The mouse run (Xvfb and
-  xdotool; skipped without them) clicks links, the right button, the menus and the About box. The
+  selector, Settings (Esc and Undo cancel it), the accessory, and the program and accessory side by
+  side. The mouse run (Xvfb and xdotool; skipped without them) clicks links, the right button, the
+  menus, the About box and Settings: its START= popup, its Library page's folders, the alert for one
+  that isn't there, and the library looked through again; `EHYPVIEW.INF` must then hold them. The
   viewer reports what it does through NatFeats, and each step waits for it.
 - **`make quiet-test`** boots the Falcon (`Falcon:16`) with the accessory, built with `-DAES_PROFILE`, and a
   library of 60 hypertexts and 6,720 pages, opens it from the Desk menu and boots again. Nothing may

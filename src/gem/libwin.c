@@ -599,7 +599,7 @@ void libwin_key(short kstate, short kreturn)
 
 	if (ctrl)
 	{
-		if (ascii == 0x0c && viewer_handle() > 0)
+		if (ascii == 0x0c && scan != 0x33 && viewer_handle() > 0)
 		{
 			viewer_top();                  /* ^L: back to the viewer */
 			return;

@@ -42,6 +42,16 @@ static const MBAR_ITEM view_items[] = {
 	{ NULL, NULL, CMD_NONE }
 };
 
+static const MBAR_ITEM opt_items[] = {
+	{ "Settings...", "^,", CMD_SETTINGS },
+	{ NULL, NULL, CMD_NONE }
+};
+
+static const MBAR_ITEM help_items[] = {
+	{ "EHypView guide", NULL, CMD_GUIDE },
+	{ NULL, NULL, CMD_NONE }
+};
+
 static const MBAR_ITEM nav_items[] = {
 	{ "Back", "Undo", CMD_BACK },
 	{ "Forward", "\x01Undo", CMD_FORWARD },
@@ -67,14 +77,17 @@ static MBAR_ITEM bm_items[BM_FIXED + 1 + BM_MAX + 1] = {
 };
 static char bm_label[BM_MAX][BM_LABEL + 4];
 
-/* the guidelines' order (3.1): Desk, File, Edit, View, then the app's */
+/* the guidelines' order (3.1): the Desk menu (under the program's name,
+   as ECal's), File, Edit, View, the app's, Options, Help */
 static const MBAR_TITLE titles[] = {
-	{ " Desk ", desk_items },
+	{ " EHypView ", desk_items },
 	{ " File ", file_items },
 	{ " Edit ", edit_items },
 	{ " View ", view_items },
 	{ " Navigate ", nav_items },
 	{ " Bookmarks ", bm_items },
+	{ " Options ", opt_items },
+	{ " Help ", help_items },
 	{ NULL, NULL }
 };
 
@@ -126,7 +139,7 @@ const char *menu_command_name(int cmd)
 		"back", "home", "index", "toc", "help", "prev", "next",
 		"font", "larger", "smaller", "cut", "copy", "paste",
 		"new-window", "link-window", "bookmark-add", "bookmark-remove",
-		"forward", "see-also"
+		"forward", "see-also", "settings", "guide"
 	};
 
 	if (cmd >= CMD_BM0 && cmd < CMD_COUNT)

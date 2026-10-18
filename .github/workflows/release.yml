@@ -1,7 +1,7 @@
 name: Release
 
-# Builds EHypView and publishes it as a GitHub Release: each file on its
-# own, and all of them in EHYPVIEW-x.y.zip. Two ways to start it:
+# Builds EHypView and its guide and publishes them as a GitHub Release:
+# each file on its own, and all of them in EHYPVIEW-x.y.zip. Two ways to start it:
 # - Actions > Release > Run workflow, on main, with the notes: it tags
 #   main's commit vX.Y, from VERSION;
 # - push a tag vX.Y that matches VERSION: the tag's message
@@ -48,11 +48,13 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu zip
+          sudo apt-get install -y gcc-m68k-linux-gnu zip autoconf automake libtool gettext autopoint pkg-config
+      - name: hcp, for the guide
+        run: common/tools/build-hcp.sh "$RUNNER_TEMP/hcp"
       - name: Test
         run: make test
       - name: Build
-        run: make dist
+        run: make dist HCP="$RUNNER_TEMP/hcp/hcp"
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

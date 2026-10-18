@@ -852,17 +852,19 @@ static int add_root(char ***list, unsigned int *n, const char *path)
 	return 0;
 }
 
-unsigned int ehv_default_roots(const inf_file *inf, char ***roots)
+unsigned int ehv_default_roots(const inf_file *inf, const char *own, char ***roots)
 {
-	char **list = NULL;
-	unsigned int n = 0, i;
+	char **list = NULL, **paths;
+	unsigned int n = 0, i, np = inf_split_list(own, &paths);
 
+	for (i = 0; i < np; i++)
+		add_root(&list, &n, paths[i]);
+	inf_free_list(paths, np);
 	if (inf != NULL)
 	{
-		char **paths;
-		unsigned int np = inf_split_list(inf_get(inf, "PATHS"), &paths);
 		const char *ref = inf_get(inf, "REF");
 
+		np = inf_split_list(inf_get(inf, "PATHS"), &paths);
 		for (i = 0; i < np; i++)
 			add_root(&list, &n, paths[i]);
 		inf_free_list(paths, np);

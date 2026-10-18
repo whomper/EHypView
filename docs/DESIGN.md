@@ -134,6 +134,7 @@ src/gem/       the GEM program
                can't read TT/Fast RAM (no AES calls; tested on the host)
   libwin.c     library window
   menu.c       the menu bar, built in code (no resource file)
+  settings.c   the Settings dialog (EMail's layout): START=, PATHS=
   fontsel.c    the text font: selector dialog (from ECal), sizes, font protocol
   about.c      the About box (as EMail's, ECal's and EContact's), icon*.h
 tools/hypdump  host command-line inspector, used by the tests
@@ -188,9 +189,9 @@ Rules for `src/core`:
   of 40 ms between events (`common/ui/bgwork.c`), so even the accessory
   never holds the machine for long; the accessory starts on it when it
   is first opened (`START=`).
-- **Default roots.** `PATHS`, `HYPFOLD` and the folder of `REF` from an
-  existing `ST-GUIDE.INF`, then `*:\GUIDES` and `*:\GEMSYS\GUIDES`
-  (`*:` = every hard disk).
+- **Default roots.** `PATHS` from `EHYPVIEW.INF` (Settings), then `PATHS`,
+  `HYPFOLD` and the folder of `REF` from an existing `ST-GUIDE.INF`, then
+  `*:\GUIDES` and `*:\GEMSYS\GUIDES` (`*:` = every hard disk).
 
 ### Resolving
 - **Files** are found in this order:
@@ -307,6 +308,7 @@ Rules for `src/core`:
 5. ~~Pop-ups in a box over the page.~~ ✔ (modal, as ST-Guide's: the next
    click or key closes them) ~~Several windows.~~ ✔ ~~Bookmarks.~~ ✔
    ~~A toolbar (ST-Guide's buttons, back and forward, See also,
-   tooltips).~~ ✔ Tabs, settings dialog, colour images, tooltips through
-   BubbleGEM when it runs.
+   tooltips).~~ ✔ ~~Settings dialog (`START=`, its own `PATHS=`).~~ ✔
+   ~~Colour images.~~ ✔ ~~Its own guide, `EHYPVIEW.HYP`.~~ ✔ Tabs, tooltips
+   through BubbleGEM when it runs.
 6. Accessory build, FireBee build, release packaging.

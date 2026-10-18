@@ -1,0 +1,9 @@
+{
+ "name": "EHypView",
+ "banner": "EHYPVIEW",
+ "address": "github.com/whomper/EHypView",
+ "welcome": ["Welcome to **EHypView**, the hypertext viewer for the Atari ST, STE, TT and Falcon. It reads the .HYP help Atari programs come with, finds every one on your drives by itself, and opens the right page when you press Help in another program."],
+ "window": {"title": "The viewer", "picture": "docs/help/WINDOW.IMG", "intro": "A page under its toolbar:", "items": ["Back and forward, the main page, the pages before and after: see [[The toolbar]].", "The file, or what EHypView has to say.", "The page: click a link, or Tab to it and press Return.", "[[The library]]: every hypertext found, and the search.", "The menu: the menu bar's commands, for the accessory."], "more": "More in [[The viewer]] and [[Keys]]."},
+ "diagram": {"title": "How your programs' help reaches EHypView", "boxes": [["Your program", "ECal, EMail"], ["EHypView", "accessory"], ["Hypertexts", "C:\\GUIDES"]], "arrows": ["Help key", "library"], "after": ["Press Help in ECal, EMail, EContact, EFTP or ClaudeST, and the page for what is on screen opens in EHypView: the accessory, or the program under MagiC or MiNT. It finds the hypertext in its library, wherever it is. See [[With other programs]]."]},
+ "contents": [["Getting started", ["Installing", "Program and accessory", "Settings"]], ["Every day", ["The viewer", "The toolbar", "The library", "Bookmarks", "Several windows", "Fonts", "Keys"]], ["With other programs", ["With other programs"]], ["When things go wrong", ["When something goes wrong", "EHYPVIEW.INF", "About EHypView"]]]
+}
