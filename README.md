@@ -48,8 +48,10 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
 | `EHYPVIEW.RSC`, `EHYPVIEW.ICN`, `EHYPVWMK.ICN` | the desktop icon, in the zip's `icons/` folder (see [The desktop icon](#the-desktop-icon)) |
 | `EHYPVIEW-x.y.zip` | all of them |
 
-1. Copy `EHYPVIEW.PRG` into a folder of its own (e.g. `C:\EHYPVIEW\`) and start it. It opens the
-   hypertext given on its command line, else `DEFHYP` (or `HYPTOP`) from the `ST-GUIDE.INF` in your
+1. Copy `EHYPVIEW.PRG` into any folder and start it. It keeps its index (`EHYPVIEW.IDX`), its list
+   of fonts (`EHYPVIEW.FNT`) and any `CRASH.LOG` next to itself, so a folder of its own (such as
+   `C:\EHYPVIEW\`) keeps them together; its settings, `EHYPVIEW.INF`, go in the root of the boot
+   drive. It opens the hypertext given on its command line, else `DEFHYP` (or `HYPTOP`) from the `ST-GUIDE.INF` in your
    boot drive's root, else the library. To open a `.HYP` with a double-click, install `EHYPVIEW.PRG`
    in your desktop as the application for `HYP` files.
 2. To have EHypView inside every program, copy `EHYPVIEW.ACC` to the root of your boot drive and
@@ -67,19 +69,25 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
    EHypView looks through these folders in the background, in short steps that pause while you use
    the mouse or keyboard. Its index (`EHYPVIEW.IDX`) has the hypertexts ready without reading them
    again: only new or changed files are read, and when nothing changed nothing is written.
-4. Press ^L for the library, Help for the hypertext's help page, and the right mouse button for a menu.
+4. Press ^L for the library, Help for the hypertext's help page (in the library, EHypView's guide),
+   ^, for the settings, and the right mouse button for a menu.
+
+**To update,** copy the new files over the old ones. `EHYPVIEW.INF`, with your settings and bookmarks,
+and the index stay; an index from an older EHypView that the new one can't read is made again.
 
 **Needs:** any ST, STE, TT or Falcon, with 1 MB or more (one build for all of them; the FireBee's
 own ColdFire build is still to come, see the [roadmap](docs/DESIGN.md#roadmap)); TOS, EmuTOS, MagiC,
-or MiNT (MultiTOS, XaAES, N.AES); a screen 640 pixels wide or more. NVDI, SpeedoGDOS or another GDOS
-is optional, for more fonts.
+or MiNT (MultiTOS, XaAES, N.AES); a screen 640 pixels wide or more (in ST low and other screens 320
+pixels wide, the accessory still shows the pages other programs ask for, but doesn't open from the
+Desk menu). NVDI, SpeedoGDOS or another GDOS is optional, for more fonts.
 
 ## Using the viewer
 
 Click a link, or move to it with Tab and press Return. Links lead into any hypertext in the index, and
-when one leads nowhere, the window's info line says so and suggests the closest names. In the program,
-every menu item (**EHypView**, **File**, **Edit**, **View**, **Navigate**, **Bookmarks**, **Options**,
-**Help**) has a keyboard shortcut, and items you can't use right now are greyed out. The right mouse button, or Insert, opens a
+when one leads nowhere, the window's info line says so and suggests the closest names. The program's
+menus are **EHypView** (where other programs have Desk), **File**, **Edit**, **View**, **Navigate**,
+**Bookmarks**, **Options** and **Help**; most items have a key, shown beside them, and items you
+can't use right now are greyed out. The right mouse button, or Insert, opens a
 menu with **Back** and **Forward** first (and, on a link, **Link in new window**), then the pages,
 **New window**, **Add bookmark**, **Copy page**, **Library and search**, **Font...**, and
 **About EHypView...** last.
@@ -218,9 +226,12 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
 ### With other programs
 
 - **The Help key.** EMail, EFTP, ECal, EContact and ClaudeST open their guides in EHypView with the
-  Help key when it runs (as an accessory, or as a program under MultiTOS or MagiC). Any program or
-  desktop (Thing, jinnee, Gemini) can hand it a hypertext and a page the same way, with the AV
-  protocol's `VA_START`.
+  Help key when it runs (as an accessory, or as a program under MultiTOS or MagiC): they look for
+  EHypView first, then ST-Guide and HypView. Any program or desktop (Thing, jinnee, Gemini) can hand
+  it a hypertext and a page the same way, with the AV protocol's `VA_START`, or as ST-Guide is asked,
+  with `AC_HELP`.
+- **The clipboard.** ^C copies the page shown, as text, to the GEM clipboard (`SCRAP.TXT`); in the
+  library ^C copies the hypertext chosen, and ^V and ^X paste into and cut the search.
 - **Drag and drop.** Under MultiTOS, MagiC or XaAES, a hypertext dragged onto EHypView's windows opens.
   The accessory tells the desktop about its windows, so Thing and the like can drop one on them under
   plain TOS too.

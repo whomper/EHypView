@@ -14,14 +14,16 @@ when you press Help.
 | `EHYPVIEW.HYP` | this guide (and `EHYPVIEW.REF`, its index for ST-Guide) |
 | `EHYPVIEW.RSC`, `.ICN` | the desktop icon, in the zip's `icons` folder |
 
-- **The program:** copy `EHYPVIEW.PRG` into a folder of its own, such as `C:\EHYPVIEW\`, and start
-  it. To open a `.HYP` with a double-click, install `EHYPVIEW.PRG` on your desktop as the
+- **The program:** copy `EHYPVIEW.PRG` into any folder and start it. It keeps its index
+  (`EHYPVIEW.IDX`), its list of fonts (`EHYPVIEW.FNT`) and any `CRASH.LOG` next to itself, so a
+  folder of its own, such as `C:\EHYPVIEW\`, keeps them together; `EHYPVIEW.INF` goes in the root
+  of the boot drive. To open a `.HYP` with a double-click, install `EHYPVIEW.PRG` on your desktop as the
   application for `HYP` files.
 - **The accessory:** copy `EHYPVIEW.ACC` to the root of your boot drive and restart. **To be the help
   viewer for every program**, copy it there as `ST-GUIDE.ACC` instead (in place of any accessory with
   that name): that is the name programs look for when you press Help.
-- **This guide:** copy `EHYPVIEW.HYP` and `EHYPVIEW.REF` into `C:\GUIDES\`, or next to
-  `EHYPVIEW.PRG`. **Help > EHypView guide** opens it.
+- **This guide:** copy `EHYPVIEW.HYP` and `EHYPVIEW.REF` into `C:\GUIDES\` (or any folder
+  EHypView looks in), or next to `EHYPVIEW.PRG`. **Help > EHypView guide** opens it.
 - **Your hypertexts:** keep each `.HYP` with its `.REF` where EHypView looks for them, with all
   their subfolders: `\GUIDES` and `\GEMSYS\GUIDES` on every drive, the folders in `PATHS`,
   `HYPFOLD` and `REF` from `ST-GUIDE.INF`, and the folders you add in [Settings](#settings).
@@ -29,8 +31,12 @@ when you press Help.
 The program starts with the hypertext given on its command line, else `DEFHYP` (or `HYPTOP`) from
 the `ST-GUIDE.INF` in your boot drive's root, else [the library](#the-library).
 
+**To update,** copy the new files over the old ones. `EHYPVIEW.INF`, with your settings and
+bookmarks, and the index stay; an index from an older EHypView that the new one can't read is made
+again.
+
 **Needs:** any ST, STE, TT or Falcon with 1 MB or more; TOS, EmuTOS, MagiC or MiNT; a screen 640
-pixels wide or more. NVDI, SpeedoGDOS or another GDOS is optional, for more fonts.
+pixels wide or more (on a narrower one the accessory still shows the pages other programs ask for). NVDI, SpeedoGDOS or another GDOS is optional, for more fonts.
 
 ## The viewer
 
@@ -38,7 +44,8 @@ The viewer window shows one page of a hypertext. Its title is the hypertext's an
 the line under it the file it is in, or what EHypView has to say: a link that leads nowhere, and
 the names closest to it ("did you mean").
 
-- **Links** are underlined, or in colour on a colour screen. Click one, or move to it with Tab and
+- **Links** are underlined, and in colour on a screen with 16 colours or more (bold with fewer).
+  Click one, or move to it with Tab and
   ⇧Tab and press Return. Links lead into any hypertext in the library, wherever it is.
 - **⇧-click a link**, or ⇧Return, to follow it in a new window.
 - **Back:** Backspace, Undo, the toolbar's back arrow, or the right button's menu. ⇧Undo goes
@@ -153,19 +160,20 @@ The font is chosen with **View > Font...**, and bookmarks from the Bookmarks men
 ## With other programs
 
 - **The Help key.** EMail, EFTP, ECal, EContact and ClaudeST open their guides in EHypView with the
-  Help key when it runs (as an accessory, or as a program under MultiTOS or MagiC). Any program or
-  desktop can hand it a hypertext and a page the same way, with the AV protocol's `VA_START`, or as
+  Help key when it runs (as an accessory, or as a program under MultiTOS or MagiC): they look for
+  EHypView first, then ST-Guide and HypView. Any program or desktop can hand it a hypertext and a page the same way, with the AV protocol's `VA_START`, or as
   ST-Guide with `AC_HELP`.
 - **Drag and drop.** Under MultiTOS, MagiC or XaAES, a hypertext dragged onto EHypView's windows
   opens. The accessory tells the desktop about its windows, so Thing and the like can drop one on
   them under plain TOS too.
-- **The clipboard.** ^C copies the page shown, as text, to the GEM clipboard (`SCRAP.TXT`).
+- **The clipboard.** ^C copies the page shown, as text, to the GEM clipboard (`SCRAP.TXT`); in the
+  library ^C copies the hypertext chosen, and ^V and ^X paste into and cut the search.
 - **Iconify.** Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the viewer and the
   library shrink to EHypView's icon. A page asked for by another program brings the viewer back.
 
 ## Keys
 
-Every menu item has its key, shown in the menu.
+Most menu items have a key, shown beside them in the menu.
 
 | Keys | What they do |
 |---|---|
@@ -212,7 +220,8 @@ it doesn't know, when it writes the file. [Settings](#settings) changes most of 
 
 - **A hypertext isn't in the library.** Is it in one of the folders EHypView looks in (see
   [Settings](#settings))? A new one is found the next time the library is looked through: when the
-  program starts, or the accessory is next started.
+  program starts, when the accessory first opens after the Atari starts, or when you add a folder in
+  Settings.
 - **"Hypertext not found" or "Page not found".** The link names something that isn't in the
   library. The line under the title suggests the closest names.
 - **Help in another program does nothing.** The accessory must be loaded (in the root of the boot
@@ -221,7 +230,10 @@ it doesn't know, when it writes the file. [Settings](#settings) changes most of 
 - **If the program crashes** (what would be 2 to 8 bombs), it says so, writes what happened to
   `CRASH.LOG` next to `EHYPVIEW.PRG` and quits, leaving the Atari running. The next time it starts it
   offers to show the report.
-- **In ST low** (320 pixels wide) EHypView says the screen is too narrow: use ST medium or more.
+- **In ST low** (320 pixels wide) EHypView says the screen is too narrow: use ST medium or more. The
+  accessory still shows the pages other programs ask for there.
+- **"The system has no window left for EHypView."** GEM has only a few windows to share between
+  the programs and accessories: close one and try again.
 
 ## About EHypView
 

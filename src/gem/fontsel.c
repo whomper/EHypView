@@ -314,7 +314,7 @@ static void save(void)
 	char pt[12];
 
 	sprintf(pt, "%d", pref.point);
-	settings_put("FONT", pref.name, "the text font: SYSTEM, or the name of a GDOS font (View > Font...)");
+	settings_put("FONT", pref.name, "the text font: System font, or the name of a GDOS font (View > Font...)");
 	settings_put("POINT", pt, "its size in points; 0: the usual one");
 	inf_seen = stamp(inf_path);
 }

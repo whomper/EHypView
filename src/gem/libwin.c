@@ -434,7 +434,7 @@ void libwin_open(void)
 		if (lib_h <= 0)
 		{
 			lib_h = -1;
-			alert(1, "[3][EHypView: no more windows.][ OK ]");
+			alert(1, "[3][The system has no window left for EHypView.|Close a window and try again.][ OK ]");
 			return;
 		}
 		wind_calc(WC_BORDER, LKIND, 0, 0, (short) (60 * cw + 2 * MARGIN), (short) (desk_h * 2 / 3),

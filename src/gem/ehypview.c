@@ -856,7 +856,7 @@ static void open_window(void)
 	if (cur->h <= 0)
 	{
 		cur->h = -1;
-		alert(1, "[3][EHypView: no more windows.][ OK ]");
+		alert(1, "[3][The system has no window left for EHypView.|Close a window and try again.][ OK ]");
 		return;
 	}
 	cols = (short) (cur->view.doc && cur->view.doc->width ? cur->view.doc->width : 75);
