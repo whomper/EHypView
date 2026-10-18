@@ -67,9 +67,8 @@ void app_bookmark_remove(int i);         /* Delete in the library, the menu */
 int settings_put(const char *key, const char *value, const char *note);
 
 /* fontsel.c: the text font */
-void font_init(const char *dir, const char *inf, int later);	/* the font from inf; EHYPVIEW.FNT in dir;
-							   later: a GDOS font only at font_wake() */
-void font_wake(void);                     /* the accessory, first opened: its font now */
+void font_init(const char *dir, const char *inf, int is_acc);	/* the font from inf; EHYPVIEW.FNT in dir;
+							   the accessory: GDOS fonts now or not at all */
 void font_check(void);                    /* the accessory: inf changed meanwhile? the font again */
 void font_exit(void);
 void font_dialog(void);                   /* View > Font... */
@@ -85,5 +84,6 @@ void about_box(void);
 
 /* gemui.c: the drawing the shared GEM building blocks take from EHypView */
 extern short ehv_ui_scr_w, ehv_ui_scr_h;
+void *ehv_ui_st_ram(long n);           /* st_ram() of gemui.c (ui.h) */
 
 #endif

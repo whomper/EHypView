@@ -122,6 +122,11 @@ picked. ^+ and ^- make the text larger and smaller. A font dropped on a window f
 (the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and which fonts are
 monospaced in `EHYPVIEW.FNT`.
 
+The accessory loads GDOS fonts only when the Atari starts, and only when `EHYPVIEW.INF` names one:
+GDOS fonts loaded later would be lost when the program in front ends. So a GDOS font chosen in the
+accessory, or in the program while the accessory is loaded, is the accessory's from the next boot.
+Its font selector says which fonts it hasn't loaded.
+
 ## Settings
 
 **Options > Settings...** (^,; in the accessory, the toolbar's ≡ menu) shows what `EHYPVIEW.INF`

@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "charset.h"
@@ -663,12 +664,24 @@ static int same_index(const ehv_index *a, const ehv_index *b)
 	return 1;
 }
 
+/* the lowest file number free: the same before and after a step when
+   the step left no file open (guidelines 2.2: an accessory's files
+   belong to the program in front, whose end closes them) */
+static int free_fd(void)
+{
+	int fd = open("/dev/null", O_RDONLY);
+
+	if (fd >= 0)
+		close(fd);
+	return fd;
+}
+
 /* the job to its end; *nindex: indices it handed out; the last one */
 static ehv_index *run_job(const char *cache, const char *allref, int *nindex, int *unchanged, int *steps)
 {
 	ehv_libjob *j = ehv_libjob_begin(cache, (const char *const *) roots, 4, allref);
 	ehv_index *idx = NULL;
-	int r;
+	int r, fd = free_fd(), kept = 0;
 
 	*nindex = *steps = 0;
 	CHECK(j != NULL);
@@ -677,6 +690,8 @@ static ehv_index *run_job(const char *cache, const char *allref, int *nindex, in
 	while ((r = ehv_libjob_step(j)) >= 0 && r != EHV_JOB_DONE)
 	{
 		++*steps;
+		if (free_fd() != fd)
+			kept++;
 		if (r == EHV_JOB_INDEX)
 		{
 			ehv_index_free(idx);
@@ -685,6 +700,7 @@ static ehv_index *run_job(const char *cache, const char *allref, int *nindex, in
 		}
 	}
 	CHECK(r == EHV_JOB_DONE);
+	CHECK(kept == 0);                  /* no file open between two steps */
 	*unchanged = ehv_libjob_unchanged(j);
 	ehv_libjob_free(j);
 	return idx;

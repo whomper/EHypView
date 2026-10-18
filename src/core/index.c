@@ -1009,7 +1009,9 @@ struct ehv_saver {
 	const ehv_index *idx;
 	char *path, *tmp;
 	outbuf o;                       /* written out each CHUNK */
-	int phase, table, h;
+	int phase, table;
+	int h;                          /* open only within a step (guidelines 2.2) */
+	int made;                       /* tmp is on the disk */
 	unsigned long i, k;             /* S_GUIDES: guide, and its name (0: the guide itself) */
 };
 
@@ -1037,28 +1039,34 @@ void ehv_index_save_abort(ehv_saver *v)
 	if (v == NULL)
 		return;
 	if (v->h >= 0)
-	{
 		pf_close(v->h);
+	if (v->made)
 		pf_remove(v->tmp);
-	}
 	free(v->o.data);
 	free(v->path);
 	free(v->tmp);
 	free(v);
 }
 
-/* what is built goes to the file (a step of its own) */
+/* what is built goes to the file (a step of its own), opened again for
+   it: the accessory's files belong to the program in front, which may
+   end, and close them, between two steps */
 static int flush(ehv_saver *v)
 {
 	if (v->o.failed)
 		return -1;
-	if (v->o.len > 0 && pf_write(v->h, v->o.data, (long) v->o.len) != (long) v->o.len)
-		return -1;
+	if (v->o.len > 0)
+	{
+		if (v->h < 0 && (v->h = pf_open(v->tmp, PF_APPEND)) < 0)
+			return -1;
+		if (pf_write(v->h, v->o.data, (long) v->o.len) != (long) v->o.len)
+			return -1;
+	}
 	v->o.len = 0;
 	return 0;
 }
 
-int ehv_index_save_some(ehv_saver *v, unsigned int budget)
+static int save_steps(ehv_saver *v, unsigned int budget)
 {
 	const ehv_index *idx = v->idx;
 	int k;
@@ -1078,6 +1086,7 @@ int ehv_index_save_some(ehv_saver *v, unsigned int budget)
 		case S_OPEN:
 			if ((v->h = pf_open(v->tmp, PF_WRITE)) < 0)
 				return -1;
+			v->made = 1;
 			v->phase = S_HEAD;
 			break;
 		case S_HEAD:
@@ -1165,20 +1174,31 @@ int ehv_index_save_some(ehv_saver *v, unsigned int budget)
 			v->phase = S_CLOSE;
 			break;
 		case S_CLOSE:
-			pf_close(v->h);
+			if (v->h >= 0)
+				pf_close(v->h);
 			v->h = -1;
 			/* TOS cannot rename over an existing file */
 			pf_remove(v->path);
 			if (pf_rename(v->tmp, v->path) != 0)
-			{
-				pf_remove(v->tmp);
 				return -1;
-			}
+			v->made = 0;
 			v->phase = S_DONE;
 			break;
 		}
 	}
 	return 1;
+}
+
+int ehv_index_save_some(ehv_saver *v, unsigned int budget)
+{
+	int r = save_steps(v, budget);
+
+	if (v->h >= 0)
+	{
+		pf_close(v->h);
+		v->h = -1;
+	}
+	return r;
 }
 
 int ehv_index_save(const ehv_index *idx, const char *path)
@@ -1241,7 +1261,9 @@ static int split_fields(char *line, char **fields, int max)
 
 struct ehv_loader {
 	ehv_index *idx;
-	int h, version, done;
+	char *path;
+	int h;                          /* open only within a step (guidelines 2.2) */
+	int version, done;
 	char *buf, *pos, *end;
 	unsigned long size, got;
 	long cur;                       /* the guide being read */
@@ -1263,8 +1285,10 @@ ehv_loader *ehv_index_load_begin(const char *path)
 	l->size = st.size;
 	l->buf = malloc(l->size + 1);
 	l->idx = ehv_index_new();
-	l->h = pf_open(path, PF_READ);
-	if (l->buf == NULL || l->idx == NULL || l->h < 0)
+	l->h = -1;
+	if ((l->path = malloc(strlen(path) + 1)) != NULL)
+		strcpy(l->path, path);
+	if (l->buf == NULL || l->idx == NULL || l->path == NULL)
 	{
 		ehv_index_load_abort(l);
 		return NULL;
@@ -1281,6 +1305,7 @@ void ehv_index_load_abort(ehv_loader *l)
 	ehv_index_finish_abort(l->fin);
 	ehv_index_free(l->idx);
 	free(l->buf);
+	free(l->path);
 	free(l);
 }
 
@@ -1423,7 +1448,7 @@ static int read_line(ehv_loader *l, char *line)
 	return 0;
 }
 
-int ehv_index_load_some(ehv_loader *l, unsigned int budget)
+static int load_steps(ehv_loader *l, unsigned int budget)
 {
 	ehv_index *idx = l->idx;
 
@@ -1435,6 +1460,14 @@ int ehv_index_load_some(ehv_loader *l, unsigned int budget)
 			unsigned long left = l->size - l->got;
 			long n = left > (unsigned long) CHUNK ? CHUNK : (long) left;
 
+			/* opened again in each step, where the last one left off */
+			if (l->h < 0)
+			{
+				if ((l->h = pf_open(l->path, PF_READ)) < 0)
+					return -1;
+				if (l->got > 0 && pf_seek(l->h, (long) l->got) != (long) l->got)
+					return -1;
+			}
 			if (pf_read(l->h, l->buf + l->got, n) != n)
 				return -1;
 			l->got += (unsigned long) n;
@@ -1508,6 +1541,18 @@ int ehv_index_load_some(ehv_loader *l, unsigned int budget)
 		}
 	}
 	return 0;
+}
+
+int ehv_index_load_some(ehv_loader *l, unsigned int budget)
+{
+	int r = load_steps(l, budget);
+
+	if (l->h >= 0)
+	{
+		pf_close(l->h);
+		l->h = -1;
+	}
+	return r;
 }
 
 ehv_index *ehv_index_load_take(ehv_loader *l)

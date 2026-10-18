@@ -151,7 +151,9 @@ Rules for `src/core`:
   the viewer never converts.
 - Files are **not kept open** between calls. An accessory on plain TOS
   must not hold handles, because they belong to the program that was
-  running when they were opened.
+  running when they were opened. Nor does it take GEMDOS memory after
+  its first event call: the About box's ST RAM is taken at start-up with
+  the rest (`acc_heap`).
 - Every parser takes untrusted input. The mutation tests run under
   AddressSanitizer.
 
@@ -188,7 +190,11 @@ Rules for `src/core`:
   after a few dozen moves) and saving. The GEM program runs it in slices
   of 40 ms between events (`common/ui/bgwork.c`), so even the accessory
   never holds the machine for long; the accessory starts on it when it
-  is first opened (`START=`).
+  is first opened (`START=`). Each step opens `EHYPVIEW.IDX` (or, while
+  saving, `EHYPVIEW.ID$`) and closes it again before it ends, reading on
+  from where the last step stopped or adding to the end (`PF_APPEND`):
+  the program in front can end between two steps and close what the
+  accessory left open (guidelines 2.2).
 - **Default roots.** `PATHS` from `EHYPVIEW.INF` (Settings), then `PATHS`,
   `HYPFOLD` and the folder of `REF` from an existing `ST-GUIDE.INF`, then
   `*:\GUIDES` and `*:\GEMSYS\GUIDES` (`*:` = every hard disk).

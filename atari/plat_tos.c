@@ -46,9 +46,17 @@ typedef struct {
 
 int pf_open(const char *path, int mode)
 {
+	long h;
+
 	if (mode == PF_WRITE)
 		return (int) Fcreate(path, 0);
-	return (int) Fopen(path, 0);
+	h = Fopen(path, mode == PF_APPEND ? 1 : 0);
+	if (h >= 0 && mode == PF_APPEND && Fseek(0L, (short) h, 2) < 0)
+	{
+		Fclose((short) h);
+		return -1;
+	}
+	return (int) h;
 }
 
 long pf_read(int h, void *buf, long n) { return Fread((short) h, n, buf); }

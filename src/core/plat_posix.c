@@ -18,6 +18,8 @@ int pf_open(const char *path, int mode)
 {
 	if (mode == PF_WRITE)
 		return open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (mode == PF_APPEND)
+		return open(path, O_WRONLY | O_APPEND);
 	return open(path, O_RDONLY);
 }
 
