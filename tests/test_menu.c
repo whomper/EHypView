@@ -79,7 +79,7 @@ static void test_tree(short cw, short ch, short sw, short sh)
 
 	CHECK(menu_build(&m, &two, cw, ch, sw, sh) == 0);
 	t = m.tree;
-	CHECK(m.ntitles == 6);
+	CHECK(m.ntitles == 8);
 
 	/* every object reached exactly once from the root */
 	memset(visits, 0, sizeof(visits));
@@ -126,7 +126,7 @@ static void test_tree(short cw, short ch, short sw, short sh)
 		drop = t[drop].ob_next;
 	}
 	CHECK(title == 2 && drop == screen);
-	CHECK(strcmp(text(&t[t[2].ob_head]), " Desk ") == 0);
+	CHECK(strcmp(text(&t[t[2].ob_head]), " EHypView ") == 0);
 
 	/* commands: every one, a bookmark's only while there is one */
 	for (i = CMD_ABOUT; i < CMD_COUNT; i++)
@@ -150,9 +150,10 @@ static void test_tree(short cw, short ch, short sw, short sh)
 	/* the titles in the guidelines' order */
 	{
 		short ti = t[2].ob_head;
-		static const char *const want[] = { " Desk ", " File ", " Edit ", " View ", " Navigate ", " Bookmarks " };
+		static const char *const want[] = { " EHypView ", " File ", " Edit ", " View ", " Navigate ", " Bookmarks ",
+						    " Options ", " Help " };
 
-		for (i = 0; i < 6; i++, ti = t[ti].ob_next)
+		for (i = 0; i < 8; i++, ti = t[ti].ob_next)
 			CHECK(strcmp(text(&t[ti]), want[i]) == 0);
 	}
 	CHECK(menu_object(&m, CMD_NONE) == -1);

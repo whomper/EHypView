@@ -254,7 +254,7 @@ static void test_default_roots(void)
 	inf_file *inf = inf_parse("PATHS=C:\\GUIDES\\;c:\\guides;D:\\DOC\n"
 		"HYPFOLD=C:\\GUIDES\nREF=E:\\REFS\\ALL.REF\n", NULL);
 	char **r;
-	unsigned int n = ehv_default_roots(inf, &r);
+	unsigned int n = ehv_default_roots(inf, NULL, &r);
 
 	CHECK(n == 5);
 	if (n == 5)
@@ -266,8 +266,22 @@ static void test_default_roots(void)
 		CHECK(strcmp(r[4], "*:\\GEMSYS\\GUIDES") == 0);
 	}
 	inf_free_list(r, n);
+	/* EHypView's own PATHS (EHYPVIEW.INF) first, the same folder once */
+	n = ehv_default_roots(inf, "F:\\HELP\\; d:\\doc\\", &r);
+	CHECK(n == 6);
+	if (n == 6)
+	{
+		CHECK(strcmp(r[0], "F:\\HELP\\") == 0);
+		CHECK(strcmp(r[1], "d:\\doc\\") == 0);
+		CHECK(strcmp(r[2], "C:\\GUIDES\\") == 0);
+		CHECK(strcmp(r[3], "E:\\REFS") == 0);
+	}
+	inf_free_list(r, n);
 	inf_free(inf);
-	n = ehv_default_roots(NULL, &r);
+	n = ehv_default_roots(NULL, NULL, &r);
+	CHECK(n == 2);
+	inf_free_list(r, n);
+	n = ehv_default_roots(NULL, "", &r);
 	CHECK(n == 2);
 	inf_free_list(r, n);
 }

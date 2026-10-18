@@ -40,6 +40,20 @@ MINUS, EQUALS = 0x0C, 0x0D
 N, D, DELETE = 0x31, 0x20, 0x53
 IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
+COMMA, SEMICOLON, BACKSLASH = 0x33, 0x27, 0x2B
+
+
+def typed(text):
+    """keys for text in a dialog's field, on the US keyboard: Hatari's
+    keypress takes letters and digits, not ':' or '\\'. A field says
+    nothing as it is typed into, so each key is given time of its own:
+    sent a quarter of a second apart, Hatari once lost one"""
+    keys = []
+    for c in text:
+        keys.append(("field",) + ((SHIFT, SEMICOLON) if c == ":" else (None, BACKSLASH) if c == "\\" else (None, c)))
+    return keys
+
+
 # (keys to send, events expected afterwards, in order)
 STEPS = [
     ([], ["font System font 16", "menu shown", "page %s Main" % BASIC]),  # DEFHYP
@@ -55,6 +69,11 @@ STEPS = [
     ([LEFT, UNDO], ["dialog-closed font cancel", "!font *"]),
     ([("ctrl+shift", F)], ["dialog font"]),
     ([LEFT, RETURN], ["dialog-closed font ok", "font System font 8"]),   # 8 x 8, kept in EHYPVIEW.INF
+    # Settings (^,): Esc and Undo are Cancel, and nothing is written (3.5)
+    ([("ctrl", COMMA)], ["dialog settings *"]),
+    ([ESC], ["dialog-closed settings cancel", "!settings *"]),
+    ([("ctrl", COMMA)], ["dialog settings *"]),
+    ([UNDO], ["dialog-closed settings cancel", "!settings *"]),
     ([TAB], ["select 2"]),                             # first link
     ([RETURN], ["page %s Second" % BASIC]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
@@ -301,6 +320,15 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
                     time.sleep(2)
                 elif isinstance(k, tuple) and k[0] == "type":
                     type_text(k[1])
+                elif isinstance(k, tuple) and k[0] == "field":     # a key into a dialog's field
+                    if k[1]:
+                        send("hatari-event keydown 0x%x" % k[1])
+                        time.sleep(0.2)
+                    send("hatari-event keypress %s" % (k[2] if isinstance(k[2], str) else "0x%x" % k[2]))
+                    time.sleep(0.3)
+                    if k[1]:
+                        send("hatari-event keyup 0x%x" % k[1])
+                        time.sleep(0.2)
                 elif isinstance(k, tuple) and k[0] == "wait":
                     time.sleep(k[1])
                 elif isinstance(k, tuple) and k[0] == "hover":      # rest there
@@ -369,7 +397,12 @@ def copy_dir(name, inf, settings=None):
 
 # with the mouse (8x16 system font, Falcon VGA): a link, the right
 # button's menu, and each menu (title x, y, then the item's x, y)
-DESK, FILE, EDIT, VIEW, NAV, BOOK = (40, 9), (88, 9), (136, 9), (184, 9), (248, 9), (332, 9)
+DESK, FILE, EDIT, VIEW, NAV, BOOK = (56, 9), (120, 9), (168, 9), (216, 9), (280, 9), (364, 9)
+OPTIONS, HELPMENU = (444, 9), (504, 9)
+
+# the Settings dialog, centred on the screen: its pages on the left, the
+# START= popup on General, the first folder field on Library
+SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 201), (320, 217), (300, 252), (300, 211)
 
 
 def item(title, n):
@@ -434,6 +467,23 @@ MOUSE_STEPS = [
     ([("click", 320, 300)], []),                            # a click closes it
     ([item(DESK, 0)], ["menu about", "dialog about *"]),    # the About box
     ([("click", 320, 300)], []),                            # a click closes it
+    # Settings: START= from the popup, two folders on the Library page;
+    # one that isn't there is asked about (Esc: Change, back to the page),
+    # then kept; OK writes EHYPVIEW.INF and looks through the library again
+    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
+    ([("click",) + SET_START], ["menu settings-start"]),
+    ([("click",) + SET_START_NOW], ["settings-start now"]),
+    ([("click",) + SET_LIBRARY], ["settings-page library"]),
+    ([("click",) + SET_FIELD] + typed("C:\\FIXT\\SUB"), []),
+    ([TAB] + typed("C:\\NOWHERE"), []),
+    ([RETURN], ["alert no-folder C:\\NOWHERE"]),
+    ([ESC], ["alert-closed no-folder change"]),
+    ([RETURN], ["alert no-folder C:\\NOWHERE"]),
+    ([RETURN], ["alert-closed no-folder keep", "dialog-closed settings ok", "settings START now",
+                "settings PATHS C:\\FIXT\\SUB;C:\\NOWHERE", "index again", "index 5 guides"]),
+    # the guide, when it is nowhere: where to put it
+    ([item(HELPMENU, 0)], ["menu guide", "alert no-guide"]),
+    ([RETURN], []),
     # several windows: Shift+click opens the link in a new one
     ([("sclick", 120, 142)], ["window new 2", "page %s Second" % BASIC]),
     ([item(BOOK, 0)], ["menu bookmark-add", "bookmark added *"]),
@@ -455,6 +505,21 @@ MOUSE_STEPS = [
     ([HELP], ["page %s Help" % BASIC]),
     ([TAB, RETURN], ["select *", "closed viewer"]),
     ([item(FILE, 6)], ["menu quit", "quit"]),
+]
+
+
+# EHypView's own guide (make help): Help in the library opens its page
+# of it; Help > EHypView guide finds it in C:\\GUIDES through the library
+# and shows the front page's two pictures; a link on it leads to its page,
+# and Help there to the guide's help page, Keys (guideline 4.3)
+GUIDE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "binary", "EHYPVIEW.HYP")
+GUIDE_STEPS = [
+    ([], ["menu shown", "library 0", "index 6 guides"]),
+    ([HELP], [r"page C:\GUIDES\EHYPVIEW.HYP The library"]),
+    ([item(HELPMENU, 0)], ["menu guide", r"page C:\GUIDES\EHYPVIEW.HYP Main", "pictures 2 st-ram"]),
+    ([TAB, RETURN], ["select *", r"page C:\GUIDES\EHYPVIEW.HYP The toolbar"]),
+    ([HELP], [r"page C:\GUIDES\EHYPVIEW.HYP Keys"]),
+    ([("ctrl", Q)], ["quit"]),
 ]
 
 
@@ -567,8 +632,25 @@ def main():
                 ok = run_scenario("mouse", d, MOUSE_STEPS, windowed=True)
             finally:
                 xvfb.terminate()
+            ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
+                                  ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE"])
         else:
             print("skip  mouse: needs Xvfb and xdotool")
+    if ok:
+        if have_display() and os.path.exists(GUIDE):
+            d = copy_dir("guide", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n")
+            os.makedirs(os.path.join(d, "GUIDES"))
+            shutil.copy(GUIDE, os.path.join(d, "GUIDES"))
+            shutil.copy(GUIDE[:-4] + ".REF", os.path.join(d, "GUIDES"))
+            xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(1)
+            try:
+                ok = run_scenario("guide", d, GUIDE_STEPS, windowed=True)
+            finally:
+                xvfb.terminate()
+        else:
+            print("skip  guide: needs Xvfb, xdotool and binary/EHYPVIEW.HYP (make help)")
     if ok:
         ok = accessory_smoke()
     if ok:

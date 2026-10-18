@@ -1,0 +1,406 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/*
+ * EHypView - the Settings dialog (^,, the AERA guidelines 6.1): what
+ * EHYPVIEW.INF holds, as EMail's Settings lays it out: a black title band,
+ * the pages on the left (the chosen one in a black bar) and that page's
+ * settings on the right. Built in code, run by the shared dialog loop
+ * (common/ui/dialog.c), so Esc and Undo are Cancel (3.5).
+ *
+ *   General   START=: when the accessory looks through the library;
+ *             FOLDER=, shown: where the index is kept
+ *   Library   PATHS=: folders to look in as well as ST-GUIDE.INF's
+ *
+ * The font is View > Font... (⇧^F), as in ECal and EMail, and the
+ * bookmarks are kept from the Bookmarks menu and the library.
+ */
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include "gem.h"
+#include "gemapp.h"
+#include "settings.h"
+#include "grect.h"
+#include "dialog.h"
+#include "popup.h"
+#include "alert.h"
+#include "inf.h"
+#include "plat.h"
+#include "bgwork.h"
+
+#define DMAX 32
+#define TMAX 8
+#define NPATH 3                    /* folder fields on the Library page */
+#define PLEN 40                    /* characters a folder field holds */
+
+#define W 57                       /* the dialog, in characters */
+#define H 16
+#define SW 13                      /* the list of pages */
+#define SX (SW + 2)                /* where a page's settings start */
+
+static OBJECT tree[DMAX];
+static TEDINFO ted[TMAX];
+static short nobj, nted, last_child;
+static short page_of[DMAX], page_tab[3], cur_page;
+
+static short d_add(short type, short flags, short state, long spec, short x, short y, short w, short h)
+{
+	short i = nobj++;
+	OBJECT *o = &tree[i];
+
+	o->ob_next = 0;
+	o->ob_head = o->ob_tail = -1;
+	o->ob_type = (unsigned short) type;
+	o->ob_flags = (unsigned short) flags;
+	o->ob_state = (unsigned short) state;
+	o->ob_spec = spec;
+	o->ob_x = x;
+	o->ob_y = y;
+	o->ob_width = w;
+	o->ob_height = h;
+	if (last_child)
+		tree[last_child].ob_next = i;
+	else
+		tree[0].ob_head = i;
+	tree[0].ob_tail = i;
+	last_child = i;
+	return i;
+}
+
+static short d_text(short x, short y, const char *s)
+{
+	return d_add(G_STRING, 0, 0, (long) s, x, y, (short) strlen(s), 1);
+}
+
+static TEDINFO *d_ted(char *text, const char *tmpl, const char *valid, short color)
+{
+	TEDINFO *t = &ted[nted++];
+
+	t->te_ptext = text;
+	t->te_ptmplt = (char *) tmpl;
+	t->te_pvalid = (char *) valid;
+	t->te_font = 3;
+	t->te_just = 0;
+	t->te_color = color;
+	t->te_thickness = 0;
+	t->te_txtlen = (short) strlen(text) + 1;
+	t->te_tmplen = (short) strlen(tmpl) + 1;
+	return t;
+}
+
+/* a folder field in a thin frame */
+static char tmpl[PLEN + 1], valid[PLEN + 1];
+static char paths[NPATH][PLEN + 1];
+
+static short d_field(short x, short y, char *buf)
+{
+	TEDINFO *t;
+
+	memset(tmpl, '_', PLEN);
+	memset(valid, 'X', PLEN);
+	tmpl[PLEN] = valid[PLEN] = '\0';
+	t = d_ted(buf, tmpl, valid, 0x1180);
+	t->te_txtlen = PLEN + 1;
+	t->te_thickness = -1;
+	return d_add(G_FBOXTEXT, EDITABLE, 0, (long) t, x, y, PLEN, 1);
+}
+
+/* ---------------------------------------------------------------- */
+/* START=, as the popup shows it (ECal's choices)                    */
+
+static const char *const start_val[] = { "opened", "now", "60", "300" };
+static const char *const start_name[] = {
+	"When first opened", "At start", "After a minute", "After 5 minutes"
+};
+#define NSTART 4
+static short start_sel;                /* NSTART: another number of seconds */
+static long start_other;
+static short start_was;                /* as the file had it */
+static char start_label[30];
+
+static void start_from(const char *v)
+{
+	long s = bg_parse(v != NULL ? v : "opened");
+
+	start_sel = s == BG_OPENED ? 0 : s == BG_NOW ? 1 : s == 60 ? 2 : s == 300 ? 3 : NSTART;
+	start_other = s;
+}
+
+/* the button's text: the choice, padded, and the system font's down arrow */
+static void start_show(void)
+{
+	char what[24];
+
+	if (start_sel < NSTART)
+		strcpy(what, start_name[start_sel]);
+	else
+		sprintf(what, "After %ld s", start_other);
+	sprintf(start_label, " %-21s\x02", what);
+}
+
+/* ---------------------------------------------------------------- */
+/* the pages                                                         */
+
+static void show_page(short p, int draw)
+{
+	short i;
+
+	cur_page = p;
+	for (i = 1; i < nobj; i++)
+	{
+		if (!page_of[i])
+			continue;
+		if (page_of[i] == p)
+		{
+			tree[i].ob_flags &= (unsigned short) ~HIDETREE;
+			if (tree[i].ob_type == G_FBOXTEXT)
+				tree[i].ob_flags |= EDITABLE;
+		} else
+		{
+			tree[i].ob_flags |= HIDETREE;
+			tree[i].ob_flags &= (unsigned short) ~EDITABLE;
+		}
+	}
+	for (i = 1; i <= 2; i++)
+		tree[page_tab[i]].ob_state = i == p ? SELECTED : 0;
+	if (draw)
+	{
+		short x, y;
+
+		objc_offset(tree, 0, &x, &y);
+		objc_draw(tree, 0, 8, x, y, tree[0].ob_width, tree[0].ob_height);
+	}
+}
+
+static short o_start, o_ok, o_cancel;
+static char folder_text[PLEN + 1];
+
+static void build(const char *folder)
+{
+	static char band[] = " Settings", tab1[] = "  General", tab2[] = "  Library";
+	short i, k, from, gap = (short) (sys_ch / 2);
+
+	memset(tree, 0, sizeof(tree));
+	memset(page_of, 0, sizeof(page_of));
+	nobj = 1;
+	nted = 0;
+	last_child = 0;
+	tree[0].ob_next = -1;
+	tree[0].ob_head = tree[0].ob_tail = -1;
+	tree[0].ob_type = G_BOX;
+	tree[0].ob_state = OUTLINED;
+	tree[0].ob_spec = 0x00021100L;
+	tree[0].ob_width = W;
+	tree[0].ob_height = H;
+
+	/* the band, the list of pages, a line between them and the page */
+	d_add(G_BOXTEXT, 0, 0, (long) d_ted(band, "", "", 0x1071), 0, 0, W, 1);
+	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short) (0 | (1 << 8)), H - 1);
+	page_tab[1] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(tab1, "", "", 0x1180),
+			    (short) (0 | (2 << 8)), 2, (short) ((SW - 1) | (6 << 8)), 1);
+	page_tab[2] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(tab2, "", "", 0x1180),
+			    (short) (0 | (2 << 8)), (short) (4 | (gap << 8)), (short) ((SW - 1) | (6 << 8)), 1);
+
+	/* General */
+	from = nobj;
+	d_text(SX, 2, "General");
+	d_add(G_BOX, 0, 0, 0x00001171L, SX, (short) (3 | (2 << 8)), 40, (short) (0 | (1 << 8)));
+	d_text(SX, 4, "The accessory looks through the library:");
+	start_show();
+	o_start = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(start_label, "", "", 0x1180),
+			SX + 2, (short) (5 | (gap << 8)), 23, 1);
+	((TEDINFO *) tree[o_start].ob_spec)->te_thickness = -1;
+	d_text(SX, (short) (7 | (gap << 8)), "The program looks as it starts.");
+	d_text(SX, (short) (9 | (gap << 8)), "EHypView's folder (FOLDER=):");
+	snprintf(folder_text, sizeof(folder_text), "%s", folder);
+	d_text(SX + 2, (short) (10 | (gap << 8)), folder_text);
+	d_text(SX, (short) (11 | (gap << 8)), "keeps the library's index, EHYPVIEW.IDX,");
+	d_text(SX, (short) (12 | (gap << 8)), "and the fonts measured, EHYPVIEW.FNT.");
+	for (i = from; i < nobj; i++)
+		page_of[i] = 1;
+
+	/* Library */
+	from = nobj;
+	d_text(SX, 2, "Library");
+	d_add(G_BOX, 0, 0, 0x00001171L, SX, (short) (3 | (2 << 8)), 40, (short) (0 | (1 << 8)));
+	d_text(SX, 4, "Also look for hypertexts in (PATHS=):");
+	for (k = 0; k < NPATH; k++)
+		d_field(SX, (short) ((5 + k) | ((2 + k * (sys_ch / 4 + 2)) << 8)), paths[k]);
+	d_text(SX, (short) (9 | (gap << 8)), "Each with its subfolders, as well as");
+	d_text(SX, (short) (10 | (gap << 8)), "PATHS, HYPFOLD and REF in ST-GUIDE.INF,");
+	d_text(SX, (short) (11 | (gap << 8)), "and \\GUIDES and \\GEMSYS\\GUIDES on every");
+	d_text(SX, (short) (12 | (gap << 8)), "drive.");
+	for (i = from; i < nobj; i++)
+		page_of[i] = 2;
+
+	o_cancel = d_add(G_BUTTON, SELECTABLE | EXIT, 0, (long) "Cancel", W - 24, 14, 10, 1);
+	o_ok = d_add(G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long) "OK", W - 12, 14, 10, 1);
+	tree[last_child].ob_next = 0;
+	tree[nobj - 1].ob_flags |= LASTOB;
+	for (i = 0; i < nobj; i++)
+		rsrc_obfix(tree, i);
+	show_page(1, 0);
+}
+
+/* the popup of START= choices, below its button; the dialog under it
+   drawn again */
+static void start_pick(void)
+{
+	static char lab[NSTART][28];
+	const char *l[NSTART];
+	short x, y, k, r;
+
+	for (k = 0; k < NSTART; k++)
+	{
+		sprintf(lab[k], "%c %s", k == start_sel ? '\x08' : ' ', start_name[k]);
+		l[k] = lab[k];
+	}
+	objc_offset(tree, o_start, &x, &y);
+	log_event("menu", "settings-start", NULL);
+	r = popup(x, (short) (y + tree[o_start].ob_height + 1), l, NSTART);
+	objc_draw(tree, 0, 8, popup_area.x, popup_area.y, popup_area.w, popup_area.h);
+	if (r < 0)
+		return;
+	start_sel = r;
+	start_show();
+	objc_offset(tree, o_start, &x, &y);
+	objc_draw(tree, o_start, 0, x - 1, y - 1, tree[o_start].ob_width + 2, tree[o_start].ob_height + 2);
+	log_event("settings-start", start_val[r], NULL);
+}
+
+/* the folders typed, as one PATHS= value: blanks trimmed, empty ones
+   left out */
+static void paths_join(char *out, size_t size)
+{
+	short k;
+
+	out[0] = '\0';
+	for (k = 0; k < NPATH; k++)
+	{
+		char *p = paths[k], *e;
+
+		while (*p == ' ')
+			p++;
+		e = p + strlen(p);
+		while (e > p && e[-1] == ' ')
+			*--e = '\0';
+		if (*p == '\0')
+			continue;
+		if (out[0] != '\0' && strlen(out) + 1 < size)
+			strcat(out, ";");
+		if (strlen(out) + strlen(p) < size)
+			strcat(out, p);
+	}
+}
+
+/* a folder that isn't there: kept when the user says so (a drive that
+   isn't in yet), else back to the Library page. 1 when all may stay */
+static int paths_check(void)
+{
+	short k;
+
+	for (k = 0; k < NPATH; k++)
+	{
+		pf_info st;
+		char *p = paths[k];
+
+		while (*p == ' ')
+			p++;
+		if (*p == '\0' || (pf_stat(p, &st) == 0 && st.is_dir))
+			continue;
+		log_event("alert", "no-folder", p);
+		if (alert(1, "[2][%s isn't a folder on this Atari.|Look there anyway?][ Keep |Change]", p) != 1)
+		{
+			log_event("alert-closed", "no-folder", "change");
+			show_page(2, 1);
+			return 0;
+		}
+		log_event("alert-closed", "no-folder", "keep");
+	}
+	return 1;
+}
+
+int settings_dialog(const char *inf_path, const char *folder)
+{
+	inf_file *inf = inf_load(inf_path, NULL);
+	char was[NPATH * (PLEN + 1)], now[NPATH * (PLEN + 1)];
+	short x, y, w, h, r, k;
+	int changed = 0;
+
+	/* what the file says now: the program may have changed it */
+	start_from(inf != NULL ? inf_get(inf, "START") : NULL);
+	{
+		char **list;
+		unsigned int n = inf_split_list(inf != NULL ? inf_get(inf, "PATHS") : NULL, &list);
+
+		for (k = 0; k < NPATH; k++)
+			snprintf(paths[k], sizeof(paths[k]), "%s", (unsigned int) k < n ? list[k] : "");
+		inf_free_list(list, n);
+	}
+	inf_free(inf);
+	start_was = start_sel;
+	paths_join(was, sizeof(was));
+	build(folder);
+
+	form_center(tree, &x, &y, &w, &h);
+	wind_update(BEG_UPDATE);
+	wind_update(3);                    /* BEG_MCTRL: the dialog keeps the mouse */
+	form_dial(FMD_START, x, y, w, h);
+	objc_draw(tree, 0, 8, x, y, w, h);
+	{
+		char at[16];
+
+		sprintf(at, "%d %d", x, y);
+		log_event("dialog", "settings", at);
+	}
+	for (;;)
+	{
+		r = (short) (dlg_do(tree, 0, o_cancel) & 0x7fff);
+		if (r == page_tab[1] || r == page_tab[2])
+		{
+			if (cur_page != (r == page_tab[1] ? 1 : 2))
+			{
+				show_page(r == page_tab[1] ? 1 : 2, 1);
+				log_event("settings-page", cur_page == 1 ? "general" : "library", NULL);
+			}
+			continue;
+		}
+		if (r == o_start)
+		{
+			start_pick();
+			continue;
+		}
+		if (r == o_ok && !paths_check())
+		{
+			tree[o_ok].ob_state &= (unsigned short) ~SELECTED;
+			objc_draw(tree, o_ok, 0, x, y, w, h);
+			continue;
+		}
+		break;
+	}
+	form_dial(FMD_FINISH, x, y, w, h);
+	wind_update(2);                    /* END_MCTRL */
+	wind_update(END_UPDATE);
+	tree[r].ob_state &= (unsigned short) ~SELECTED;
+	log_event("dialog-closed", "settings", r == o_ok ? "ok" : "cancel");
+	if (r != o_ok)
+		return 0;
+
+	if (start_sel != start_was && start_sel < NSTART)
+	{
+		settings_put("START", start_val[start_sel], "when the accessory looks through the library: opened "
+			     "(when first opened or asked for a page), now (at boot), or seconds after boot");
+		changed |= SETTINGS_START;
+	}
+	log_event("settings", "START", start_sel < NSTART ? start_val[start_sel] : "other");
+	paths_join(now, sizeof(now));
+	if (strcmp(now, was) != 0)
+	{
+		settings_put("PATHS", now, "folders to look for hypertexts in (with their subfolders), between ';', "
+			     "as well as ST-GUIDE.INF's PATHS, HYPFOLD and REF, and \\GUIDES and \\GEMSYS\\GUIDES "
+			     "on every drive");
+		changed |= SETTINGS_PATHS;
+	}
+	log_event("settings", "PATHS", now);
+	return changed;
+}

@@ -48,10 +48,25 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - **README:** keep the section order from the template (Highlights, Getting started, How it reaches the
   servers, Building, Source, Tests, Licence, family footer). Use British English.
 
+## Talking with Erez
+
+- Write to Erez only when he has a decision to make, with a short context: no progress or in-between
+  messages.
+- When presenting an analysis, give just the information, your assessment of it and what he should do.
+- Messages to the hub session stay as they are.
+
 ## EHypView
 
-- **A release** carries `EHYPVIEW.PRG`, `EHYPVIEW.ACC` and the icon (`make atari` copies the
-  programs to `binary/`; the icons are committed in `icons/`). The first release was 1.0.
+- **A release** carries `EHYPVIEW.PRG`, `EHYPVIEW.ACC`, `EHYPVIEW.HYP` and `.REF` (`make help`,
+  hcp from `common/tools/build-hcp.sh`) and the icon (`make atari` copies the programs to
+  `binary/`; the icons are committed in `icons/`). The first release was 1.0.
+- The guide is `docs/GUIDE.md` (tools/mkhelp.py, EContact's) with the family's front page
+  (guidelines 4.3, `docs/front.json`, `common/tools/helpfront.py`). Its window picture
+  `docs/help/WINDOW.IMG` is committed: when the viewer changes, take a Hatari screenshot of a page
+  of the guide in the program (640 x 480) and make it again with
+  `python3 common/tools/helpfront.py thumb SHOT.PNG docs/help/WINDOW.IMG 4,36,632,410 32,90 210,68 330,206 412,90 596,90`.
+- Settings (src/gem/settings.c, ^,) is EMail's layout: pages on the left, run by the shared
+  `dlg_do`. It edits `START=` and `PATHS=`; the font stays in View > Font... as in ECal and EMail.
 - Before pushing: `make test`, `make asan`, `make m68k-test`,
   `make hatari-test`, `make gui-test`, `make quiet-test` (these two
   need hatari, Xvfb and xdotool) and `make colour-test`, and `make atari`

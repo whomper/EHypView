@@ -22,6 +22,7 @@ int tls_tz_minutes;
 char tls_seed_path[200];
 char tls_roots_cache[200];
 void (*tls_note)(const char *msg);
+void (*tls_log)(const char *msg);
 int (*tls_rsa_accel)(unsigned char *x, size_t xlen, const unsigned char *n, size_t nlen,
 		     const unsigned char *e, size_t elen);
 
@@ -39,6 +40,7 @@ int tls_anchor_count(void) { return 0; }
 void tls_free_anchors(void) { }
 
 void tls_forget_sessions(void) { }
+int tls_ec_fast(void) { return 0; }
 
 TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int errlen)
 {

@@ -32,9 +32,14 @@ jobs:
       - name: Install m68k cross compiler and Hatari
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu hatari xvfb xdotool x11-utils
+          sudo apt-get install -y gcc-m68k-linux-gnu hatari xvfb xdotool x11-utils \
+            autoconf automake libtool gettext autopoint pkg-config
       - name: Build the Atari programs and run them in Hatari (Falcon, EmuTOS)
         run: make hatari-test
+      - name: The guide, EHYPVIEW.HYP (hcp), read by EHypView's own reader
+        run: |
+          common/tools/build-hcp.sh "$RUNNER_TEMP/hcp"
+          make help HCP="$RUNNER_TEMP/hcp/hcp"
       - name: Drive the viewer in Hatari with the keyboard and mouse
         run: make gui-test
       - name: The accessory's quiet start, measured in Hatari

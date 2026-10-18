@@ -29,6 +29,8 @@ extern char tls_seed_path[200];
 extern char tls_roots_cache[200];
 /* a word for the status line while something slow happens, or NULL */
 extern void (*tls_note)(const char *msg);
+/* the handshake's steps and their times, for the log (conn.c), or NULL */
+extern void (*tls_log)(const char *msg);
 
 /* load the root certificates from a PEM file (once; later calls are
    cheap). Returns how many, or 0 with err filled in */
@@ -65,5 +67,10 @@ const char *tls_describe(TLS *t);
 extern int (*tls_rsa_accel)(unsigned char *x, size_t xlen,
 			    const unsigned char *n, size_t nlen,
 			    const unsigned char *e, size_t elen);
+
+/* the elliptic curves are done elsewhere (the Falcon's DSP): set by
+   tls_set_ec() (declared in ecdsp.h, where BearSSL's types are). Then
+   ECDSA is about as cheap as RSA, and a server is offered both at once */
+int tls_ec_fast(void);
 
 #endif

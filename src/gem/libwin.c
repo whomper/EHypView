@@ -434,7 +434,7 @@ void libwin_open(void)
 		if (lib_h <= 0)
 		{
 			lib_h = -1;
-			alert(1, "[3][EHypView: no more windows.][ OK ]");
+			alert(1, "[3][The system has no window left for EHypView.|Close a window and try again.][ OK ]");
 			return;
 		}
 		wind_calc(WC_BORDER, LKIND, 0, 0, (short) (60 * cw + 2 * MARGIN), (short) (desk_h * 2 / 3),
@@ -599,7 +599,7 @@ void libwin_key(short kstate, short kreturn)
 
 	if (ctrl)
 	{
-		if (ascii == 0x0c && viewer_handle() > 0)
+		if (ascii == 0x0c && scan != 0x33 && viewer_handle() > 0)
 		{
 			viewer_top();                  /* ^L: back to the viewer */
 			return;
@@ -624,6 +624,9 @@ void libwin_key(short kstate, short kreturn)
 	case 0x1c:                             /* Return */
 	case 0x72:                             /* Enter */
 		activate();
+		return;
+	case 0x62:                             /* Help: this window's page of EHypView's guide */
+		app_guide("The library");
 		return;
 	case 0x53:                             /* Delete: the bookmark chosen */
 		if (lib_selected_bookmark(&lib) >= 0)
