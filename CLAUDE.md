@@ -78,6 +78,9 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   EMail's, ECal's and EContact's.
 - The font selector (src/gem/fontsel.c) is ECal's and EMail's; keep them
   alike.
+- Control shortcuts test `key_ctrl(kstate, key)` (common/atari/gem.h),
+  never `kstate & K_CTRL` alone: a ^key typed while EHypView is busy
+  arrives with kstate 0 (guidelines 3.2).
 - GUI events for the tests go out through NatFeats as "EHV ..." lines
   (log_event); tests/run_gui.py waits for them.
 - Only `atari/plat_tos.c` is EHypView's own runtime; the rest (start-up, C library, TOS, AES/VDI,

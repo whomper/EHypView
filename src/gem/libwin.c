@@ -592,7 +592,7 @@ void libwin_clip(int what)
 void libwin_key(short kstate, short kreturn)
 {
 	short scan = KEY_SCAN(kreturn), ascii = KEY_ASCII(kreturn);
-	int shift = (kstate & K_SHIFT) != 0, ctrl = (kstate & K_CTRL) != 0;
+	int shift = (kstate & K_SHIFT) != 0, ctrl = key_ctrl(kstate, kreturn);
 	long rows = visible_rows();
 	char q[LIB_QUERY_MAX];
 	size_t n = strlen(lib.query);
