@@ -48,6 +48,13 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - **README:** keep the section order from the template (Highlights, Getting started, How it reaches the
   servers, Building, Source, Tests, Licence, family footer). Use British English.
 
+## Talking with Erez
+
+- Write to Erez only when he has a decision to make, with a short context: no progress or in-between
+  messages.
+- When presenting an analysis, give just the information, your assessment of it and what he should do.
+- Messages to the hub session stay as they are.
+
 ## EHypView
 
 - **A release** carries `EHYPVIEW.PRG`, `EHYPVIEW.ACC`, `EHYPVIEW.HYP` and `.REF` (`make help`,
