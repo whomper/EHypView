@@ -45,10 +45,12 @@ COMMA, SEMICOLON, BACKSLASH = 0x33, 0x27, 0x2B
 
 def typed(text):
     """keys for text in a dialog's field, on the US keyboard: Hatari's
-    keypress takes letters and digits, not ':' or '\\'"""
+    keypress takes letters and digits, not ':' or '\\'. A field says
+    nothing as it is typed into, so each key is given time of its own:
+    sent a quarter of a second apart, Hatari once lost one"""
     keys = []
     for c in text:
-        keys.append(("shift", SEMICOLON) if c == ":" else BACKSLASH if c == "\\" else c)
+        keys.append(("field",) + ((SHIFT, SEMICOLON) if c == ":" else (None, BACKSLASH) if c == "\\" else (None, c)))
     return keys
 
 
@@ -318,6 +320,15 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
                     time.sleep(2)
                 elif isinstance(k, tuple) and k[0] == "type":
                     type_text(k[1])
+                elif isinstance(k, tuple) and k[0] == "field":     # a key into a dialog's field
+                    if k[1]:
+                        send("hatari-event keydown 0x%x" % k[1])
+                        time.sleep(0.2)
+                    send("hatari-event keypress %s" % (k[2] if isinstance(k[2], str) else "0x%x" % k[2]))
+                    time.sleep(0.3)
+                    if k[1]:
+                        send("hatari-event keyup 0x%x" % k[1])
+                        time.sleep(0.2)
                 elif isinstance(k, tuple) and k[0] == "wait":
                     time.sleep(k[1])
                 elif isinstance(k, tuple) and k[0] == "hover":      # rest there
