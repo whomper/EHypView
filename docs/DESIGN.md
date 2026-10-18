@@ -1,8 +1,8 @@
 # EHypView design
 
 EHypView is a new viewer for ST-Guide hypertexts (`.HYP`). It runs on the Atari
-itself, aims first at Falcon, TT and FireBee, and is meant to replace
-`ST-GUIDE.ACC`.
+itself, on every ST, STE, TT and Falcon (one 68000 build; a FireBee build is to
+come), and is meant to replace `ST-GUIDE.ACC`.
 
 ## Why replace ST-Guide
 

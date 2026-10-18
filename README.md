@@ -2,9 +2,10 @@
 
 <img src="docs/icon16.png" width="96" align="right" alt="EHypView icon: an Atari SM124-style monitor showing a page whose link points to another page">
 
-EHypView reads and searches `.HYP` hypertexts, the help that Atari programs come with, on the TT and
-Falcon. It runs as a program or as a desk accessory, finds every hypertext on your drives by itself,
-and is the help viewer your other programs open when you press Help.
+A hypertext viewer for the Atari ST, STE, TT and Falcon: EHypView reads and searches `.HYP` hypertexts,
+the help that Atari programs come with. It runs as a program or as a desk accessory, finds every
+hypertext on your drives by itself, and is the help viewer your other programs open when you press
+Help.
 
 **Highlights**
 

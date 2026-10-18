@@ -503,7 +503,7 @@ MOUSE_STEPS = [
 GUIDE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "binary", "EHYPVIEW.HYP")
 GUIDE_STEPS = [
     ([], ["menu shown", "library 0", "index 6 guides"]),
-    ([item(HELPMENU, 0)], ["menu guide", "pictures 2 st-ram", r"page C:\GUIDES\EHYPVIEW.HYP Main"]),
+    ([item(HELPMENU, 0)], ["menu guide", r"page C:\GUIDES\EHYPVIEW.HYP Main", "pictures 2 st-ram"]),
     ([TAB, RETURN], ["select *", r"page C:\GUIDES\EHYPVIEW.HYP The toolbar"]),
     ([("ctrl", Q)], ["quit"]),
 ]

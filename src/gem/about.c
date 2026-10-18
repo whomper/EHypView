@@ -41,7 +41,7 @@ static void status_line(char *buf, size_t size)
 void about_box(void)
 {
 	static char status[100];
-	ABOUT a = { "EHypView", app_version, "A hypertext viewer for the Atari TT and Falcon",
+	ABOUT a = { "EHypView", app_version, "Hypertexts for the Atari ST, TT and Falcon",
 		    { status, NULL, NULL }, { 0, 0, 0 }, icon_bits, icon16_px, icon16_rgb };
 
 	status_line(status, sizeof(status));
