@@ -1446,10 +1446,11 @@ void app_font_changed(void)
 	libwin_font_changed();
 }
 
-/* shortcuts that work whichever window (or none) is on top */
+/* shortcuts that work whichever window (or none) is on top; Control by
+   key_ctrl(): a ^key typed while busy comes with kstate 0 (guidelines 3.2) */
 int app_key(short kstate, short kreturn)
 {
-	if (!(kstate & K_CTRL))
+	if (!key_ctrl(kstate, kreturn))
 		return 0;
 	/* by scan code: with Control, '-' gives the code of Return */
 	switch (KEY_SCAN(kreturn))
@@ -1487,7 +1488,7 @@ static void context_menu(short x, short y);
 static void key(short kstate, short kreturn)
 {
 	short scan = KEY_SCAN(kreturn), ascii = KEY_ASCII(kreturn);
-	int shift = (kstate & K_SHIFT) != 0, ctrl = (kstate & K_CTRL) != 0;
+	int shift = (kstate & K_SHIFT) != 0, ctrl = key_ctrl(kstate, kreturn);
 	long rows = visible_lines();
 	int rc = -2;
 
