@@ -112,7 +112,7 @@ make room first; the ≡ menu and the keys still reach everything.
 | Backspace, Undo | back |
 | ⇧Undo | forward again |
 | right mouse button, Insert | the right-click menu |
-| Help | the hypertext's help page |
+| Help | the hypertext's help page (in the library: EHypView's guide) |
 | ^I / ^T | index / contents |
 | ^Left / ^Right | previous / next page |
 | ^Clr/Home | main page |

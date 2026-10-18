@@ -625,6 +625,9 @@ void libwin_key(short kstate, short kreturn)
 	case 0x72:                             /* Enter */
 		activate();
 		return;
+	case 0x62:                             /* Help: this window's page of EHypView's guide */
+		app_guide("The library");
+		return;
 	case 0x53:                             /* Delete: the bookmark chosen */
 		if (lib_selected_bookmark(&lib) >= 0)
 			app_bookmark_remove(lib_selected_bookmark(&lib));

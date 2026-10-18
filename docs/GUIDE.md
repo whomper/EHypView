@@ -85,7 +85,7 @@ asked for.
 - **Bookmarks** come first: all of them with an empty search, the ones that match while you type.
 - **Keys:** Up and Down to choose, Return or a click to open, Backspace to take out a letter,
   Delete to remove the bookmark chosen. ^V pastes into the search, ^X cuts it, ^C copies the
-  hypertext chosen. Esc leaves the search as it is.
+  hypertext chosen. Help opens this guide. Esc leaves the search as it is.
 
 EHypView looks through its folders in the background, in short steps that pause while you use the
 mouse or the keyboard, and keeps what it found in `EHYPVIEW.IDX`. The next time only new or changed
@@ -176,7 +176,7 @@ Every menu item has its key, shown in the menu.
 | ^Left / ^Right | the page before / after |
 | ^Clr/Home | the main page |
 | ^T / ^I | contents / index |
-| Help | the hypertext's help page |
+| Help | the hypertext's help page; in the library, this guide |
 | arrows, ⇧arrows | scroll by a line / a page |
 | Clr/Home, ⇧Clr/Home | top / bottom |
 | right mouse button, Insert | the right button's menu |

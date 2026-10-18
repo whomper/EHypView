@@ -190,6 +190,7 @@ def main():
            "@inputenc atarist",
            "@charset atarist",
            "@autorefoff",
+           '@help "Keys"',
            '@options "+z"',		# and EHYPVIEW.REF, for ST-Guide's index
            "",
            '@node "Main" "EHypView %s"' % version,

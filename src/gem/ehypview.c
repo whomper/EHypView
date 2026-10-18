@@ -1294,7 +1294,6 @@ static void clip_command(int cmd)
 
 static void seealso_here(void);
 static void job_again(void);
-static void guide_open(void);
 static void show_request(const char *args);
 
 static void command(int cmd)
@@ -1348,7 +1347,7 @@ static void command(int cmd)
 			job_again();
 		return;
 	case CMD_GUIDE:
-		guide_open();
+		app_guide(NULL);
 		return;
 	case CMD_LARGER:
 	case CMD_SMALLER:
@@ -2079,27 +2078,35 @@ static void click(short mx, short my, short button, short kstate)
 	graf_mouse(ARROW, NULL);
 }
 
-/* Help > EHypView guide: EHYPVIEW.HYP in EHypView's folder, else
-   wherever the library has it; else where to put it */
-static void guide_open(void)
+/* EHypView's own guide at page (NULL: its front page), for Help >
+   EHypView guide and the library's Help key: EHYPVIEW.HYP in EHypView's
+   folder, else wherever the library has it; else where to put it */
+void app_guide(const char *page)
 {
-	char *p = fs_join(home_dir, "EHYPVIEW.HYP");
+	char *p = fs_join(home_dir, "EHYPVIEW.HYP"), req[240];
+	const char *file = NULL;
 	pf_info st;
 	unsigned long hit;
 
 	if (p != NULL && strchr(p, ' ') == NULL && pf_stat(p, &st) == 0 && !st.is_dir)
+		file = p;
+	else
 	{
-		show_request(p);
+		job_wait_index();
+		if (idx != NULL && ehv_index_find_guides(idx, "EHYPVIEW.HYP", &hit, 1) > 0)
+			file = "*:\\EHYPVIEW.HYP";
+	}
+	if (file != NULL)
+	{
+		if (page != NULL)
+			snprintf(req, sizeof(req), "%s '%s'", file, page);
+		else
+			snprintf(req, sizeof(req), "%s", file);
 		free(p);
+		show_request(req);
 		return;
 	}
 	free(p);
-	job_wait_index();
-	if (idx != NULL && ehv_index_find_guides(idx, "EHYPVIEW.HYP", &hit, 1) > 0)
-	{
-		show_request("*:\\EHYPVIEW.HYP");
-		return;
-	}
 	log_event("alert", "no-guide", NULL);
 	alert(1, "[1][EHypView's guide, EHYPVIEW.HYP, isn't in the library.|Copy it into \\GUIDES, or next "
 	      "to EHYPVIEW.PRG.][ OK ]");

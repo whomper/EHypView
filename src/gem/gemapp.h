@@ -38,6 +38,7 @@ short viewer_handle(void);                /* -1 when closed */
 void app_window_closed(void);             /* quits the program when none is left */
 int app_key(short kstate, short kreturn); /* ^O, ^L, ^W, ^Q...: 1 when handled */
 void app_font_changed(void);              /* lay out and redraw both windows */
+void app_guide(const char *page);         /* EHYPVIEW.HYP at page (NULL: the front page) */
 
 /* about.c: an iconified window (WM_ICONIFY) drawn as EHypView's icon,
    where the AES asks (w <= 0: all of it) */
