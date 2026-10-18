@@ -2726,7 +2726,11 @@ static void acc_heap(void)
 	long tt = (long) Mxalloc(-1L, 1);      /* Fast RAM; -32: TOS 1.x, none */
 	void *p;
 
-	/* first the pictures' ST RAM (stmem.h): a sixteenth of what is free
+	/* the About box's icon's ST RAM (st_ram() in gemui.c), now: taken
+	   later, it would belong to the program in front (guidelines 2.2) */
+	ehv_ui_st_ram(0);
+
+	/* then the pictures' ST RAM (stmem.h): a sixteenth of what is free
 	   there, 64 to 128 KB (a page's pictures; the rest is the screen's
 	   and the programs'); TOS 1.x has no Mxalloc, and only ST RAM */
 	if (st == -32)

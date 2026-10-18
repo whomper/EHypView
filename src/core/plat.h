@@ -16,6 +16,7 @@
 
 #define PF_READ  0
 #define PF_WRITE 1                   /* create or truncate */
+#define PF_APPEND 2                  /* write on at the end of a file there is */
 
 typedef struct {
 	int is_dir;
