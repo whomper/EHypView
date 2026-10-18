@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""GUI test: run EHYPVIEW.PRG in Hatari (Falcon, EmuTOS) and drive it.
+"""GUI test: run EHYPVIEW.PRG in Hatari and drive it.
 
-    tests/run_gui.py HATARI_DIR EMUTOS_IMAGE OUT_DIR
+    tests/run_gui.py HATARI_DIR OUT_DIR
+
+The machine is the family's Falcon:16 (common/tools/machines.py), or
+another 640 x 480 one in MACHINE.
 
 HATARI_DIR holds EHYPVIEW.PRG, EHYPVIEW.ACC and the test folder FIXT; each
 scenario gets its own drive C: under OUT_DIR with an ST-GUIDE.INF.  Keys go in through Hatari's command FIFO; the viewer
@@ -22,7 +25,11 @@ import subprocess
 import sys
 import time
 
-HDIR, EMUTOS, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common", "tools"))
+import machines  # noqa: E402
+
+HDIR, OUT = sys.argv[1], sys.argv[2]
+MACHINE = os.environ.get("MACHINE", "Falcon:16")
 ACC_DIR = os.path.join(OUT, "acc")
 BASIC = r"C:\FIXT\BASIC.HYP"
 OTHER = r"C:\FIXT\SUB\DEEP\OTHER.HYP"
@@ -124,14 +131,13 @@ def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=()):
     for name in (fifo, os.path.join(hdir, "EHYPVIEW.IDX")):
         if os.path.exists(name):
             os.remove(name)
+    m = machines.Machine(MACHINE, hdir)
+    args = ["hatari"] + m.args() + ["--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
+                                    "--cmd-fifo", fifo] + list(extra)
+    env = m.env()
     if windowed:
-        env = dict(os.environ, DISPLAY=DISPLAY, SDL_AUDIODRIVER="dummy")
-    else:
-        env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
-    args = ["hatari", "--tos", EMUTOS, "--machine", "falcon", "--monitor", "vga", "--memsize", "14",
-            "--natfeats", "yes", "--sound", "off", "--confirm-quit", "no",
-            "--statusbar", "no", "--log-level", "fatal", "--harddrive", hdir, "--gemdos-drive", "C",
-            "--cmd-fifo", fifo] + list(extra)
+        env["DISPLAY"] = DISPLAY
+        env.pop("SDL_VIDEODRIVER")
     # in a window, one screen pixel is one window pixel for the mouse;
     # fast-forward would outrun the mouse moves
     args += ["-w", "--borders", "no", "--zoom", "1"] if windowed else ["--fast-forward", "yes"]
@@ -540,6 +546,7 @@ def check_exists(path, what):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
+    print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "viewer")).describe())
     d = copy_dir("viewer", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
     ok = run_scenario("viewer", d, STEPS)
     if ok:

@@ -301,7 +301,7 @@ make asan         # the same with AddressSanitizer and UBSan
 make m68k-test    # the suite as big-endian 68020 code under QEMU (Linux's libraries need a
                   # 68020; the 68000 is tested in Hatari, on an ST)
                   # (apt install gcc-m68k-linux-gnu qemu-user-static)
-make hatari-test  # EHVCHECK.PRG in Hatari, a Falcon and an ST, with EmuTOS (apt install hatari)
+make hatari-test  # EHVCHECK.PRG in Hatari, on the family's Falcon and ST (apt install hatari)
 make gui-test     # drive EHYPVIEW.PRG in Hatari with the keyboard and mouse
                   # (apt install hatari xvfb xdotool; screenshots in build/gui)
 make quiet-test   # the accessory's start and indexing measured in Hatari
@@ -314,8 +314,8 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   independent implementation, and their links, index and header the reviewed files in
   `tests/expected/`.
 - **`make m68k-test`** catches byte-order and alignment mistakes before they reach real hardware.
-- **`make hatari-test`** runs `EHVCHECK.PRG`, a self-test, not part of the viewer, on a Falcon and on
-  a 4 MB ST (whose 68000 faults on a word read at an odd address). It exercises the
+- **`make hatari-test`** runs `EHVCHECK.PRG`, a self-test, not part of the viewer, on the Falcon
+  (`Falcon:16`) and on the 4 MB ST (`ST:mono`), whose 68000 faults on a word read at an odd address. It exercises the
   core through GEMDOS on a test folder: scanning, every page and image, links, and the cache. Its
   report must match the same program built for this computer, line for line. To run it on a real
   Atari, copy `build/hatari/` (the program and its `FIXT` folder) to a drive and start
@@ -325,7 +325,7 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   selector, the accessory, and the program and accessory side by side. The mouse run (Xvfb and
   xdotool; skipped without them) clicks links, the right button, the menus and the About box. The
   viewer reports what it does through NatFeats, and each step waits for it.
-- **`make quiet-test`** boots a Falcon (32 MHz) with the accessory, built with `-DAES_PROFILE`, and a
+- **`make quiet-test`** boots the Falcon (`Falcon:16`) with the accessory, built with `-DAES_PROFILE`, and a
   library of 60 hypertexts and 6,720 pages, opens it from the Desk menu and boots again. Nothing may
   be read before it is opened, no stretch between its event calls while it reads and indexes may last
   more than 50 ms, and the second boot must find nothing changed and write nothing
@@ -338,8 +338,12 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   program's help, from its latest release (`common/tools/getrelease.py`), on a 1 MB ST and a 1 MB
   Falcon: both pictures must show (`tests/run_colour.py`; screenshots in `build/colour`).
 
-The Hatari rigs fetch EmuTOS 1.4 (the first with true colour on the Falcon) into `build/emutos` the
-first time (`tests/emutos.sh`).
+The Hatari rigs run on the family's test machines (`ST`, `ST-1`, `TT`, `Falcon` and their screens,
+from `common/tools/machines.py`; the guidelines, The machines). Each run names its machine and TOS.
+That is EmuTOS 1.4, fetched once into `~/.cache/aera`, unless `~/.aera/tos` holds Erez's own TOS
+images (never in git). `colour-test` adds the screens the machines don't have, starting from the
+machines' own arguments: the Falcon in 4 colours, ST medium and true colour, TT low, and a Falcon cut
+down to 1 MB.
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all of the above on every push, and checks
 that the build changed no tracked file.
 

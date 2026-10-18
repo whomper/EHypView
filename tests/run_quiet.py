@@ -3,12 +3,13 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 """The accessory's quiet start (the AERA guidelines, 2.2), measured.
 
-    tests/run_quiet.py PROFILE_DIR EMUTOS_IMAGE OUT_DIR
+    tests/run_quiet.py PROFILE_DIR OUT_DIR
 
 PROFILE_DIR holds an EHYPVIEW.ACC built with -DAES_PROFILE=40 (make
 quiet-test): every stretch of 40 ms or more between its event calls goes
 to the emulator's console as "AESGAP <ms> ms <tag>".  The accessory boots
-on a Falcon (EmuTOS, VGA, at 32 MHz; CPUCLOCK=16 for a stock one) with a
+on the family's Falcon:16 (common/tools/machines.py; MACHINE=ST:mono and
+QUIET_GUIDES=20 for an ST) with a
 library of 60 hypertexts, 6,720 pages, in C:\\GUIDES (tests/fixtures/many,
 copied), and is opened from the Desk menu with the mouse (Xvfb and
 xdotool, as tests/run_gui.py does):
@@ -34,15 +35,15 @@ import subprocess
 import sys
 import time
 
-PDIR, EMUTOS, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "common", "tools"))
+import machines  # noqa: E402
+
+PDIR, OUT = sys.argv[1], sys.argv[2]
 MANY = os.path.join(HERE, "fixtures", "many")
 DISPLAY = ":98"
 LIMIT = 50
-CPU = os.environ.get("CPUCLOCK", "32")     # MHz
-# MACHINE: Hatari's options for another machine, e.g. an ST:
-# MACHINE="--machine st --monitor mono --memsize 4" CPUCLOCK=8
-MACHINE = os.environ.get("MACHINE", "--machine falcon --monitor vga --memsize 14").split()
+MACHINE = os.environ.get("MACHINE", "Falcon:16")
 GUIDES = int(os.environ.get("QUIET_GUIDES", "60"))   # an ST: fewer (its accessory's heap is smaller)
 failed = 0
 
@@ -101,11 +102,13 @@ def boot(d, name, wanted, timeout=int(os.environ.get("QUIET_TIMEOUT", "240"))):
     """boot with drive C: = d, open the accessory, wait for the events
     wanted; the console's lines"""
     log_path = os.path.join(OUT, name + ".log")
-    env = dict(os.environ, DISPLAY=DISPLAY, SDL_AUDIODRIVER="dummy")
-    args = ["hatari", "--tos", EMUTOS] + MACHINE + [
-            "--natfeats", "yes", "--sound", "off", "--confirm-quit", "no", "--statusbar", "no",
-            "--log-level", "fatal", "--harddrive", d, "--gemdos-drive", "C",
-            "-w", "--borders", "no", "--zoom", "1", "--fast-forward", "no", "--cpuclock", CPU]
+    m = machines.Machine(MACHINE, d)
+    env = m.env()
+    env["DISPLAY"] = DISPLAY
+    env.pop("SDL_VIDEODRIVER")
+    args = ["hatari"] + m.args() + [
+            "--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
+            "-w", "--borders", "no", "--zoom", "1", "--fast-forward", "no"]
     h = subprocess.Popen(args, env=env, stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
 
     def lines():
@@ -144,11 +147,11 @@ def help_boot(d, page):
     """boot with drive C: = d and ASKHELP.PRG started: the console's lines,
     and the seconds from its request to the page (None: no page)"""
     log_path = os.path.join(OUT, "help.log")
-    env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
-    args = ["hatari", "--tos", EMUTOS] + MACHINE + [
-            "--natfeats", "yes", "--sound", "off", "--confirm-quit", "no", "--statusbar", "no",
-            "--log-level", "fatal", "--harddrive", d, "--gemdos-drive", "C", "--fast-forward", "no",
-            "--cpuclock", CPU, "--auto", r"C:\ASKHELP.PRG"]
+    m = machines.Machine(MACHINE, d)
+    args = ["hatari"] + m.args() + [
+            "--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal", "--fast-forward", "no",
+            "--auto", r"C:\ASKHELP.PRG"]
+    env = m.env()
     h = subprocess.Popen(args, env=env, stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
     sent = shown = None
     try:
@@ -207,6 +210,7 @@ def main():
     try:
         d = os.path.join(OUT, "c")
         make_drive(d)
+        print("      on %s, %d hypertexts" % (machines.Machine(MACHINE, d).describe(), GUIDES))
         idx = os.path.join(d, "EHYPVIEW.IDX")
 
         # 1. the first boot: no index yet
