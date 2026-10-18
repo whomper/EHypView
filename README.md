@@ -185,6 +185,11 @@ fonts are shown but can't be picked. ^+ and ^- change the size. A font dropped o
 selector (the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and the list of which
 fonts are monospaced in `EHYPVIEW.FNT`.
 
+The accessory loads GDOS fonts only when the Atari starts, and only when `EHYPVIEW.INF` names one, as
+every AERA accessory does: GDOS fonts loaded later would be lost when the program in front ends. So a
+GDOS font chosen in the accessory, or in the program while the accessory is loaded, is used by the
+accessory from the next boot; its font selector lists the ones it hasn't loaded as such.
+
 ### Settings
 
 **Options > Settings...** (^,; in the accessory, the toolbar's ≡ menu) shows what `EHYPVIEW.INF` holds,

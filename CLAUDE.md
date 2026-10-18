@@ -95,7 +95,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   icons/EHYPVIEW.RSC (committed). The About box (src/gem/about.c) follows
   EMail's, ECal's and EContact's.
 - The font selector (src/gem/fontsel.c) is ECal's and EMail's; keep them
-  alike.
+  alike. The accessory calls `vst_load_fonts` only in `font_init()`, before
+  its first event call, and only when `FONT=` names a GDOS font; after
+  that it lists EHYPVIEW.FNT's fonts as not loaded, taken at the next boot
+  (guidelines 2.2).
 - Control shortcuts test `key_ctrl(kstate, key)` (common/atari/gem.h),
   never `kstate & K_CTRL` alone: a ^key typed while EHypView is busy
   arrives with kstate 0 (guidelines 3.2).

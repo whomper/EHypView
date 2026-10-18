@@ -67,9 +67,8 @@ void app_bookmark_remove(int i);         /* Delete in the library, the menu */
 int settings_put(const char *key, const char *value, const char *note);
 
 /* fontsel.c: the text font */
-void font_init(const char *dir, const char *inf, int later);	/* the font from inf; EHYPVIEW.FNT in dir;
-							   later: a GDOS font only at font_wake() */
-void font_wake(void);                     /* the accessory, first opened: its font now */
+void font_init(const char *dir, const char *inf, int is_acc);	/* the font from inf; EHYPVIEW.FNT in dir;
+							   the accessory: GDOS fonts now or not at all */
 void font_check(void);                    /* the accessory: inf changed meanwhile? the font again */
 void font_exit(void);
 void font_dialog(void);                   /* View > Font... */

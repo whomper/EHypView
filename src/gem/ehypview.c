@@ -2664,8 +2664,8 @@ static int needs_index(const char *args)
 }
 
 /*
- * Opened, or asked for a page, the first time: the font chosen (a GDOS
- * font loads now), and the index may be read (START=opened).
+ * Opened, or asked for a page, the first time: the index may be read
+ * (START=opened).  The font was set at start-up (font_init).
  */
 static void wake(void)
 {
@@ -2673,7 +2673,6 @@ static void wake(void)
 		return;
 	woken = 1;
 	bg_opened();
-	font_wake();
 	log_font();
 }
 

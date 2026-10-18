@@ -16,6 +16,13 @@
  * a font dropped on a window by a font selector (the font protocol,
  * FONT_CHANGED) is taken too.  The choice is kept in EHYPVIEW.INF.
  *
+ * The accessory loads GDOS fonts only at start-up, before its first
+ * event call, and only when EHYPVIEW.INF names one (guidelines 2.2):
+ * loaded later, their memory would belong to the program in front and
+ * go when it ends.  Without them, its selector lists the fonts
+ * EHYPVIEW.FNT knows as "not loaded"; one chosen is taken at the next
+ * boot.
+ *
  * Adapted from ECal's ui/font.c (github.com/whomper/ECal).
  * Copyright (C) the EHypView and ECal authors.  Free software under the
  * GNU General Public License, version 2 or (at your option) any later
@@ -28,12 +35,13 @@
 #include "plat.h"
 #include "fontpref.h"
 #include "gemapp.h"
+#include "alert.h"
 
 #define MAXFAM  256
 #define MAXSIZE 20
 
 typedef struct {
-	short id, format;         /* VDI font id; 1 bitmap, 2 Speedo, 4 TrueType, 8 Type 1 */
+	short id, format;         /* VDI font id (0: not loaded); 1 bitmap, 2 Speedo, 4 TrueType, 8 Type 1 */
 	signed char mono;         /* -1: not measured yet */
 	char name[FONT_NAME_MAX];
 } FAM;
@@ -46,6 +54,7 @@ static font_pref pref;
 static short cur_id = 1, cur_pt;
 static char inf_path[200], fnt_path[200];
 static unsigned long inf_seen;		/* EHYPVIEW.INF as we last read or wrote it */
+static int acc, may_load = 1;		/* the accessory: GDOS fonts at start-up only */
 
 static unsigned long stamp(const char *path)
 {
@@ -133,6 +142,28 @@ static void list_names(void)
 	fam[0].mono = 1;
 	strcpy(fam[0].name, FONT_SYSTEM_NAME);
 	nfam = 1;
+	if (gdos_fonts < 0 && !may_load)
+	{
+		/* the accessory after start-up: none loaded, the ones known by
+		   name (monospaced) to choose for the next boot */
+		char *known = vq_gdos() ? pf_load(fnt_path, NULL) : NULL, *line;
+
+		gdos_fonts = 0;
+		for (line = known; line != NULL && *line != '\0' && nfam < MAXFAM;
+			line = strchr(line, '\n') ? strchr(line, '\n') + 1 : NULL)
+		{
+			size_t n = strcspn(line + 2, "\r\n");
+
+			if (line[0] != '1' || line[1] != ' ' || n == 0 || n >= FONT_NAME_MAX)
+				continue;
+			memset(&fam[nfam], 0, sizeof(fam[nfam]));
+			memcpy(fam[nfam].name, line + 2, n);
+			fam[nfam].mono = 1;
+			nfam++;
+		}
+		free(known);
+		return;
+	}
 	if (gdos_fonts < 0)
 	{
 		busy(1);
@@ -266,6 +297,13 @@ static void look_at(FAM *f)
 		nsizes = 2;
 		return;
 	}
+	if (f->id == 0)
+	{
+		sizes[0] = 0;                  /* POINT=0: the usual one */
+		strcpy(size_label[0], "Usual");
+		nsizes = 1;
+		return;
+	}
 	busy(1);
 	if (vst_font(vdi_h, f->id) != f->id)
 	{
@@ -297,6 +335,8 @@ static const char *format_name(const FAM *f)
 {
 	if (f->id == 1)
 		return "Bitmap (built in)";
+	if (f->id == 0)
+		return "GDOS font, loaded when the Atari starts";
 	switch (f->format)
 	{
 	case 1: return "Bitmap (GDOS)";
@@ -331,9 +371,11 @@ static void apply(void)
 	}
 	list_names();
 	f = family_of_name(pref.name);
-	if (f == NULL || !set_font(f->id, pref.point))
+	if (f == NULL || f->id == 0 || !set_font(f->id, pref.point))
 	{
-		fontpref_default(&pref);
+		/* the accessory keeps the choice for the next boot */
+		if (!acc)
+			fontpref_default(&pref);
 		set_font(1, 0);
 	}
 }
@@ -352,11 +394,9 @@ static void join(char *out, size_t size, const char *dir, const char *name)
 	snprintf(out, size, "%s%s%s", dir, n > 0 && dir[n - 1] != '\\' ? "\\" : "", name);
 }
 
-/* the accessory at start: the GDOS font chosen only when it is first
-   opened (loading GDOS fonts at boot would hold the machine) */
-static int waiting;
-
-void font_init(const char *dir, const char *inf, int later)
+/* the accessory: before its first event call, so GDOS fonts load now
+   or not at all (guidelines 2.2) */
+void font_init(const char *dir, const char *inf, int is_acc)
 {
 	char *text;
 
@@ -366,21 +406,11 @@ void font_init(const char *dir, const char *inf, int later)
 	inf_seen = stamp(inf_path);
 	fontpref_parse(&pref, text);
 	free(text);
-	if (later && !fontpref_is_system(&pref))
-	{
-		waiting = 1;
-		set_font(1, sys_point());
-	} else
-		apply();
-}
-
-void font_wake(void)
-{
-	if (waiting)
-	{
-		waiting = 0;
-		apply();
-	}
+	acc = is_acc;
+	if (acc && !fontpref_is_system(&pref))
+		list_names();                  /* vst_load_fonts */
+	may_load = !acc;
+	apply();
 }
 
 /* EHYPVIEW.PRG chose another font while the accessory waited: the
@@ -410,9 +440,13 @@ void font_exit(void)
 	gdos_fonts = -1;
 }
 
+/* the font in use: in the accessory, the one chosen may wait for the
+   next boot */
 const char *font_name(void)
 {
-	return pref.name;
+	FAM *f = family_of_id(cur_id);
+
+	return f != NULL ? f->name : pref.name;
 }
 
 short font_point(void)
@@ -742,7 +776,12 @@ static void draw_preview(void)
 	graf_mouse(M_OFF, NULL);
 	clip_on(&r);
 	fill_rect(&r, 0);
-	if (fam[lf.sel].mono && set_font(fam[lf.sel].id, chosen_pt()))
+	if (fam[lf.sel].id == 0)
+	{
+		use_sys();
+		dtext((short) (r.x + sys_cw), (short) (r.y + 2), "Not loaded: the accessory takes it at the next boot.",
+			(short) ((r.w - 2 * sys_cw) / sys_cw), 0, 0);
+	} else if (fam[lf.sel].mono && set_font(fam[lf.sel].id, chosen_pt()))
 	{
 		short cols = (short) ((r.w - 2 * cw) / cw);
 
@@ -990,7 +1029,17 @@ void font_dialog(void)
 	wind_update(2);                      /* END_MCTRL */
 	wind_update(END_UPDATE);
 	log_event("dialog-closed", "font", ok ? "ok" : "cancel");
-	if (ok)
+	if (ok && fam[lf.sel].id == 0)
+	{
+		/* the accessory: kept for the next boot, the font stays */
+		strcpy(pref.name, fam[lf.sel].name);
+		pref.point = 0;
+		set_font(keep_id, keep_pt);
+		save();
+		log_event("alert", "font-next-boot", pref.name);
+		alert(1, "[1][EHypView takes %s when the Atari next starts: the accessory loads GDOS fonts at "
+		      "start-up only.][ OK ]", pref.name);
+	} else if (ok)
 	{
 		strcpy(pref.name, fam[lf.sel].name);
 		pref.point = chosen_pt();
