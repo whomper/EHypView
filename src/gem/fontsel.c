@@ -842,6 +842,9 @@ static void family_changed(int draw)
 	if (want == 0)
 		want = cur_pt;
 	look_at(&fam[lf.sel]);
+	/* for the tests (tests/run_gui.py's accnvdi): which family, and can
+	   it be chosen */
+	log_event("font-family", fam[lf.sel].name, fam[lf.sel].mono > 0 ? "mono" : "prop");
 	use_sys();
 	ls.n = nsizes;
 	k = fontpref_pick(sizes, nsizes, want);

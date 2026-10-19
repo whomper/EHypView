@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import time
+import types
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common", "tools"))
 import machines  # noqa: E402
@@ -38,6 +39,7 @@ TAB, RETURN, BACKSPACE, HELP, UNDO, ESC = 15, 28, 14, 0x62, 0x61, 1
 RIGHT, LEFT, Q, L, W, I, F, CTRL, SHIFT = 0x4D, 0x4B, 0x10, 0x26, 0x11, 0x17, 0x21, 29, 0x2A
 MINUS, EQUALS = 0x0C, 0x0D
 N, D, DELETE = 0x31, 0x20, 0x53
+DOWN = 0x50
 IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
 COMMA, SEMICOLON, BACKSLASH = 0x33, 0x27, 0x2B
@@ -330,50 +332,81 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
                     continue                # not taken: once more
                 break
 
+    def press(k):
+        if isinstance(k, tuple) and k[0] in ("click", "rclick"):
+            mouse.click(k[1], k[2], "1" if k[0] == "click" else "3")
+        elif isinstance(k, tuple) and k[0] == "sclick":       # with Shift held
+            send("hatari-event keydown 0x%x" % SHIFT)
+            mouse.click(k[1], k[2])
+            send("hatari-event keyup 0x%x" % SHIFT)
+        elif isinstance(k, tuple) and k[0] == "dclick":
+            mouse.move(k[1], k[2])
+            mouse.xdo("click", "--repeat", "2", "--delay", "80", "1")
+            time.sleep(2)
+        elif isinstance(k, tuple) and k[0] == "type":
+            type_text(k[1])
+        elif isinstance(k, tuple) and k[0] == "field":     # a key into a dialog's field
+            if k[1]:
+                send("hatari-event keydown 0x%x" % k[1])
+                time.sleep(0.2)
+            send("hatari-event keypress %s" % (k[2] if isinstance(k[2], str) else "0x%x" % k[2]))
+            time.sleep(0.3)
+            if k[1]:
+                send("hatari-event keyup 0x%x" % k[1])
+                time.sleep(0.2)
+        elif isinstance(k, tuple) and k[0] == "wait":
+            time.sleep(k[1])
+        elif isinstance(k, tuple) and k[0] == "hover":      # rest there
+            mouse.move(k[1], k[2])
+            time.sleep(2)
+        elif isinstance(k, tuple) and k[0] == "menu":
+            mouse.click(k[1], k[2])                # the title drops the menu down
+            mouse.click(k[3], k[4])                # the item
+        elif isinstance(k, tuple):
+            mods = [SHIFT] if k[0] == "shift" else [CTRL] + ([SHIFT] if k[0] == "ctrl+shift" else [])
+            for m in mods:
+                send("hatari-event keydown 0x%x" % m)
+            send("hatari-event keypress 0x%x" % k[1])
+            for m in reversed(mods):
+                send("hatari-event keyup 0x%x" % m)
+        elif isinstance(k, str):
+            send("hatari-event keypress %s" % k)
+        else:
+            send("hatari-event keypress 0x%x" % k)
+
+    def wait_any(expected, timeout=30):
+        """the first of these to come: its index, or -1"""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            new = events()[len(seen):]
+            for i, ev in enumerate(new):
+                for k, e in enumerate(expected):
+                    if matches(ev, e):
+                        seen.extend(new[:i + 1])
+                        return k
+            time.sleep(0.2)
+        return -1
+
+    # a step may be a function of the rig instead of keys: it presses and
+    # waits as it goes, and says False when it failed
+    rig = types.SimpleNamespace(press=press, send=send, events=events, seen=seen,
+                                wait_for=wait_for, wait_any=wait_any, name=name)
+
     ok = True
     try:
         for n, (keys, expect) in enumerate(steps):
-            for k in keys:
-                if isinstance(k, tuple) and k[0] in ("click", "rclick"):
-                    mouse.click(k[1], k[2], "1" if k[0] == "click" else "3")
-                elif isinstance(k, tuple) and k[0] == "sclick":       # with Shift held
-                    send("hatari-event keydown 0x%x" % SHIFT)
-                    mouse.click(k[1], k[2])
-                    send("hatari-event keyup 0x%x" % SHIFT)
-                elif isinstance(k, tuple) and k[0] == "dclick":
-                    mouse.move(k[1], k[2])
-                    mouse.xdo("click", "--repeat", "2", "--delay", "80", "1")
-                    time.sleep(2)
-                elif isinstance(k, tuple) and k[0] == "type":
-                    type_text(k[1])
-                elif isinstance(k, tuple) and k[0] == "field":     # a key into a dialog's field
-                    if k[1]:
-                        send("hatari-event keydown 0x%x" % k[1])
-                        time.sleep(0.2)
-                    send("hatari-event keypress %s" % (k[2] if isinstance(k[2], str) else "0x%x" % k[2]))
-                    time.sleep(0.3)
-                    if k[1]:
-                        send("hatari-event keyup 0x%x" % k[1])
-                        time.sleep(0.2)
-                elif isinstance(k, tuple) and k[0] == "wait":
-                    time.sleep(k[1])
-                elif isinstance(k, tuple) and k[0] == "hover":      # rest there
-                    mouse.move(k[1], k[2])
-                    time.sleep(2)
-                elif isinstance(k, tuple) and k[0] == "menu":
-                    mouse.click(k[1], k[2])                # the title drops the menu down
-                    mouse.click(k[3], k[4])                # the item
-                elif isinstance(k, tuple):
-                    mods = [SHIFT] if k[0] == "shift" else [CTRL] + ([SHIFT] if k[0] == "ctrl+shift" else [])
-                    for m in mods:
-                        send("hatari-event keydown 0x%x" % m)
-                    send("hatari-event keypress 0x%x" % k[1])
-                    for m in reversed(mods):
-                        send("hatari-event keyup 0x%x" % m)
-                elif isinstance(k, str):
-                    send("hatari-event keypress %s" % k)
-                else:
-                    send("hatari-event keypress 0x%x" % k)
+            if callable(keys):
+                if not keys(rig):
+                    print("FAIL  %s step %d" % (name, n))
+                    print("      events so far: %s" % events())
+                    ok = False
+            else:
+                for k in keys:
+                    press(k)
+            if not ok:
+                send("hatari-debug screenshot %s" % os.path.abspath(
+                    os.path.join(OUT, "%s-%02d.png" % (name, n))))
+                break
             if not expect:
                 time.sleep(1.0)
             for e in expect:
@@ -586,6 +619,130 @@ ACC_FASTRAM_STEPS = [
 ]
 
 
+# The accessory with a GDOS font under NVDI (guidelines 2.2), for the hub's
+# runs with Erez's NVDI (AERA_WITH_NVDI=1, common/tools/machines.py; the
+# case is skipped without it). Keyboard only, but for the desktop's Desk
+# menu, so no TOS's layout matters. Boot 1: EHYPVIEW.PRG (--auto) measures
+# the GDOS fonts in its selector (EHYPVIEW.FNT) and quits; the accessory,
+# opened from the desktop, picks the first monospaced GDOS font in its own
+# selector (the "font-family NAME mono|prop" lines say which): under 1.13's
+# rule it is taken at the next boot (an alert), under NVDI with PR #32 at
+# once; then the accessory is closed and opened again. Boot 2, with FONT=
+# set: ASKHELP.PRG (--auto) asks the accessory for a page and quits, so the
+# accessory draws in the font with another program in front and after it
+# ended, then is closed and opened again. Screenshots of every step are in
+# build/gui (accnvdi1-NN.png, accnvdi2-NN.png).
+ACC_NVDI = {}
+DESK_ACC = [("click", 18, 8), ("click", 60, 64)]    # the desktop's Desk menu, first accessory
+
+
+def pick_gdos_font(rig):
+    """in the accessory's font selector: the first monospaced GDOS font"""
+    base = len(rig.seen)                        # the first family comes before "dialog font"
+    rig.press(("ctrl+shift", F))
+    if not rig.wait_for("dialog font"):
+        return False
+
+    def families():
+        return [e[len("font-family "):] for e in rig.events()[base:] if e.startswith("font-family ")]
+
+    for _ in range(80):
+        fams = families()
+        last = fams[-1] if fams else ""
+        if last.endswith(" mono") and last[:-5] != "System font":
+            break
+        n = len(fams)
+        rig.press(DOWN)
+        deadline = time.time() + 8
+        while time.time() < deadline and len(families()) == n:
+            time.sleep(0.2)
+        if len(families()) == n:
+            print("      %s: no monospaced GDOS font in the list (%s)" % (rig.name, ", ".join(fams) or "none"))
+            return False
+    name = last[:-5]
+    rig.press(RETURN)
+    if not rig.wait_for("dialog-closed font ok"):
+        return False
+    k = rig.wait_any(["alert font-next-boot *", "font %s *" % name])
+    if k < 0:
+        return False
+    ACC_NVDI["font"] = name
+    ACC_NVDI["rule"] = "at the next boot (1.13)" if k == 0 else "at once (NVDI, PR #32)"
+    print("ok    %s: %s chosen in the accessory, used %s" % (rig.name, name, ACC_NVDI["rule"]))
+    if k == 0:
+        rig.press(RETURN)                       # the alert's OK
+    return True
+
+
+def reopen(rig):
+    """the accessory again from the desktop's Desk menu: its viewer or library"""
+    for k in DESK_ACC:
+        rig.press(k)
+    return rig.wait_any(["page *", "library *"]) >= 0
+
+
+def font_at_boot(rig):
+    """boot 2: the accessory loaded the font chosen, before its first event call"""
+    return rig.wait_for("font %s *" % ACC_NVDI.get("font", "?"), 90)
+
+
+ACC_NVDI_BOOT1 = [
+    ([], ["acc registered", "menu shown"]),
+    ([("ctrl+shift", F)], ["dialog font"]),                 # the program measures the fonts
+    ([ESC], ["dialog-closed font cancel"]),
+    ([("ctrl", Q)], ["quit"]),
+    ([("wait", 6)] + DESK_ACC, ["library *"]),              # the accessory, from the desktop
+    (pick_gdos_font, []),
+    ([("ctrl", W)], ["closed *"]),
+    (reopen, []),
+]
+ACC_NVDI_BOOT2 = [
+    (font_at_boot, []),
+    ([], ["page %s Main" % BASIC]),                         # asked by ASKHELP.PRG, which then ends
+    ([("wait", 4)], []),
+    ([("ctrl", W)], ["closed *"]),
+    (reopen, []),
+    ([("ctrl", W)], ["closed *"]),
+    (reopen, []),
+]
+
+
+def acc_nvdi_dir():
+    """C: with the accessory in the root, the program in C:\\EHV, ASKHELP.PRG
+    asking for BASIC.HYP's main page, and FIXT"""
+    d = os.path.join(OUT, "accnvdi")
+    if os.path.exists(d):
+        shutil.rmtree(d)
+    shutil.copytree(os.path.join(HDIR, "FIXT"), os.path.join(d, "FIXT"))
+    os.makedirs(os.path.join(d, "EHV"))
+    shutil.copy(os.path.join(HDIR, "EHYPVIEW.PRG"), os.path.join(d, "EHV"))
+    shutil.copy(os.path.join(HDIR, "EHYPVIEW.ACC"), d)
+    shutil.copy(os.path.join(HDIR, "ASKHELP.PRG"), d)
+    with open(os.path.join(d, "ASKHELP.TXT"), "w") as f:
+        f.write(BASIC + " Main\r\n")
+    with open(os.path.join(d, "ST-GUIDE.INF"), "w") as f:
+        f.write("PATHS=C:\\FIXT\r\nREF=C:\\FIXT\\ALL.REF\r\n")
+    return d
+
+
+def acc_nvdi():
+    if not (os.environ.get("AERA_WITH_NVDI") or os.environ.get("ACC_NVDI_TRY")):
+        print("skip  accnvdi: runs under Erez's NVDI only (AERA_WITH_NVDI=1)")
+        return True
+    if not have_display():
+        print("skip  accnvdi: needs Xvfb and xdotool")
+        return True
+    d = acc_nvdi_dir()
+    xvfb = start_xvfb()
+    try:
+        ok = run_scenario("accnvdi1", d, ACC_NVDI_BOOT1, auto=r"C:\EHV\EHYPVIEW.PRG", windowed=True)
+        ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FONT=%s" % ACC_NVDI.get("font", "?")])
+        ok = ok and run_scenario("accnvdi2", d, ACC_NVDI_BOOT2, auto=r"C:\ASKHELP.PRG", windowed=True)
+    finally:
+        xvfb.terminate()
+    return ok
+
+
 def acc_fastram_dir():
     """C: with the accessory in the root, and FIXT"""
     import shutil
@@ -702,6 +859,8 @@ def main():
                 xvfb.terminate()
         else:
             print("skip  accfast: needs Xvfb and xdotool")
+    if ok:
+        ok = acc_nvdi()
     return 0 if ok else 1
 
 
