@@ -225,9 +225,12 @@ class Machine:
         nv[48], nv[49] = ~s & 0xFF, s
         with open(os.path.join(cfg, "hatari.nvram"), "wb") as f:
             f.write(nv)
+        # under NVDI, TOS's memory count as well (TOS 4.04 on Falcon-4 was
+        # still counting after 45 s): fast-boot skips it
+        fast = ["--fast-boot", "yes"] if os.path.exists(os.path.join(self.hd, "AUTO", "NVDI.PRG")) else []
         return (["--tos", self.tos] + self.base + SCREENS[self.screen] +
                 ["--harddrive", self.hd, "--gemdos-drive", "C", "--sound", "off",
-                 "--confirm-quit", "no"])
+                 "--confirm-quit", "no"] + fast)
 
     def nvdi(self):
         """Erez's NVDI on C: (see above): True, or False when it isn't here"""
