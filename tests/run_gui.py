@@ -523,16 +523,16 @@ GUIDE_STEPS = [
 ]
 
 
-# EHYPVIEW.PRG and EHYPVIEW.ACC (the AERA guidelines, 2.3, 6.1), under
-# EmuTOS: the accessory starts quietly (nothing read until it is opened);
-# the program, started from the
-# desktop (C:\\EHV\\EHYPVIEW.PRG), writes C:\\EHYPVIEW.INF with FOLDER=; the
-# accessory chosen meanwhile hands it to the program; the program makes
-# the text smaller and quits; the accessory, opened, takes the new size
+# EHYPVIEW.PRG and EHYPVIEW.ACC (the AERA guidelines, 2.3, 6.1): the
+# accessory starts quietly (nothing read until it is opened); the program,
+# started by the desktop (Hatari's --auto C:\\EHV\\EHYPVIEW.PRG, so no
+# desktop icons are clicked: their places differ from TOS to TOS), writes
+# C:\\EHYPVIEW.INF with FOLDER=; the accessory chosen meanwhile hands it to
+# the program; the program makes the text smaller and quits; the
+# accessory, opened, takes the new size
+TWIN_AUTO = r"C:\EHV\EHYPVIEW.PRG"
 TWIN_STEPS = [
-    ([], ["acc registered", "started *"]),
-    ([("dclick", 195, 40), ("dclick", 60, 158), ("dclick", 60, 158)],    # DISK C, EHV, the program
-     ["menu shown", "library 0", "index 5 guides"]),
+    ([], ["acc registered", "menu shown", "library 0", "index 5 guides"]),
     ([item(DESK, 2)], ["acc to the program"]),                          # the accessory, in the Desk menu
     ([("ctrl", MINUS)], ["font System font 8"]),
     ([("ctrl", Q)], ["quit"]),
@@ -660,7 +660,7 @@ def main():
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(1)
             try:
-                ok = run_scenario("twin", d, TWIN_STEPS, auto=None, windowed=True)
+                ok = run_scenario("twin", d, TWIN_STEPS, auto=TWIN_AUTO, windowed=True)
             finally:
                 xvfb.terminate()
             ok = check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FOLDER=C:\\EHV", "POINT=8"]) and ok
