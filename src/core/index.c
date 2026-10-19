@@ -867,8 +867,24 @@ unsigned long ehv_index_suggest_guides(const ehv_index *idx, const char *file,
  * file (to EHypView 1.6) is loaded and sorted afresh.
  */
 #define CACHE_MAGIC "EHYPVIEW-INDEX"
-#define CHUNK       4096L              /* bytes read or written per step */
 #define LINES       8                  /* lines read or written per step */
+#define MARGIN      16384L             /* room for a step's lines past the buffer */
+
+static unsigned long read_piece = 32768L, write_buffer = 32768L;
+static void *(*buf_alloc)(unsigned long want, unsigned long *got);
+static void (*buf_release)(void *p);
+
+void ehv_index_pieces(unsigned long rp, unsigned long wb)
+{
+	read_piece = rp > 512 ? rp : 512;
+	write_buffer = wb > MARGIN ? wb : MARGIN;
+}
+
+void ehv_index_buffers(void *(*alloc)(unsigned long want, unsigned long *got), void (*release)(void *p))
+{
+	buf_alloc = alloc;
+	buf_release = release;
+}
 #define PER_LINE    32                 /* table numbers per line */
 
 /* the cache text is built in memory and written in pieces */
@@ -876,6 +892,7 @@ typedef struct {
 	char *data;
 	unsigned long len, cap;
 	int failed;
+	int fixed;                /* from buf_alloc: can't grow */
 } outbuf;
 
 static void out_bytes(outbuf *o, const char *s, unsigned long n)
@@ -887,6 +904,11 @@ static void out_bytes(outbuf *o, const char *s, unsigned long n)
 		unsigned long ncap = o->cap ? o->cap : 16384;
 		char *p;
 
+		if (o->fixed)
+		{
+			o->failed = 1;           /* past MARGIN: not saved this time */
+			return;
+		}
 		while (ncap < o->len + n + 1)
 			ncap *= 2;
 		p = realloc(o->data, ncap);
@@ -1008,7 +1030,8 @@ enum { S_OPEN, S_HEAD, S_GUIDES, S_ORPHANS, S_TABLES, S_END, S_CLOSE, S_DONE };
 struct ehv_saver {
 	const ehv_index *idx;
 	char *path, *tmp;
-	outbuf o;                       /* written out each CHUNK */
+	outbuf o;                       /* written out when full, and at the end */
+	unsigned long full;             /* when it is */
 	int phase, table;
 	int h;                          /* open only within a step (guidelines 2.2) */
 	int made;                       /* tmp is on the disk */
@@ -1031,6 +1054,34 @@ ehv_saver *ehv_index_save_begin(const ehv_index *idx, const char *path)
 		return NULL;
 	}
 	strcpy(v->path, path);
+	/* the buffer at once, as big as can be up to write_buffer, and no
+	   bigger than the file will be: an accessory has what it took at
+	   boot, and an ST little of it */
+	{
+		unsigned long est = idx->nguides * 512UL + idx->nsyms * 64UL + (2 * idx->nguides + idx->nsyms) * 8UL;
+		unsigned long cap = (est < write_buffer ? est : write_buffer) + MARGIN, got = 0;
+
+		if (buf_alloc != NULL && (v->o.data = buf_alloc(cap, &got)) != NULL && got > 2 * MARGIN)
+		{
+			v->o.fixed = 1;
+			cap = got;
+		} else
+		{
+			if (v->o.data != NULL && buf_release != NULL)
+				buf_release(v->o.data);
+			v->o.data = NULL;
+			/* down by eighths: the biggest piece left in an accessory's heap */
+			while ((v->o.data = malloc(cap)) == NULL && cap > 2 * MARGIN)
+				cap -= cap / 8;
+		}
+		if (v->o.data == NULL)
+		{
+			ehv_index_save_abort(v);
+			return NULL;
+		}
+		v->o.cap = cap;
+		v->full = cap - MARGIN;
+	}
 	return v;
 }
 
@@ -1042,23 +1093,28 @@ void ehv_index_save_abort(ehv_saver *v)
 		pf_close(v->h);
 	if (v->made)
 		pf_remove(v->tmp);
-	free(v->o.data);
+	if (v->o.fixed && buf_release != NULL)
+		buf_release(v->o.data);
+	else
+		free(v->o.data);
 	free(v->path);
 	free(v->tmp);
 	free(v);
 }
 
-/* what is built goes to the file (a step of its own), opened again for
-   it: the accessory's files belong to the program in front, which may
-   end, and close them, between two steps */
+/* what is built goes to the file (a step of its own), opened for it:
+   made by the first, added to by the next ones (the accessory's files
+   belong to the program in front, which may end, and close them,
+   between two steps) */
 static int flush(ehv_saver *v)
 {
 	if (v->o.failed)
 		return -1;
 	if (v->o.len > 0)
 	{
-		if (v->h < 0 && (v->h = pf_open(v->tmp, PF_APPEND)) < 0)
+		if (v->h < 0 && (v->h = pf_open(v->tmp, v->made ? PF_APPEND : PF_WRITE)) < 0)
 			return -1;
+		v->made = 1;
 		if (pf_write(v->h, v->o.data, (long) v->o.len) != (long) v->o.len)
 			return -1;
 	}
@@ -1075,7 +1131,7 @@ static int save_steps(ehv_saver *v, unsigned int budget)
 	{
 		if (budget-- == 0)
 			return 0;
-		if (v->o.len >= (unsigned long) CHUNK)
+		if (v->o.len >= v->full)
 		{
 			if (flush(v) < 0)
 				return -1;
@@ -1083,10 +1139,7 @@ static int save_steps(ehv_saver *v, unsigned int budget)
 		}
 		switch (v->phase)
 		{
-		case S_OPEN:
-			if ((v->h = pf_open(v->tmp, PF_WRITE)) < 0)
-				return -1;
-			v->made = 1;
+		case S_OPEN:                 /* made by the first flush() */
 			v->phase = S_HEAD;
 			break;
 		case S_HEAD:
@@ -1271,24 +1324,20 @@ struct ehv_loader {
 	ehv_finish *fin;                /* a version 1 file: sorted afresh */
 };
 
+/* the file is looked at in the first step: opened, its size from the
+   open file (one open, no look at the folder) */
 ehv_loader *ehv_index_load_begin(const char *path)
 {
-	ehv_loader *l;
-	pf_info st;
+	ehv_loader *l = calloc(1, sizeof(*l));
 
-	if (pf_stat(path, &st) != 0 || st.is_dir)
-		return NULL;
-	l = calloc(1, sizeof(*l));
 	if (l == NULL)
 		return NULL;
 	l->cur = -1;
-	l->size = st.size;
-	l->buf = malloc(l->size + 1);
 	l->idx = ehv_index_new();
 	l->h = -1;
 	if ((l->path = malloc(strlen(path) + 1)) != NULL)
 		strcpy(l->path, path);
-	if (l->buf == NULL || l->idx == NULL || l->path == NULL)
+	if (l->idx == NULL || l->path == NULL)
 	{
 		ehv_index_load_abort(l);
 		return NULL;
@@ -1454,11 +1503,22 @@ static int load_steps(ehv_loader *l, unsigned int budget)
 
 	while (budget-- > 0)
 	{
+		if (l->buf == NULL && !l->done)
+		{
+			/* the first step: the file opened, its size from it */
+			pf_info st;
+
+			if ((l->h = pf_open(l->path, PF_READ)) < 0 || pf_finfo(l->h, &st) != 0 || st.is_dir)
+				return -1;
+			l->size = st.size;
+			if (l->size == 0 || (l->buf = malloc(l->size + 1)) == NULL)
+				return -1;
+		}
 		if (l->got < l->size)
 		{
-			/* the file, a piece at a time */
+			/* the file, a big piece at a time */
 			unsigned long left = l->size - l->got;
-			long n = left > (unsigned long) CHUNK ? CHUNK : (long) left;
+			long n = left > read_piece ? (long) read_piece : (long) left;
 
 			/* opened again in each step, where the last one left off */
 			if (l->h < 0)

@@ -676,8 +676,24 @@ static int free_fd(void)
 	return fd;
 }
 
+static ehv_index *run_job_counted(const char *cache, const char *allref, int *nindex, int *unchanged, int *steps);
+
+/* the last job's opens and looks (plat_posix.c's counts; the AERA
+   guidelines, 6.5) */
+static unsigned long job_opens, job_looks;
+
 /* the job to its end; *nindex: indices it handed out; the last one */
 static ehv_index *run_job(const char *cache, const char *allref, int *nindex, int *unchanged, int *steps)
+{
+	unsigned long o0 = pf_opens, l0 = pf_lookups;
+	ehv_index *idx = run_job_counted(cache, allref, nindex, unchanged, steps);
+
+	job_opens = pf_opens - o0;
+	job_looks = pf_lookups - l0;
+	return idx;
+}
+
+static ehv_index *run_job_counted(const char *cache, const char *allref, int *nindex, int *unchanged, int *steps)
 {
 	ehv_libjob *j = ehv_libjob_begin(cache, (const char *const *) roots, 4, allref);
 	ehv_index *idx = NULL;
@@ -706,12 +722,83 @@ static ehv_index *run_job(const char *cache, const char *allref, int *nindex, in
 	return idx;
 }
 
+/* the index file in pieces: written from a small buffer, read a small
+   piece a step, each piece one open (the AERA guidelines, 6.5) */
+static void test_pieces(void)
+{
+	ehv_index *idx = ehv_index_new(), *back = NULL;
+	ehv_guide g;
+	ehv_loader *l;
+	unsigned long i, o0, size;
+	char name[32];
+	pf_info st;
+	int r;
+
+	memset(&g, 0, sizeof(g));
+	g.path = "C:\\GUIDES\\PIECES.HYP";
+	g.size = 1234;
+	CHECK(idx != NULL && ehv_index_add_guide(idx, &g) == 0);
+	for (i = 0; idx != NULL && i < 3000; i++)
+	{
+		sprintf(name, "page number %05lu", i);
+		CHECK(ehv_index_add_sym(idx, 0, EHV_SYM_NODE, 0, name, NULL, 0) == 0);
+	}
+	CHECK(idx != NULL && ehv_index_finish(idx) == 0);
+	if (idx == NULL)
+		return;
+
+	ehv_index_pieces(4096, 16384);
+	o0 = pf_opens;
+	{
+		/* in steps, as the library job does: a buffer at a time, each
+		   one open */
+		ehv_saver *v = ehv_index_save_begin(idx, tp("pieces.idx"));
+
+		CHECK(v != NULL);
+		while (v != NULL && (r = ehv_index_save_some(v, 1)) == 0)
+			;
+		CHECK(v != NULL && r == 1);
+		ehv_index_save_abort(v);
+	}
+	CHECK(pf_stat(tp("pieces.idx"), &st) == 0 && st.size > 3 * 16384);
+	size = st.size;
+	CHECK(pf_opens - o0 >= size / 16384 && pf_opens - o0 <= size / 16384 + 2);
+
+	o0 = pf_opens;
+	l = ehv_index_load_begin(tp("pieces.idx"));
+	CHECK(l != NULL);
+	while (l != NULL && (r = ehv_index_load_some(l, 1)) == 0)
+		;
+	CHECK(l != NULL && r == 1);
+	if (l != NULL && r == 1)
+		back = ehv_index_load_take(l);
+	else
+		ehv_index_load_abort(l);
+	CHECK(back != NULL && same_index(back, idx));
+	CHECK(pf_opens - o0 == (size + 4095) / 4096);    /* a piece a step, each one open */
+
+	/* the whole file in one read and one write when they fit */
+	ehv_index_pieces(1024L * 1024, 1024L * 1024);
+	o0 = pf_opens;
+	CHECK(ehv_index_save(idx, tp("pieces.idx")) == 0);
+	CHECK(pf_opens - o0 == 1);
+	ehv_index_free(back);
+	o0 = pf_opens;
+	back = ehv_index_load(tp("pieces.idx"));
+	CHECK(back != NULL && same_index(back, idx) && pf_opens - o0 == 1);
+	ehv_index_free(back);
+	ehv_index_free(idx);
+	ehv_index_pieces(32768, 32768);
+	remove(tp("pieces.idx"));
+}
+
 static void test_libjob(const ref_db *db)
 {
 	char cache[1024], allref[1024], allref2[1024];
 	ehv_index *want, *got;
 	ehv_scan_status st;
 	pf_info before, after;
+	unsigned long looks;
 	int n, same, steps;
 	char *text;
 	unsigned long len;
@@ -729,12 +816,26 @@ static void test_libjob(const ref_db *db)
 	CHECK(got != NULL && want != NULL && same_index(got, want));
 	CHECK(pf_stat(cache, &before) == 0);
 	ehv_index_free(got);
+	/* every folder looked at once; each hypertext (the damaged ones too)
+	   and .REF opened once,
+	   ALL.REF, and the index (looked for, then written): the AERA
+	   guidelines, 6.5 */
+	looks = job_looks;
+	{
+		unsigned long g, refs = 0;
+
+		for (g = 0; want != NULL && g < want->nguides; g++)
+			refs += want->guides[g].ref_path != NULL;
+		CHECK(job_opens == st.opened + st.failed + refs + 3);
+	}
 
 	/* again: the index read is handed out, nothing changed, nothing
-	   written */
+	   written; one open (the index), the folders listed and nothing
+	   looked up one by one */
 	sleep(1);
 	got = run_job(cache, allref, &n, &same, &steps);
 	CHECK(got != NULL && n == 1 && same);
+	CHECK(job_opens == 1 && job_looks == looks);
 	CHECK(got != NULL && want != NULL && same_index(got, want) && tables_sorted(got));
 	CHECK(pf_stat(cache, &after) == 0 && after.mtime == before.mtime);
 	ehv_index_free(got);
@@ -749,6 +850,7 @@ static void test_libjob(const ref_db *db)
 	}
 	got = run_job(cache, allref2, &n, &same, &steps);
 	CHECK(got != NULL && n == 2 && !same && same_index(got, want));
+	CHECK(job_looks == looks);              /* built at once, no checking pass first */
 	ehv_index_free(got);
 	got = run_job(cache, allref2, &n, &same, &steps);
 	CHECK(got != NULL && n == 1 && same);
@@ -766,6 +868,9 @@ static void test_libjob(const ref_db *db)
 	copy_file("other.hyp", tp("r1/sub/deeper/deepest/Other.Hyp"));
 	got = run_job(cache, allref, &n, &same, &steps);
 	CHECK(got != NULL && n == 2 && !same && tables_sorted(got));
+	/* the folders read once (the checking pass's, taken by the building
+	   one); the index, the changed hypertext, ALL.REF, the new index */
+	CHECK(job_looks == looks && job_opens <= 4);
 	ehv_index_free(got);
 
 	/* one gone, then back: built again each time */
@@ -857,6 +962,7 @@ int main(int argc, char **argv)
 		test_scan(idx, &st);
 		test_resolve(idx);
 		test_cache(idx, allref);
+		test_pieces();
 		test_libjob(allref);
 	}
 	ehv_index_free(idx);

@@ -616,6 +616,69 @@ static void test_mutations(const char *name)
 	checks++;
 }
 
+/* one open per request (the AERA guidelines, 6.5): a hypertext held
+   while its page is read, kept a moment after it is closed; a file looked
+   up once until forgotten; pf_load() opens and looks at nothing else */
+static void test_opens(void)
+{
+	unsigned long o0;
+	hyp_doc *doc, *again;
+	hyp_page *pg;
+	pf_info a, b;
+	char *text;
+	int err;
+
+	o0 = pf_opens;
+	doc = hyp_open_held(fixture("basic.hyp"), &err);
+	CHECK(doc != NULL && doc->h >= 0);
+	pg = doc != NULL ? hyp_page_load(doc, hyp_default_node(doc), &err) : NULL;
+	CHECK(pg != NULL && pf_opens - o0 == 1);           /* the page in the same open */
+	hyp_page_free(pg);
+	hyp_let_go(doc);
+	CHECK(doc != NULL && doc->h < 0);
+	pg = doc != NULL ? hyp_page_load(doc, hyp_default_node(doc), &err) : NULL;
+	CHECK(pg != NULL && pf_opens - o0 == 2);           /* let go: opened for it */
+	hyp_page_free(pg);
+
+	hyp_recent(1);
+	o0 = pf_opens;
+	hyp_keep(doc);                                      /* closed: kept */
+	again = hyp_open(fixture("basic.hyp"), &err);
+	CHECK(again == doc && pf_opens == o0);              /* the one closed a moment ago */
+	hyp_close(again);
+	hyp_forget();
+	again = hyp_open(fixture("basic.hyp"), &err);
+	CHECK(again != NULL && pf_opens == o0 + 1);         /* forgotten: opened again */
+	hyp_close(again);
+	o0 = pf_opens;
+	doc = hyp_open_held(fixture("basic.hyp"), &err);   /* the resolver's look */
+	hyp_keep(doc);
+	again = hyp_open_held(fixture("basic.hyp"), &err); /* the viewer's */
+	CHECK(again == doc && again->h >= 0);
+	pg = again != NULL ? hyp_page_load(again, hyp_default_node(again), &err) : NULL;
+	CHECK(pg != NULL && pf_opens == o0 + 1);            /* one open for the request */
+	hyp_page_free(pg);
+	hyp_close(again);
+	hyp_recent(0);
+
+	pf_looks(1);
+	o0 = pf_lookups;
+	CHECK(pf_look(fixture("basic.hyp"), &a) == 0 && pf_look(fixture("basic.hyp"), &b) == 0);
+	CHECK(pf_lookups == o0 + 1 && a.size == b.size && a.mtime == b.mtime);
+	CHECK(pf_look(fixture("no such.hyp"), &a) != 0 && pf_look(fixture("no such.hyp"), &a) != 0);
+	CHECK(pf_lookups == o0 + 2);
+	pf_forget();
+	CHECK(pf_look(fixture("basic.hyp"), &a) == 0 && pf_lookups == o0 + 3);
+	pf_looks(0);
+
+	o0 = pf_opens;
+	b.size = 0;
+	text = pf_load_info(fixture("basic.ref"), NULL, &a);
+	CHECK(text != NULL && pf_opens == o0 + 1 && pf_stat(fixture("basic.ref"), &b) == 0);
+	CHECK(a.size == b.size && a.mtime == b.mtime);     /* the date from the open file */
+	free(text);
+}
+
 int main(int argc, char **argv)
 {
 	fixdir = argc > 1 ? argv[1] : "tests/fixtures";
@@ -637,6 +700,7 @@ int main(int argc, char **argv)
 	test_inf_put();
 	test_save();
 	test_charset();
+	test_opens();
 	test_mutations("basic.hyp");
 	test_mutations("images.hyp");
 	test_mutations("basic.ref");

@@ -47,6 +47,7 @@
 #include "dd.h"
 #include "twin.h"
 #include "bgwork.h"
+#include "bigbuf.h"
 #include "settings.h"
 #include "version.h"
 
@@ -2381,6 +2382,29 @@ static const char inf_head[] =
 	"; A line starting with ';' is a note. EHypView keeps the notes, and\r\n"
 	"; any setting it doesn't know, when it writes the file.\r\n\r\n";
 
+/*
+ * EHYPVIEW.INF as read: once at the start (the AERA guidelines, 6.5),
+ * again when the accessory opens (the program may have changed it), and
+ * as written.  Its text, for the font's settings, and its date.
+ */
+static char *own_text;
+static pf_info own_info;
+static inf_file *own_inf;
+
+static void own_set(char *text)
+{
+	free(own_text);
+	inf_free(own_inf);
+	own_text = text;
+	own_inf = text != NULL ? inf_parse(text, NULL) : NULL;
+}
+
+static void own_reload(void)
+{
+	memset(&own_info, 0, sizeof(own_info));
+	own_set(pf_load_info(settings_path, NULL, &own_info));
+}
+
 int settings_put(const char *key, const char *value, const char *note)
 {
 	char *text = pf_load(settings_path, NULL), *t;
@@ -2390,7 +2414,10 @@ int settings_put(const char *key, const char *value, const char *note)
 	if (t != NULL)
 	{
 		r = pf_save(settings_path, t, (unsigned long) strlen(t));
-		free(t);
+		if (r == 0)
+			own_set(t);                /* as it is on the disk now */
+		else
+			free(t);
 	}
 	free(text);
 	return r;
@@ -2400,8 +2427,12 @@ int settings_put(const char *key, const char *value, const char *note)
    as the program may have changed them */
 static void bookmarks_load(void)
 {
-	inf_file *inf = inf_load(settings_path, NULL);
+	inf_file *inf;
 	unsigned int i;
+
+	if (is_acc)
+		own_reload();
+	inf = own_inf;
 
 	bm_read(&bookmarks, inf);
 	bm_written = 0;
@@ -2413,8 +2444,6 @@ static void bookmarks_load(void)
 		if (inf_get(inf, key) != NULL)
 			bm_written = i + 1;
 	}
-	if (inf != NULL)
-	inf_free(inf);
 	libwin_bookmarks(&bookmarks);
 	menu_rebuild();
 }
@@ -2423,7 +2452,7 @@ static void bookmarks_load(void)
    used left empty */
 static int bookmarks_save(void)
 {
-	char *text = pf_load(settings_path, NULL);
+	char *text = pf_load(settings_path, NULL);	/* the program may have written since */
 	unsigned int i, last = bookmarks.n > bm_written ? bookmarks.n : bm_written;
 	int r = 0;
 
@@ -2446,7 +2475,10 @@ static int bookmarks_save(void)
 	}
 	if (r == 0 && text != NULL)
 		r = pf_save(settings_path, text, (unsigned long) strlen(text));
-	free(text);
+	if (r == 0 && text != NULL)
+		own_set(text);
+	else
+		free(text);
 	if (r == 0)
 		bm_written = last;
 	return r;
@@ -2490,18 +2522,18 @@ static void find_home(void)
 			free(t);
 		}
 		free(old);
-		inf = inf_load(settings_path, NULL);
-		f = inf != NULL ? inf_get(inf, "FOLDER") : NULL;
+		own_reload();
+		f = own_inf != NULL ? inf_get(own_inf, "FOLDER") : NULL;
 		if (f == NULL || atari_casecmp(f, home_dir) != 0)
 			settings_put("FOLDER", home_dir, "where EHypView keeps its files (EHYPVIEW.IDX, the library; "
 				     "EHYPVIEW.FNT, the fonts measured): the program writes the folder it was started from");
-		if (inf == NULL || inf_get(inf, "START") == NULL)
+		if (own_inf == NULL || inf_get(own_inf, "START") == NULL)
 			settings_put("START", "opened", "when the accessory looks through the library: opened (when "
 				     "first opened or asked for a page), now (at boot), or seconds after boot");
-		inf_free(inf);
 		return;
 	}
-	inf = inf_load(settings_path, NULL);
+	own_reload();
+	inf = own_inf;
 	f = inf != NULL ? inf_get(inf, "START") : NULL;
 	if (f != NULL)
 		start_when = bg_parse(f);
@@ -2511,23 +2543,30 @@ static void find_home(void)
 		strcpy(home_dir, f);
 	else
 		strcpy(home_dir, settings_path), home_dir[3] = '\0';	/* X:\ */
-	inf_free(inf);
 }
 
-static inf_file *read_inf(void)
+/* ST-GUIDE.INF, read once a start (guidelines 6.5); not to be freed */
+static const inf_file *read_inf(void)
 {
+	static inf_file *stg;
+	static int read;
 	char path[32];
 
-	path[0] = (char) ('A' + boot_drive());
-	strcpy(path + 1, ":\\ST-GUIDE.INF");
-	return inf_load(path, NULL);
+	if (!read)
+	{
+		read = 1;
+		path[0] = (char) ('A' + boot_drive());
+		strcpy(path + 1, ":\\ST-GUIDE.INF");
+		stg = inf_load(path, NULL);
+	}
+	return stg;
 }
 
 /* the job starts: the folders to look in, EHypView's own (PATHS= in
    EHYPVIEW.INF) and ST-GUIDE.INF's */
 static void job_begin(void)
 {
-	inf_file *inf, *own;
+	const inf_file *inf;
 	char **roots;
 	unsigned int n;
 	char *p;
@@ -2535,9 +2574,7 @@ static void job_begin(void)
 	if (job != NULL || job_over)
 		return;
 	inf = read_inf();
-	own = inf_load(settings_path, NULL);
-	n = ehv_default_roots(inf, own != NULL ? inf_get(own, "PATHS") : NULL, &roots);
-	inf_free(own);
+	n = ehv_default_roots(inf, own_inf != NULL ? inf_get(own_inf, "PATHS") : NULL, &roots);
 	p = fs_join(home_dir, "EHYPVIEW.IDX");
 	if (p != NULL)
 	{
@@ -2546,7 +2583,6 @@ static void job_begin(void)
 	}
 	job = ehv_libjob_begin(cache_path, (const char *const *) roots, n, inf ? inf_get(inf, "REF") : NULL);
 	inf_free_list(roots, n);
-	inf_free(inf);
 	if (job == NULL)
 		job_over = 1;
 	aes_profile_tag("index");
@@ -2657,7 +2693,7 @@ static int needs_index(const char *args)
 		pf_info st;
 
 		r = !(fs_has_ext(f, ".hyp") && !(f[0] == '*' && f[1] == ':') && fs_has_dir(f) &&
-		      pf_stat(f, &st) == 0 && !st.is_dir);
+		      pf_look(f, &st) == 0 && !st.is_dir);
 	}
 	inf_free_list(argv, argc);
 	return r;
@@ -2718,6 +2754,30 @@ static const char *command_line(void)
 	return arg;
 }
 
+/* the program's buffer for writing the index in one go: TT RAM first
+   (the AERA guidelines, 6.5, common/atari/bigbuf.c) */
+static void *index_buffer(unsigned long want, unsigned long *got)
+{
+	long n = 0;
+	int tt;
+	void *p = big_alloc((long) want, &n, &tt);
+
+	*got = (unsigned long) n;
+	return p;
+}
+
+/* how the index file is read and written (index.h): a 68030 reads 32 KB
+   a step and writes the file in one go where memory allows, a 68000 16 KB
+   both (the AERA guidelines, 6.5) */
+static void index_pieces(void)
+{
+	int big = get_cookie(0x5F435055L) >= 20;      /* '_CPU' */
+
+	ehv_index_pieces(big ? 32768L : 16384L, big ? (is_acc ? 512L : 1024L) * 1024 : 16384L);
+	if (big && !is_acc)
+		ehv_index_buffers(index_buffer, big_free);
+}
+
 /* an accessory takes its memory once, at start-up (see libc.c) */
 static void acc_heap(void)
 {
@@ -2753,14 +2813,17 @@ static void acc_heap(void)
 		want = 2L * 1024 * 1024;
 	if (want < 96L * 1024)
 		want = avail / 2 < 96L * 1024 ? avail / 2 : 96L * 1024;
-	p = want > 0 ? Malloc(want) : NULL;
+	/* TT RAM first, where there is some (guidelines 6.5); TOS 1.x has no
+	   Mxalloc */
+	p = want <= 0 ? NULL : tt == -32 ? Malloc(want) : Mxalloc(want, 3);
 	if ((long) p > 0)
 		heap_add(p, (size_t) want);
 	{
-		/* for the tests: what it took, and what it left the programs */
-		char a[48], b[24];
+		/* for the tests: what it took, where, and what it left the programs */
+		char a[80], b[24];
 
-		sprintf(a, "pictures %ldK heap %ldK", st / 1024, (long) p > 0 ? want / 1024 : 0L);
+		sprintf(a, "pictures %ldK heap %ldK at %lx", st / 1024, (long) p > 0 ? want / 1024 : 0L,
+			(long) p > 0 ? (long) p : 0L);
 		sprintf(b, "free %ldK", (long) Malloc(-1L) / 1024);
 		log_event("acc-memory", a, b);
 	}
@@ -2804,7 +2867,7 @@ int main(void)
 {
 	short work_out[57], msg[8], d, screen_w, screen_h;
 	AEVENT ev;
-	inf_file *inf;
+	const inf_file *inf;
 	int fts_busy = 0;
 	unsigned long t0 = tos_hz200();       /* not tos_ms(): it measures the clock first */
 
@@ -2864,10 +2927,17 @@ int main(void)
 	   ST-GUIDE.ACC, standing in for ST-Guide */
 	av_init("EHYPVIEW|ST-GUIDE");
 
+	/* a file looked up once, and a hypertext opened once, for each
+	   event's work (the AERA guidelines, 6.5): forgotten before each
+	   event call */
+	pf_looks(1);
+	hyp_recent(1);
+	index_pieces();
 	find_home();
 	/* the accessory: nothing more before its first event call (the AERA
-	   guidelines, 2.2): no GDOS fonts, no index, until it is opened */
-	font_init(home_dir, settings_path, is_acc);
+	   guidelines, 2.2): no index until it is opened, GDOS fonts now or
+	   not at all */
+	font_init(home_dir, settings_path, own_text, &own_info, is_acc);
 	if (!is_acc)
 		log_font();
 	{
@@ -2926,7 +2996,6 @@ int main(void)
 		}
 		app_window_closed();
 	}
-	inf_free(inf);
 	crash_offer("EHypView", "next to EHYPVIEW.PRG");
 
 	{
@@ -2960,6 +3029,8 @@ int main(void)
 			t = 0;
 		if (pending || hover || fts_busy || index_news)
 			flags |= MU_TIMER;
+		pf_forget();
+		hyp_forget();
 		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, t, msg, &ev);
 		/* what holds the machine until the next event call, for the
 		   AESGAP lines of an -DAES_PROFILE build */

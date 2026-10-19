@@ -14,8 +14,11 @@
 #include <dirent.h>
 #include "plat.h"
 
+unsigned long pf_opens, pf_lookups;
+
 int pf_open(const char *path, int mode)
 {
+	pf_opens++;
 	if (mode == PF_WRITE)
 		return open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (mode == PF_APPEND)
@@ -43,17 +46,33 @@ void pf_close(int h)
 	close(h);
 }
 
+static void from_stat(const struct stat *st, pf_info *info)
+{
+	info->is_dir = S_ISDIR(st->st_mode) ? 1 : 0;
+	info->size = (unsigned long) st->st_size;
+	info->mtime = (unsigned long) st->st_mtime;
+	info->dev = (unsigned long) st->st_dev;
+	info->ino = (unsigned long) st->st_ino;
+}
+
 int pf_stat(const char *path, pf_info *info)
 {
 	struct stat st;
 
+	pf_lookups++;
 	if (stat(path, &st) != 0)
 		return -1;
-	info->is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
-	info->size = (unsigned long) st.st_size;
-	info->mtime = (unsigned long) st.st_mtime;
-	info->dev = (unsigned long) st.st_dev;
-	info->ino = (unsigned long) st.st_ino;
+	from_stat(&st, info);
+	return 0;
+}
+
+int pf_finfo(int h, pf_info *info)
+{
+	struct stat st;
+
+	if (fstat(h, &st) != 0 || lseek(h, 0, SEEK_SET) != 0)
+		return -1;
+	from_stat(&st, info);
 	return 0;
 }
 
@@ -69,12 +88,20 @@ int pf_rename(const char *from, const char *to)
 
 long pf_list_dir(const char *path, char ***names)
 {
+	return pf_list_dir_info(path, names, NULL);
+}
+
+long pf_list_dir_info(const char *path, char ***names, pf_info **infos)
+{
 	DIR *dir;
 	struct dirent *de;
 	char **list = NULL;
 	long n = 0, cap = 0;
 
 	*names = NULL;
+	if (infos != NULL)
+		*infos = NULL;
+	pf_lookups++;
 	dir = opendir(path);
 	if (dir == NULL)
 		return -1;
@@ -98,6 +125,26 @@ long pf_list_dir(const char *path, char ***names)
 	}
 	closedir(dir);
 	*names = list;
+	if (infos != NULL && n > 0)
+	{
+		/* as an Atari's listing gives them (the stat()s aren't counted:
+		   the listing has them there) */
+		long i;
+
+		*infos = calloc((size_t) n, sizeof(pf_info));
+		for (i = 0; *infos != NULL && i < n; i++)
+		{
+			char *full = malloc(strlen(path) + strlen(list[i]) + 2);
+			struct stat st;
+
+			if (full == NULL)
+				break;
+			sprintf(full, "%s/%s", path, list[i]);
+			if (stat(full, &st) == 0)
+				from_stat(&st, &(*infos)[i]);
+			free(full);
+		}
+	}
 	return n;
 }
 

@@ -7,6 +7,7 @@
 #ifndef EHV_GEMAPP_H
 #define EHV_GEMAPP_H
 
+#include "plat.h"
 #include "index.h"
 #include "bookmark.h"
 
@@ -67,8 +68,9 @@ void app_bookmark_remove(int i);         /* Delete in the library, the menu */
 int settings_put(const char *key, const char *value, const char *note);
 
 /* fontsel.c: the text font */
-void font_init(const char *dir, const char *inf, int is_acc);	/* the font from inf; EHYPVIEW.FNT in dir;
-							   the accessory: GDOS fonts now or not at all */
+/* the font from inf (its text and date, read once); EHYPVIEW.FNT in dir;
+   the accessory: GDOS fonts now or not at all */
+void font_init(const char *dir, const char *inf, const char *text, const pf_info *info, int is_acc);
 void font_check(void);                    /* the accessory: inf changed meanwhile? the font again */
 void font_exit(void);
 void font_dialog(void);                   /* View > Font... */

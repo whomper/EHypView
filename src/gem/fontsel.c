@@ -56,11 +56,16 @@ static char inf_path[200], fnt_path[200];
 static unsigned long inf_seen;		/* EHYPVIEW.INF as we last read or wrote it */
 static int acc, may_load = 1;		/* the accessory: GDOS fonts at start-up only */
 
+static unsigned long stamp_of(const pf_info *st)
+{
+	return st->mtime ^ (st->size << 16) ^ st->size;
+}
+
 static unsigned long stamp(const char *path)
 {
 	pf_info st;
 
-	return pf_stat(path, &st) == 0 ? st.mtime ^ (st.size << 16) ^ st.size : 0;
+	return pf_stat(path, &st) == 0 ? stamp_of(&st) : 0;
 }
 
 static void busy(int on)
@@ -396,16 +401,12 @@ static void join(char *out, size_t size, const char *dir, const char *name)
 
 /* the accessory: before its first event call, so GDOS fonts load now
    or not at all (guidelines 2.2) */
-void font_init(const char *dir, const char *inf, int is_acc)
+void font_init(const char *dir, const char *inf, const char *text, const pf_info *info, int is_acc)
 {
-	char *text;
-
 	snprintf(inf_path, sizeof(inf_path), "%s", inf);
 	join(fnt_path, sizeof(fnt_path), dir, "EHYPVIEW.FNT");
-	text = pf_load(inf_path, NULL);
-	inf_seen = stamp(inf_path);
+	inf_seen = text != NULL ? stamp_of(info) : 0;
 	fontpref_parse(&pref, text);
-	free(text);
 	acc = is_acc;
 	if (acc && !fontpref_is_system(&pref))
 		list_names();                  /* vst_load_fonts */
@@ -418,12 +419,13 @@ void font_init(const char *dir, const char *inf, int is_acc)
 void font_check(void)
 {
 	char *text;
+	pf_info info;
 	font_pref was = pref;
 
 	if (stamp(inf_path) == inf_seen)
 		return;
-	text = pf_load(inf_path, NULL);
-	inf_seen = stamp(inf_path);
+	text = pf_load_info(inf_path, NULL, &info);
+	inf_seen = text != NULL ? stamp_of(&info) : 0;
 	fontpref_parse(&pref, text);
 	free(text);
 	if (strcmp(was.name, pref.name) != 0 || was.point != pref.point)

@@ -87,7 +87,7 @@ static int is_file(const char *path)
 {
 	pf_info info;
 
-	return pf_stat(path, &info) == 0 && !info.is_dir;
+	return pf_look(path, &info) == 0 && !info.is_dir;
 }
 
 /* look for name (no folder) next to the open hypertext */
@@ -183,7 +183,8 @@ static int use_sym(const ehv_index *idx, unsigned long i, ehv_target *t)
 /* look the page up in a file that is not in the index */
 static int node_from_disk(const char *path, const char *node, ehv_target *t)
 {
-	hyp_doc *doc = hyp_open(path, NULL);
+	/* held: the viewer shows the page with this same open (hyp_keep) */
+	hyp_doc *doc = hyp_open_held(path, NULL);
 	int rc = EHV_NO_NODE;
 
 	if (doc == NULL)
@@ -197,7 +198,7 @@ static int node_from_disk(const char *path, const char *node, ehv_target *t)
 		if (n != HYP_NO_NODE)
 			rc = set_str(&t->node, doc->entries[n].name) < 0 ? EHV_ERR_MEMORY : EHV_FOUND;
 	}
-	hyp_close(doc);
+	hyp_keep(doc);
 	if (rc != EHV_NO_NODE)
 		return rc;
 

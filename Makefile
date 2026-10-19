@@ -224,7 +224,8 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/settings.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
-           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/colour.o
+           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/colour.o \
+           $(ATARI)/bigbuf.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
 # and the build never writes it. Every build shows it as it is in the
@@ -330,6 +331,13 @@ quiet-test: atari
 colour-test: atari $(HATARI_DIR)/ASKHELP.PRG
 	python3 tests/run_colour.py $(HATARI_DIR) build/colour
 
+# the accessory's disk use, job by job, against its budget (the AERA
+# guidelines, 6.5): Hatari's GEMDOS trace, on the family's Falcon:16
+# (ACC_FILES_MACHINE=ST-1 for the smallest ST, ACC_FILES_BIG=1 for a
+# 60-guide library too)
+acc-files-test: atari $(HATARI_DIR)/ASKHELP.PRG
+	python3 tests/hatari/acc_files.py $(HATARI_DIR) build/accfiles $(or $(ACC_FILES_MACHINE),Falcon:16)
+
 # run EHVCHECK.PRG in Hatari (the family's Falcon:16, then ST:mono;
 # common/tools/machines.py) and compare with the host
 hatari-test: atari $(HOST)/ehvcheck
@@ -354,4 +362,4 @@ dist: atari help
 clean:
 	rm -rf build binary dist
 
-.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test colour-test clean FORCE
+.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test colour-test acc-files-test clean FORCE

@@ -152,10 +152,21 @@ int ehv_index_save(const ehv_index *idx, const char *path);
 ehv_index *ehv_index_load(const char *path);
 
 /*
- * Both in steps (a unit of budget: 16 KB of the file, or a few lines,
+ * Both in steps (a unit of budget: a piece of the file, or a few lines,
  * guides or table lines): 1 = done, 0 = more, -1 = failed.  The index
  * saved must stay as it is until the saver is done or aborted.
+ *
+ * The file is read a piece per step, each in one open, and written from
+ * a buffer when it is full and at the end (the AERA guidelines, 6.5):
+ * ehv_index_pieces() sets the sizes, 32 KB each by default (16 KB for a
+ * 68000; the buffer as big as the whole file where memory allows, for
+ * one write).  The buffer is taken at ehv_index_save_begin(), no
+ * bigger than the file will be, halved until it can be; through
+ * ehv_index_buffers()' alloc when one is given (the program: TT RAM
+ * first, common/atari/bigbuf.c), else malloc().
  */
+void ehv_index_pieces(unsigned long read_piece, unsigned long write_buffer);
+void ehv_index_buffers(void *(*alloc)(unsigned long want, unsigned long *got), void (*release)(void *p));
 typedef struct ehv_saver ehv_saver;
 ehv_saver *ehv_index_save_begin(const ehv_index *idx, const char *path);
 int ehv_index_save_some(ehv_saver *v, unsigned int budget);
