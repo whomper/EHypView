@@ -165,6 +165,22 @@ def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=()):
     return subprocess.Popen(args, env=env, stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
 
 
+def start_xvfb():
+    """the X display, once it answers: Hatari started before it is up
+    can't open its window and prints nothing (a CI run's mouse step 0)"""
+    xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    env = dict(os.environ, DISPLAY=DISPLAY)
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        if subprocess.run(["xdotool", "getdisplaygeometry"], env=env, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0:
+            return xvfb
+        time.sleep(0.2)
+    print("      Xvfb on %s did not answer in 20 s" % DISPLAY)
+    return xvfb
+
+
 class Mouse:
     """xdotool on the Xvfb display, in Atari screen coordinates"""
 
@@ -277,6 +293,16 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
         with open(log_path, errors="replace") as f:
             return [l.strip()[4:] for l in f if l.startswith("EHV ")]
 
+    def why():
+        """no event at all: what Hatari said, and whether it still runs"""
+        if events():
+            return
+        code = hatari.poll()
+        print("      Hatari %s; its output:" % ("still runs" if code is None else "ended, code %d" % code))
+        with open(log_path, errors="replace") as f:
+            for l in f.read().splitlines()[-15:]:
+                print("        " + l)
+
     def wait_for(expected, timeout=30):
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -360,9 +386,11 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
                         ok = False
                         break
                     continue
-                if not wait_for(e):
+                # the first event waits for the boot too
+                if not wait_for(e, 90 if not seen else 30):
                     print("FAIL  %s step %d: no '%s'" % (name, n, e))
                     print("      events so far: %s" % events())
+                    why()
                     ok = False
                     break
             send("hatari-debug screenshot %s" % os.path.abspath(
@@ -625,9 +653,7 @@ def main():
     if ok:
         if have_display():
             d = copy_dir("mouse", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
-            xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            time.sleep(1)
+            xvfb = start_xvfb()
             try:
                 ok = run_scenario("mouse", d, MOUSE_STEPS, windowed=True)
             finally:
@@ -642,9 +668,7 @@ def main():
             os.makedirs(os.path.join(d, "GUIDES"))
             shutil.copy(GUIDE, os.path.join(d, "GUIDES"))
             shutil.copy(GUIDE[:-4] + ".REF", os.path.join(d, "GUIDES"))
-            xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            time.sleep(1)
+            xvfb = start_xvfb()
             try:
                 ok = run_scenario("guide", d, GUIDE_STEPS, windowed=True)
             finally:
@@ -656,9 +680,7 @@ def main():
     if ok:
         if have_display():
             d = twin_dir()
-            xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            time.sleep(1)
+            xvfb = start_xvfb()
             try:
                 ok = run_scenario("twin", d, TWIN_STEPS, auto=TWIN_AUTO, windowed=True)
             finally:
@@ -673,9 +695,7 @@ def main():
     if ok:
         if have_display():
             d = acc_fastram_dir()
-            xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
-                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            time.sleep(1)
+            xvfb = start_xvfb()
             try:
                 ok = run_scenario("accfast", d, ACC_FASTRAM_STEPS, auto=None, windowed=True, extra=FASTRAM)
             finally:
