@@ -414,12 +414,13 @@ typedef struct {
 
 static int cmp_named(const void *a, const void *b)
 {
-	return cmp_names(&((const named *) a)->name, &((const named *) b)->name);
+	return cmp_names(&(*(const named *const *) a)->name, &(*(const named *const *) b)->name);
 }
 
+/* sorted as pointers: the C library's qsort is quick with those */
 static int sort_listing(char **names, pf_info *infos, long n)
 {
-	named *t;
+	named *t, **p;
 	long i;
 
 	if (infos == NULL)
@@ -427,19 +428,27 @@ static int sort_listing(char **names, pf_info *infos, long n)
 		qsort(names, (size_t) n, sizeof(char *), cmp_names);
 		return 0;
 	}
-	if ((t = malloc((size_t) n * sizeof(named))) == NULL)
+	t = malloc((size_t) n * sizeof(named));
+	p = malloc((size_t) n * sizeof(named *));
+	if (t == NULL || p == NULL)
+	{
+		free(t);
+		free(p);
 		return -1;
+	}
 	for (i = 0; i < n; i++)
 	{
 		t[i].name = names[i];
 		t[i].info = infos[i];
+		p[i] = &t[i];
 	}
-	qsort(t, (size_t) n, sizeof(named), cmp_named);
+	qsort(p, (size_t) n, sizeof(named *), cmp_named);
 	for (i = 0; i < n; i++)
 	{
-		names[i] = t[i].name;
-		infos[i] = t[i].info;
+		names[i] = p[i]->name;
+		infos[i] = p[i]->info;
 	}
+	free(p);
 	free(t);
 	return 0;
 }
