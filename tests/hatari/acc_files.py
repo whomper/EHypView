@@ -350,7 +350,12 @@ def main():
         each("6a. 60 guides, first index", calls, across, events, seen,
              "first event call to 'index saved': " + took(seen, "started", "index saved"))
         size = os.path.getsize(os.path.join(C, "EHYPVIEW.IDX"))
-        check(opens(calls) <= 3 + 120 + 1 + size // (512 * 1024), "6a: %d opens (one per file)" % opens(calls))
+        # the ID$ in one write when the accessory's heap (2 MB at most) has a
+        # piece for it; else a write per piece of at least 256 KB, each an open
+        writes = count(calls, "Fwrite")
+        check(writes <= 1 + size // (256 * 1024), "6a: the %d KB index in %d writes" % (size // 1024, writes))
+        check(opens(calls) <= 3 + 120 + writes, "6a: %d opens (budget %d: one per file and write)"
+              % (opens(calls), 3 + 120 + writes))
         tr, seen = boot("s6b", ["index unchanged"])
         calls, across, events = parse(tr)
         each("6b. 60 guides, index up to date", calls, across, events, seen,
