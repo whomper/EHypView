@@ -312,8 +312,13 @@ HYPCHECK = grep -q "EHYPVIEW.HYP $$(cat VERSION)" binary/EHYPVIEW.HYP || \
 	  { echo "binary/EHYPVIEW.HYP isn't version $$(cat VERSION): make help"; exit 1; }
 
 # drive EHYPVIEW.PRG in Hatari with the keyboard (screenshots in build/gui)
-gui-test: atari
+gui-test: atari $(HATARI_DIR)/ASKHELP.PRG
 	python3 tests/run_gui.py $(HATARI_DIR) build/gui
+
+# the accessory with a GDOS font under Erez's NVDI, alone (AERA_WITH_NVDI=1;
+# skipped without it): tests/run_gui.py's accnvdi
+accnvdi-test: atari $(HATARI_DIR)/ASKHELP.PRG
+	python3 tests/run_gui.py $(HATARI_DIR) build/gui accnvdi
 
 # the accessory's quiet start (the AERA guidelines, 2.2), measured: a build
 # with -DAES_PROFILE=40 (common/atari/gem.c reports every stretch of 40 ms
@@ -362,4 +367,4 @@ dist: atari help
 clean:
 	rm -rf build binary dist
 
-.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test colour-test acc-files-test clean FORCE
+.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test colour-test acc-files-test accnvdi-test clean FORCE

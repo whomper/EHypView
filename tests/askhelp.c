@@ -7,8 +7,9 @@
  * the page must come at once, before the accessory has read its index
  * (a full path needs none).  It says on the emulator's console (NatFeats)
  * when it asked.  tests/run_colour.py puts another request in
- * C:\ASKHELP.TXT (a line: path and page), for the accessory in modes the
- * program won't run in.
+ * C:\ASKHELP.TXT (a line: path and page, and maybe a second: the seconds
+ * to wait before ending, ten minutes if none), for the accessory in modes
+ * the program won't run in.
  */
 #include <string.h>
 #include "tos.h"
@@ -22,6 +23,7 @@ int main(void)
 {
 	short msg[8], id, me = appl_init();
 	long fh = Fopen("C:\\ASKHELP.TXT", 0);
+	int wait = 600;                     /* seconds after asking */
 
 	if (fh >= 0)
 	{
@@ -29,9 +31,23 @@ int main(void)
 		int i;
 
 		request[n > 0 ? n : 0] = '\0';
-		for (i = 0; request[i] != '\0'; i++)
-			if (request[i] == '\r' || request[i] == '\n')
-				request[i] = '\0';
+		for (i = 0; request[i] != '\0' && request[i] != '\r' && request[i] != '\n'; i++)
+			;
+		if (request[i] != '\0')
+		{
+			/* a second line: the seconds to wait (tests/run_gui.py's accnvdi:
+			   end soon, the program in front gone) */
+			char *p = &request[i];
+			int w = 0, any = 0;
+
+			while (*p == '\r' || *p == '\n')
+				p++;
+			for (; *p >= '0' && *p <= '9'; p++, any = 1)
+				w = w * 10 + (*p - '0');
+			if (any)
+				wait = w;
+			request[i] = '\0';
+		}
 		Fclose((short) fh);
 	}
 	evnt_timer_(1000);
@@ -50,13 +66,15 @@ int main(void)
 		nf_debug("ASK sent\n");
 	}
 	/* the request stays readable, and the accessory's window open (TOS
-	   closes it when the program in front ends): ten minutes */
+	   closes it when the program in front ends): ten minutes, unless
+	   ASKHELP.TXT says otherwise */
 	{
 		int i;
 
-		for (i = 0; i < 20; i++)
-			evnt_timer_(30000);
+		for (i = 0; i < wait; i++)
+			evnt_timer_(1000);
 	}
+	nf_debug("ASK done\n");
 	appl_exit();
 	return 0;
 }
