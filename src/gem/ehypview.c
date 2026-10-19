@@ -2252,6 +2252,7 @@ static void viewer_message(short *msg)
 		if (msg[4] == menu_id && screen_check("EHypView", ehv_ui_scr_w))	/* not in ST low */
 		{
 			aes_profile_tag("opening");
+			log_event("acc", "opened", NULL);
 			av_init("EHYPVIEW|ST-GUIDE");	/* a desktop started since */
 			wake();
 			font_check();
@@ -2271,6 +2272,7 @@ static void viewer_message(short *msg)
 			   its page, for the next opening; the others go */
 			int i;
 
+			log_event("acc", "closed by the AES", NULL);
 			pick_current();
 			for (i = 0; i < MAX_VIEWERS; i++)
 			{

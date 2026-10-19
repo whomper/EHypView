@@ -437,7 +437,7 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
     # a step may be a function of the rig instead of keys: it presses and
     # waits as it goes, and says False when it failed
     rig = types.SimpleNamespace(press=press, send=send, events=events, seen=seen,
-                                wait_for=wait_for, wait_any=wait_any, name=name)
+                                wait_for=wait_for, wait_any=wait_any, name=name, log=log_path)
 
     ok = True
     try:
@@ -722,10 +722,25 @@ def pick_gdos_font(rig):
 
 
 def reopen(rig):
-    """the accessory again from the desktop's Desk menu: its viewer or library"""
+    """the accessory again from the desktop's Desk menu: its viewer or
+    library, opened or (still open: EmuTOS keeps an accessory's windows
+    when the program in front ends, TOS 4 closes them) to the front"""
     for k in DESK_ACC:
         rig.press(k)
-    return rig.wait_any(["page *", "library *"]) >= 0
+    return rig.wait_for("acc opened")
+
+
+def ask_done(rig):
+    """ASKHELP.PRG ended (after the seconds in ASKHELP.TXT): the desktop's
+    menu bar, and its Desk menu, are back"""
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        with open(rig.log, errors="replace") as f:
+            if any(l.startswith("ASK done") for l in f):
+                return True
+        time.sleep(0.5)
+    print("      %s: ASKHELP.PRG did not end" % rig.name)
+    return False
 
 
 def font_at_boot(rig):
@@ -745,9 +760,8 @@ ACC_NVDI_BOOT1 = [
 ]
 ACC_NVDI_BOOT2 = [
     (font_at_boot, []),
-    ([], ["page %s Main" % BASIC]),                         # asked by ASKHELP.PRG, which then ends
-    ([("wait", 4)], []),
-    ([("ctrl", W)], ["closed *"]),
+    ([], ["page %s Main" % BASIC]),                         # asked by ASKHELP.PRG
+    (ask_done, []),                                         # which ends: TOS closes the window
     (reopen, []),
     ([("ctrl", W)], ["closed *"]),
     (reopen, []),
@@ -766,9 +780,14 @@ def acc_nvdi_dir():
     shutil.copy(os.path.join(HDIR, "EHYPVIEW.ACC"), d)
     shutil.copy(os.path.join(HDIR, "ASKHELP.PRG"), d)
     with open(os.path.join(d, "ASKHELP.TXT"), "w") as f:
-        f.write(BASIC + " Main\r\n")
+        f.write(BASIC + " Main\r\n5\r\n")               # and ends 5 s after asking
     with open(os.path.join(d, "ST-GUIDE.INF"), "w") as f:
         f.write("PATHS=C:\\FIXT\r\nREF=C:\\FIXT\\ALL.REF\r\n")
+    # EHypView's folder from the start, so the accessory (booted before the
+    # program writes it) finds the program's EHYPVIEW.FNT under 1.13's rule
+    with open(os.path.join(d, "EHYPVIEW.INF"), "w") as f:
+        f.write("; where EHypView keeps its files (EHYPVIEW.IDX, the library; EHYPVIEW.FNT, the fonts "
+                "measured): the program writes the folder it was started from\r\nFOLDER=C:\\EHV\r\n")
     return d
 
 
