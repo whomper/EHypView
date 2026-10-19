@@ -17,11 +17,13 @@
  * FONT_CHANGED) is taken too.  The choice is kept in EHYPVIEW.INF.
  *
  * The accessory loads GDOS fonts only at start-up, before its first
- * event call, and only when EHYPVIEW.INF names one (guidelines 2.2):
- * loaded later, their memory would belong to the program in front and
- * go when it ends.  Without them, its selector lists the fonts
- * EHYPVIEW.FNT knows as "not loaded"; one chosen is taken at the next
- * boot.
+ * event call (guidelines 2.2): loaded later, their memory would belong
+ * to the program in front and go when it ends.  Under NVDI it always
+ * loads them, so its selector lists the program's fonts and a font
+ * chosen is used at once.  Under FONTGDOS or SpeedoGDOS only when
+ * EHYPVIEW.INF names one, to spare a 1 MB ST their memory; without
+ * them, its selector lists the fonts EHYPVIEW.FNT knows as "not
+ * loaded", and one chosen is taken at the next boot.
  *
  * Adapted from ECal's ui/font.c (github.com/whomper/ECal).
  * Copyright (C) the EHypView and ECal authors.  Free software under the
@@ -31,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "tos.h"
 #include "gem.h"
 #include "plat.h"
 #include "fontpref.h"
@@ -400,7 +403,8 @@ static void join(char *out, size_t size, const char *dir, const char *name)
 }
 
 /* the accessory: before its first event call, so GDOS fonts load now
-   or not at all (guidelines 2.2) */
+   or not at all (guidelines 2.2): always under NVDI, else only when
+   EHYPVIEW.INF names one */
 void font_init(const char *dir, const char *inf, const char *text, const pf_info *info, int is_acc)
 {
 	snprintf(inf_path, sizeof(inf_path), "%s", inf);
@@ -408,7 +412,7 @@ void font_init(const char *dir, const char *inf, const char *text, const pf_info
 	inf_seen = text != NULL ? stamp_of(info) : 0;
 	fontpref_parse(&pref, text);
 	acc = is_acc;
-	if (acc && !fontpref_is_system(&pref))
+	if (acc && (get_cookie(0x4E564449L) != 0 || !fontpref_is_system(&pref)))	/* NVDI */
 		list_names();                  /* vst_load_fonts */
 	may_load = !acc;
 	apply();

@@ -190,10 +190,12 @@ fonts are shown but can't be picked. ^+ and ^- change the size. A font dropped o
 selector (the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and the list of which
 fonts are monospaced in `EHYPVIEW.FNT`.
 
-The accessory loads GDOS fonts only when the Atari starts, and only when `EHYPVIEW.INF` names one, as
-every AERA accessory does: GDOS fonts loaded later would be lost when the program in front ends. So a
+The accessory loads GDOS fonts only when the Atari starts, as every AERA accessory does: GDOS fonts
+loaded later would be lost when the program in front ends. Under NVDI it always loads them, so its
+font selector lists the same fonts as the program and a font chosen is used at once. Under FONTGDOS or
+SpeedoGDOS it loads them only when `EHYPVIEW.INF` names one, to spare a 1 MB ST their memory: there a
 GDOS font chosen in the accessory, or in the program while the accessory is loaded, is used by the
-accessory from the next boot; its font selector lists the ones it hasn't loaded as such.
+accessory from the next boot, and its font selector lists the ones it hasn't loaded as such.
 
 ### Settings
 
