@@ -102,9 +102,11 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   EMail's, ECal's and EContact's.
 - The font selector (src/gem/fontsel.c) is ECal's and EMail's; keep them
   alike. The accessory calls `vst_load_fonts` only in `font_init()`, before
-  its first event call, and only when `FONT=` names a GDOS font; after
-  that it lists EHYPVIEW.FNT's fonts as not loaded, taken at the next boot
-  (guidelines 2.2).
+  its first event call: always under NVDI (the `NVDI` cookie), so its
+  selector lists the program's fonts; under FONTGDOS or SpeedoGDOS only
+  when `FONT=` names a GDOS font, and then it lists EHYPVIEW.FNT's fonts as
+  not loaded, taken at the next boot (guidelines 2.2). Hatari has no GDOS:
+  say so when a change touches it.
 - Control shortcuts test `key_ctrl(kstate, key)` (common/atari/gem.h),
   never `kstate & K_CTRL` alone: a ^key typed while EHypView is busy
   arrives with kstate 0 (guidelines 3.2).

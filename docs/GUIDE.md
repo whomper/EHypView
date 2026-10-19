@@ -127,10 +127,12 @@ picked. ^+ and ^- make the text larger and smaller. A font dropped on a window f
 (the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and which fonts are
 monospaced in `EHYPVIEW.FNT`.
 
-The accessory loads GDOS fonts only when the Atari starts, and only when `EHYPVIEW.INF` names one:
-GDOS fonts loaded later would be lost when the program in front ends. So a GDOS font chosen in the
-accessory, or in the program while the accessory is loaded, is the accessory's from the next boot.
-Its font selector says which fonts it hasn't loaded.
+The accessory loads GDOS fonts only when the Atari starts: GDOS fonts loaded later would be lost
+when the program in front ends. Under NVDI it always loads them, so its font selector lists the same
+fonts as the program, and a font chosen is used at once. Under FONTGDOS or SpeedoGDOS it loads them
+only when `EHYPVIEW.INF` names one, to spare a 1 MB ST their memory: there a GDOS font chosen in the
+accessory, or in the program while the accessory is loaded, is the accessory's from the next boot,
+and its font selector says which fonts it hasn't loaded.
 
 ## Settings
 
