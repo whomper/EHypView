@@ -1070,8 +1070,9 @@ ehv_saver *ehv_index_save_begin(const ehv_index *idx, const char *path)
 			if (v->o.data != NULL && buf_release != NULL)
 				buf_release(v->o.data);
 			v->o.data = NULL;
+			/* down by eighths: the biggest piece left in an accessory's heap */
 			while ((v->o.data = malloc(cap)) == NULL && cap > 2 * MARGIN)
-				cap /= 2;
+				cap -= cap / 8;
 		}
 		if (v->o.data == NULL)
 		{

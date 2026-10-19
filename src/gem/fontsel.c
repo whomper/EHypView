@@ -419,12 +419,13 @@ void font_init(const char *dir, const char *inf, const char *text, const pf_info
 void font_check(void)
 {
 	char *text;
+	pf_info info;
 	font_pref was = pref;
 
 	if (stamp(inf_path) == inf_seen)
 		return;
-	text = pf_load(inf_path, NULL);
-	inf_seen = stamp(inf_path);
+	text = pf_load_info(inf_path, NULL, &info);
+	inf_seen = text != NULL ? stamp_of(&info) : 0;
 	fontpref_parse(&pref, text);
 	free(text);
 	if (strcmp(was.name, pref.name) != 0 || was.point != pref.point)

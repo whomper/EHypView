@@ -16,6 +16,9 @@
 #include "../src/core/plat.h"
 
 #define EINVFN    -32
+
+/* Fxattr and Dopendir: not in TOS or EmuTOS; asked once, then not again */
+static int no_fxattr, no_dopendir;
 #define EFILNF    -33
 #define ENMFILES  -49
 
@@ -133,7 +136,9 @@ int pf_stat(const char *path, pf_info *info)
 		return 0;
 	}
 
-	r = Fxattr(0, p, &x);
+	r = no_fxattr ? EINVFN : Fxattr(0, p, &x);
+	if (r == EINVFN)
+		no_fxattr = 1;
 	if (r == 0)
 	{
 		info->is_dir = (x.mode & 0xF000) == 0x4000;
@@ -225,7 +230,9 @@ long pf_list_dir_info(const char *path, char ***names, pf_info **infos)
 		return -1;
 
 	/* MiNT and MagiC: real (long) names */
-	h = Dopendir(p, 0);
+	h = no_dopendir ? EINVFN : Dopendir(p, 0);
+	if (h == EINVFN)
+		no_dopendir = 1;
 	if (h < 0 && h > -1000 && h != EINVFN)
 		return -1;              /* the folder does not exist */
 	if (h != EINVFN)

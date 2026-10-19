@@ -211,7 +211,7 @@ def summary(name, calls, seen, note=None):
     if note:
         say("   " + note)
     fns = ["Fopen", "Fcreate", "Fclose", "Fsfirst", "Fsnext", "Fdelete", "Frename", "Fseek", "Fread",
-           "Fwrite", "Fxattr", "Dopendir", "Mxalloc", "Malloc"]
+           "Fwrite", "Fxattr", "Dopendir", "Dclosedir", "Mxalloc", "Malloc"]
     parts = []
     for fn in fns:
         cs = [c for c in calls if c["fn"] == fn]
@@ -239,7 +239,14 @@ def opens(calls):
 
 
 def looks(calls):
-    return count(calls, "Fsfirst", "Dopendir")
+    """Fsfirst, and a folder read with Dopendir (MiNT, MagiC: closed with
+    Dclosedir); TOS refuses Dopendir and Fxattr (EINVFN) without a look"""
+    return count(calls, "Fsfirst", "Dclosedir")
+
+
+def probes(name, calls):
+    check(count(calls, "Fxattr") <= 1 and count(calls, "Dopendir") <= 1 + count(calls, "Dclosedir"),
+          "%s: Fxattr and Dopendir asked once (%d, %d)" % (name, count(calls, "Fxattr"), count(calls, "Dopendir")))
 
 
 def took(seen, a, b):
@@ -266,6 +273,7 @@ def main():
     def each(name, calls, across, events, seen, note=None):
         results.append(summary(name, calls, seen, note))
         check(across == 0, "%s: no file open across an event call (%d event calls)" % (name.split(".")[0], events))
+        probes(name.split(".")[0], calls)
 
     # 0. the defaults: nothing but the settings until it is opened
     inf("opened")
