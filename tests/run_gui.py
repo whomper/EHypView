@@ -164,8 +164,7 @@ def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=()):
         env.pop("SDL_VIDEODRIVER")
     # in a window, one screen pixel is one window pixel for the mouse;
     # fast-forward would outrun the mouse moves
-    # (--fast-boot: TOS 4.04 counting 4 MB at 16 MHz, then NVDI, outlasted the boot wait)
-    args += ["-w", "--borders", "no", "--zoom", "1", "--fast-boot", "yes"] if windowed else ["--fast-forward", "yes"]
+    args += ["-w", "--borders", "no", "--zoom", "1"] if windowed else ["--fast-forward", "yes"]
     if auto:
         args += ["--auto", auto]
     return subprocess.Popen(args, env=env, stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
