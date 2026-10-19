@@ -312,7 +312,7 @@ HYPCHECK = grep -q "EHYPVIEW.HYP $$(cat VERSION)" binary/EHYPVIEW.HYP || \
 	  { echo "binary/EHYPVIEW.HYP isn't version $$(cat VERSION): make help"; exit 1; }
 
 # drive EHYPVIEW.PRG in Hatari with the keyboard (screenshots in build/gui)
-gui-test: atari
+gui-test: atari $(HATARI_DIR)/ASKHELP.PRG
 	python3 tests/run_gui.py $(HATARI_DIR) build/gui
 
 # the accessory's quiet start (the AERA guidelines, 2.2), measured: a build
