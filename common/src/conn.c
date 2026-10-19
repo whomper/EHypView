@@ -40,9 +40,11 @@ static void note_host(char list[8][64], int *next, const char *host)
 }
 
 static int log_hold;
+/* a step of a handshake; or a time after it, written with the next
+   milestone (" .. "): written out at once, it would add the disk's time */
 static void log_tls_step(const char *msg)
 {
-	conn_log("TLS", " -- ", msg, strlen(msg));
+	conn_log("TLS", log_hold ? " -- " : " .. ", msg, strlen(msg));
 }
 
 /* TLS on the open socket of c; host names the server for its
@@ -125,7 +127,17 @@ void (*conn_tick)(void);
    write it out at once, so a crash loses little; but not those of a TLS
    handshake (start_tls) */
 static char logbuf[4096];
-static int loglen;
+static int loglen, job_hold;
+
+/* a job's milestones (" -- ") stay in the buffer too until it ends (the
+   guidelines, 6.5: a sync that wrote each one opened the log 30 times);
+   errors (" !! ") are still written out at once */
+void conn_log_hold(int on)
+{
+	job_hold = on;
+	if (!on)
+		conn_log_flush();
+}
 
 void conn_log_flush(void)
 {
@@ -201,7 +213,7 @@ void conn_log(const char *who, const char *dir, const char *text, long n)
 		log_add(text, n);
 	}
 	log_add("\r\n", 2);
-	if (dir[1] == '!' || (dir[1] == '-' && !log_hold))
+	if (dir[1] == '!' || (dir[1] == '-' && !log_hold && !job_hold))
 		conn_log_flush();
 }
 
