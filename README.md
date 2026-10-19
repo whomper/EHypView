@@ -81,6 +81,11 @@ or MiNT (MultiTOS, XaAES, N.AES); a screen 640 pixels wide or more (in ST low an
 pixels wide, the accessory still shows the pages other programs ask for, but doesn't open from the
 Desk menu). NVDI, SpeedoGDOS or another GDOS is optional, for more fonts.
 
+**Under TOS, put Atari's `FOLDR100.PRG` first in `AUTO`**, renamed for more room (`FOLDR400.PRG`).
+TOS keeps an entry in a small internal pool for every folder a program or accessory has looked
+into, and halts with "OUT OF INTERNAL MEMORY" when it runs out; FOLDRxxx makes the pool bigger.
+EHypView looks into every folder of its library, with their subfolders, when it makes its index.
+
 ## Using the viewer
 
 Click a link, or move to it with Tab and press Return. Links lead into any hypertext in the index, and

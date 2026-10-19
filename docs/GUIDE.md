@@ -38,6 +38,11 @@ again.
 **Needs:** any ST, STE, TT or Falcon with 1 MB or more; TOS, EmuTOS, MagiC or MiNT; a screen 640
 pixels wide or more (on a narrower one the accessory still shows the pages other programs ask for). NVDI, SpeedoGDOS or another GDOS is optional, for more fonts.
 
+**Under TOS, put Atari's FOLDR100.PRG first in AUTO**, renamed for more room (FOLDR400.PRG).
+TOS keeps an entry in a small internal pool for every folder a program or accessory has looked
+into, and halts with "OUT OF INTERNAL MEMORY" when it runs out; FOLDRxxx makes the pool bigger.
+EHypView looks into every folder of its library, with their subfolders, when it makes its index.
+
 ## The viewer
 
 The viewer window shows one page of a hypertext. Its title is the hypertext's and the page's, and
