@@ -388,8 +388,8 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   side. The mouse run (Xvfb and xdotool; skipped without them) clicks links, the right button, the
   menus, the About box and Settings: its START= popup, its Library page's folders, the alert for one
   that isn't there, and the library looked through again; `EHYPVIEW.INF` must then hold them. The
-  viewer reports what it does through NatFeats, and each step waits for it. With Erez's NVDI
-  (`AERA_WITH_NVDI=1`, `common/tools/machines.py`; skipped without it) the accessory picks a GDOS font in
+  viewer reports what it does through NatFeats, and each step waits for it. `make accnvdi-test`, with Erez's NVDI
+  (`AERA_WITH_NVDI=1`, `common/tools/machines.py`; skipped without it): the accessory picks a GDOS font in
   its own selector, by keyboard, is closed and opened again, and draws a page another program asked for
   after that program ended (screenshots `accnvdi1-NN.png`, `accnvdi2-NN.png`).
 - **`make quiet-test`** boots the Falcon (`Falcon:16`) with the accessory, built with `-DAES_PROFILE`, and a
