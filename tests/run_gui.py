@@ -164,7 +164,8 @@ def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=()):
         env.pop("SDL_VIDEODRIVER")
     # in a window, one screen pixel is one window pixel for the mouse;
     # fast-forward would outrun the mouse moves
-    args += ["-w", "--borders", "no", "--zoom", "1"] if windowed else ["--fast-forward", "yes"]
+    # (--fast-boot: TOS 4.04 counting 4 MB at 16 MHz, then NVDI, outlasted the boot wait)
+    args += ["-w", "--borders", "no", "--zoom", "1", "--fast-boot", "yes"] if windowed else ["--fast-forward", "yes"]
     if auto:
         args += ["--auto", auto]
     return subprocess.Popen(args, env=env, stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
@@ -215,6 +216,19 @@ class Mouse:
         x0, y0 = int(loc["X"]), int(loc["Y"])
         for i in range(1, 13):
             self.xdo("mousemove", str(x0 + (wx + x - x0) * i // 12), str(y0 + (wy + y - y0) * i // 12))
+            time.sleep(0.03)
+        time.sleep(0.4)
+
+    def home(self):
+        """the Atari's pointer and ours in step again: from the window's far
+        corner to its top-left, a move bigger than the screen, so the AES
+        pointer ends at 0,0 wherever it was (a program's start and quit,
+        and NVDI's mouse handling, left it 40 px from ours)"""
+        wx, wy = self.window()
+        self.xdo("mousemove", str(wx + 639), str(wy + 479))
+        time.sleep(0.2)
+        for i in range(1, 25):
+            self.xdo("mousemove", str(wx + 639 - 639 * i // 24), str(wy + 479 - 479 * i // 24))
             time.sleep(0.03)
         time.sleep(0.4)
 
@@ -361,6 +375,8 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             time.sleep(k[1])
         elif isinstance(k, tuple) and k[0] == "still":     # till the screen stops changing
             still(k[1])
+        elif isinstance(k, tuple) and k[0] == "home":      # the pointers in step
+            mouse.home()
         elif isinstance(k, tuple) and k[0] == "hover":      # rest there
             mouse.move(k[1], k[2])
             time.sleep(2)
@@ -665,7 +681,7 @@ ACC_FASTRAM_STEPS = [
 # ended, then is closed and opened again. Screenshots of every step are in
 # build/gui (accnvdi1-NN.png, accnvdi2-NN.png).
 ACC_NVDI = {}
-DESK_ACC = [("still", 60), ("click", 18, 8), ("click", 60, 64)]    # the desktop's Desk menu, first accessory
+DESK_ACC = [("still", 60), ("home",), ("click", 18, 8), ("click", 60, 64)]    # the desktop's Desk menu, first accessory
 
 
 def pick_gdos_font(rig):
