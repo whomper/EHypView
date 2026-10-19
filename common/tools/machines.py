@@ -235,7 +235,11 @@ class Machine:
     def nvdi(self):
         """Erez's NVDI on C: (see above): True, or False when it isn't here"""
         src = os.environ.get("AERA_NVDI", os.path.join(os.path.expanduser("~"), ".aera", "nvdi", "x"))
-        if not os.path.exists(os.path.join(src, "auto", "nvdi.prg")):
+        need = [os.path.join("auto", "nvdi.prg"), "nvdi.inf", "ASSIGN.SYS", "gemsys", "btfonts"]
+        missing = [n for n in need if not os.path.exists(os.path.join(src, n))]
+        if missing:
+            if len(missing) < len(need):        # NVDI stops at its banner without GEMSYS
+                print("machines.py: NVDI in %s lacks %s" % (src, ", ".join(missing)), file=sys.stderr)
             return False
         os.makedirs(os.path.join(self.hd, "AUTO"), exist_ok=True)
         shutil.copy(os.path.join(src, "auto", "nvdi.prg"), os.path.join(self.hd, "AUTO", "NVDI.PRG"))
