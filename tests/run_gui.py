@@ -146,6 +146,9 @@ LIBRARY_START = [
 
 
 DISPLAY = ":99"
+# a case's first event waits for the boot: NVDI reads every Bitstream font
+# first (30 s on the 14 MB Falcon, longer at 16 MHz on Falcon-4)
+BOOT_WAIT = (120 if MACHINE.startswith("Falcon-4") else 90) if os.environ.get("AERA_WITH_NVDI") else 90
 
 
 def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=()):
@@ -356,6 +359,8 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
                 time.sleep(0.2)
         elif isinstance(k, tuple) and k[0] == "wait":
             time.sleep(k[1])
+        elif isinstance(k, tuple) and k[0] == "still":     # till the screen stops changing
+            still(k[1])
         elif isinstance(k, tuple) and k[0] == "hover":      # rest there
             mouse.move(k[1], k[2])
             time.sleep(2)
@@ -373,6 +378,33 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             send("hatari-event keypress %s" % k)
         else:
             send("hatari-event keypress 0x%x" % k)
+
+    def still(timeout):
+        """screenshots a second apart till two are the same (the desktop
+        redrawn after a program ended, NVDI's banner gone), at most timeout s"""
+        shot = os.path.abspath(os.path.join(OUT, name + "-still.png"))
+        last = None
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if os.path.exists(shot):
+                os.remove(shot)
+            send("hatari-debug screenshot %s" % shot)
+            for _ in range(20):
+                if os.path.exists(shot) and os.path.getsize(shot) > 0:
+                    break
+                time.sleep(0.1)
+            time.sleep(0.3)
+            try:
+                with open(shot, "rb") as f:
+                    now = f.read()
+            except OSError:
+                now = None
+            if now is not None and now == last:
+                return True
+            last = now
+            time.sleep(1)
+        print("      %s: the screen still changed after %d s" % (name, timeout))
+        return False
 
     def wait_any(expected, timeout=30):
         """the first of these to come: its index, or -1"""
@@ -420,7 +452,7 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
                         break
                     continue
                 # the first event waits for the boot too
-                if not wait_for(e, 90 if not seen else 30):
+                if not wait_for(e, BOOT_WAIT if not seen else 30):
                     print("FAIL  %s step %d: no '%s'" % (name, n, e))
                     print("      events so far: %s" % events())
                     why()
@@ -633,7 +665,7 @@ ACC_FASTRAM_STEPS = [
 # ended, then is closed and opened again. Screenshots of every step are in
 # build/gui (accnvdi1-NN.png, accnvdi2-NN.png).
 ACC_NVDI = {}
-DESK_ACC = [("click", 18, 8), ("click", 60, 64)]    # the desktop's Desk menu, first accessory
+DESK_ACC = [("still", 60), ("click", 18, 8), ("click", 60, 64)]    # the desktop's Desk menu, first accessory
 
 
 def pick_gdos_font(rig):
@@ -691,7 +723,7 @@ ACC_NVDI_BOOT1 = [
     ([("ctrl+shift", F)], ["dialog font"]),                 # the program measures the fonts
     ([ESC], ["dialog-closed font cancel"]),
     ([("ctrl", Q)], ["quit"]),
-    ([("wait", 6)] + DESK_ACC, ["library *"]),              # the accessory, from the desktop
+    (DESK_ACC, ["library *"]),                              # the accessory, from the desktop
     (pick_gdos_font, []),
     ([("ctrl", W)], ["closed *"]),
     (reopen, []),
@@ -727,7 +759,7 @@ def acc_nvdi_dir():
 
 def acc_nvdi():
     if not (os.environ.get("AERA_WITH_NVDI") or os.environ.get("ACC_NVDI_TRY")):
-        print("skip  accnvdi: runs under Erez's NVDI only (AERA_WITH_NVDI=1)")
+        print("skip  accnvdi: runs under Erez's NVDI only (AERA_WITH_NVDI=1 make accnvdi-test)")
         return True
     if not have_display():
         print("skip  accnvdi: needs Xvfb and xdotool")
@@ -796,6 +828,9 @@ def check_exists(path, what):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
+    if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
+        print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "accnvdi")).describe())
+        return 0 if acc_nvdi() else 1
     print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "viewer")).describe())
     d = copy_dir("viewer", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
     ok = run_scenario("viewer", d, STEPS)
@@ -859,8 +894,6 @@ def main():
                 xvfb.terminate()
         else:
             print("skip  accfast: needs Xvfb and xdotool")
-    if ok:
-        ok = acc_nvdi()
     return 0 if ok else 1
 
 
