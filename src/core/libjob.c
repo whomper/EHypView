@@ -28,6 +28,7 @@ struct ehv_libjob {
 	ehv_finish *fin;
 	ehv_saver *saver;
 	int started, unchanged, rebuild, saved;
+	int ref_checked;                /* ALL.REF looked at */
 	pf_info ref_info;
 	int have_ref;
 };
@@ -184,7 +185,18 @@ int ehv_libjob_step(ehv_libjob *j)
 	case EHV_JOB_SCANNING:
 		if (j->scan == NULL)
 		{
-			/* checking first; again, building, when only ALL.REF changed */
+			/* ALL.REF looked at first, once: when it changed the index
+			   is built straight away, with no checking pass before (the
+			   folders read once, the AERA guidelines, 6.5) */
+			if (!j->ref_checked)
+			{
+				j->ref_checked = 1;
+				j->have_ref = j->allref != NULL && pf_stat(j->allref, &j->ref_info) == 0 &&
+					      !j->ref_info.is_dir;
+				if (j->prev != NULL && !same_allref(j))
+					j->rebuild = 1;
+			}
+			/* checking first, or building */
 			j->scan = j->rebuild ? ehv_scan_begin((const char *const *) j->roots, j->nroots, j->prev)
 				: ehv_scan_begin_check((const char *const *) j->roots, j->nroots, j->prev);
 			if (j->scan == NULL)
@@ -195,7 +207,6 @@ int ehv_libjob_step(ehv_libjob *j)
 			return EHV_JOB_FAILED;
 		if (r == 0)
 			return EHV_JOB_MORE;
-		j->have_ref = j->allref != NULL && pf_stat(j->allref, &j->ref_info) == 0 && !j->ref_info.is_dir;
 		if (j->prev != NULL && !j->rebuild && !ehv_scan_changed(j->scan))
 		{
 			ehv_scan_abort(j->scan);

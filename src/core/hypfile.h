@@ -56,11 +56,14 @@ typedef struct {
 /*
  * The file is not kept open between calls: a desk accessory on plain TOS
  * must not hold file handles, because they belong to whichever program
- * happened to be running when it opened them.
+ * happened to be running when it opened them.  Within one call it may
+ * be (hyp_open_held(), hyp_let_go()): a page shown with its hypertext
+ * in one open (the AERA guidelines, 6.5).
  */
 typedef struct {
 	char *path;
 	unsigned long filesize;
+	int h;                       /* open, held; else -1             */
 
 	unsigned char compiler;      /* compiler version byte           */
 	unsigned char os;            /* HYP_OS_*                        */
@@ -94,6 +97,25 @@ typedef struct {
 /* open a hypertext; *err (may be NULL) receives an error code */
 hyp_doc *hyp_open(const char *path, int *err);
 void hyp_close(hyp_doc *doc);
+
+/* the same, the file left open for hyp_load() until hyp_let_go() (or
+   hyp_close()), which must come before the caller's next event call */
+hyp_doc *hyp_open_held(const char *path, int *err);
+void hyp_let_go(hyp_doc *doc);
+
+/*
+ * The last hypertext closed, kept for the rest of an event's work: a
+ * request looked up in a file and then shown opens it once.  Off until
+ * hyp_recent(1); the program calls hyp_forget() before each event call.
+ */
+void hyp_recent(int on);
+void hyp_forget(void);
+
+/* closed, but kept held for the next hyp_open*() of it in the same call
+   (a request's file looked in, then shown); hyp_recent_let_go() closes
+   the file, before the caller's next event call */
+void hyp_keep(hyp_doc *doc);
+void hyp_recent_let_go(void);
 
 const char *hyp_strerror(int err);
 

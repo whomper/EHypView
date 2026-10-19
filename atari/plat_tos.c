@@ -63,6 +63,20 @@ long pf_read(int h, void *buf, long n) { return Fread((short) h, n, buf); }
 long pf_write(int h, const void *buf, long n) { return Fwrite((short) h, n, buf); }
 long pf_seek(int h, long off) { return Fseek(off, (short) h, 0); }
 void pf_close(int h) { Fclose((short) h); }
+
+int pf_finfo(int h, pf_info *info)
+{
+	unsigned short dt[2];             /* Fdatime's: time, date */
+	long size = Fseek(0L, (short) h, 2);
+
+	memset(info, 0, sizeof(*info));
+	if (size < 0 || Fseek(0L, (short) h, 0) != 0)
+		return -1;
+	info->size = (unsigned long) size;
+	if (Fdatime(dt, (short) h, 0) == 0)
+		info->mtime = ((unsigned long) dt[1] << 16) | dt[0];
+	return 0;
+}
 int pf_remove(const char *path) { return (int) Fdelete(path); }
 int pf_rename(const char *from, const char *to) { return (int) Frename(from, to); }
 
@@ -170,11 +184,43 @@ static int add_name(char ***list, long *n, long *cap, const char *name)
 
 long pf_list_dir(const char *path, char ***names)
 {
+	return pf_list_dir_info(path, names, NULL);
+}
+
+/* the DTA's size, date and kind of the entry just added (as pf_stat()
+   gives them from Fsfirst) */
+static int add_info(pf_info **infos, long n, long *cap, const DTA *dta)
+{
+	if (n > *cap)
+	{
+		long ncap = *cap ? *cap * 2 : 32;
+		pf_info *p;
+
+		while (ncap < n)
+			ncap *= 2;
+		p = realloc(*infos, (size_t) ncap * sizeof(pf_info));
+		if (p == NULL)
+			return -1;
+		*infos = p;
+		*cap = ncap;
+	}
+	memset(&(*infos)[n - 1], 0, sizeof(pf_info));
+	(*infos)[n - 1].is_dir = (dta->d_attrib & FA_DIR) != 0;
+	(*infos)[n - 1].size = dta->d_length;
+	(*infos)[n - 1].mtime = ((unsigned long) dta->d_date << 16) | dta->d_time;
+	return 0;
+}
+
+long pf_list_dir_info(const char *path, char ***names, pf_info **infos)
+{
 	char p[PATH_MAX_LEN + 8];
 	char **list = NULL;
-	long n = 0, cap = 0, h, r;
+	pf_info *info = NULL;
+	long n = 0, cap = 0, icap = 0, h, r;
 
 	*names = NULL;
+	if (infos != NULL)
+		*infos = NULL;
 	if (clean_path(path, p) != 0)
 		return -1;
 
@@ -215,13 +261,23 @@ long pf_list_dir(const char *path, char ***names)
 		}
 		for (; r == 0; r = Fsnext())
 		{
+			long was = n;
+
 			if (dta.d_attrib & FA_LABEL)
 				continue;
 			if (add_name(&list, &n, &cap, dta.d_fname) < 0)
 				break;
+			if (infos != NULL && n > was && add_info(&info, n, &icap, &dta) < 0)
+			{
+				free(info);
+				info = NULL;
+				infos = NULL;           /* pf_stat() each, then */
+			}
 		}
 		Fsetdta(old);
 	}
 	*names = list;
+	if (infos != NULL)
+		*infos = info;
 	return n;
 }

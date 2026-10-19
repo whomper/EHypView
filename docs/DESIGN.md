@@ -153,7 +153,24 @@ Rules for `src/core`:
   must not hold handles, because they belong to the program that was
   running when they were opened. Nor does it take GEMDOS memory after
   its first event call: the About box's ST RAM is taken at start-up with
-  the rest (`acc_heap`).
+  the rest (`acc_heap`, TT RAM first).
+- **Each open costs** on an Atari's disks (the AERA guidelines, 6.5), so a
+  file is looked at once and opened once a job:
+  - `pf_load()` and `hyp_open()` open the file straight away and take its
+    size and date from the open file (`pf_finfo`: Fseek, Fdatime), with
+    no Fsfirst before;
+  - a folder's listing carries each entry's size, date and kind (the DTA
+    of Fsfirst/Fsnext), so the scan looks up no file one by one;
+  - `pf_look()` remembers what was looked up, and `hyp_recent()` the last
+    hypertext closed, for the rest of an event's work: a Help key's
+    request is looked up and opened once, and its page read in the same
+    open (`hyp_open_held`, let go before the program's next event call);
+  - `EHYPVIEW.INF` and `ST-GUIDE.INF` are read once a start (and the INF
+    again when the accessory opens, and as written);
+  - nothing is read while EHypView waits.
+
+  `tests/hatari/acc_files.py` (`make acc-files-test`) counts each job's
+  opens and looks from Hatari's GEMDOS trace and fails above its budget.
 - Every parser takes untrusted input. The mutation tests run under
   AddressSanitizer.
 
@@ -169,8 +186,10 @@ Rules for `src/core`:
     a hypertext, per unit), so the GEM program stays responsive.
   - With an index from before it first only checks: each hypertext found
     must be the next one in that index, with the same size and date. At
-    the first difference it starts again and builds the index; when
-    there is none, nothing is copied, sorted or written.
+    the first difference it starts again and builds the index, from the
+    folders the check has read already (they are read once a job); when
+    there is none, nothing is copied, sorted or written. When `ALL.REF`
+    changed, it builds straight away.
 - **Sources of names.**
   - Every `.HYP` contributes its title data and all page names, read from
     its own index table without decompressing anything.
@@ -185,7 +204,8 @@ Rules for `src/core`:
   changed. An index from version 1 (to EHypView 1.6) is read and sorted,
   and saved again as version 2.
 - **In steps.** `src/core/libjob.c` keeps the index up to date one short
-  step at a time: reading `EHYPVIEW.IDX` (8 KB or a dozen lines a step),
+  step at a time: reading `EHYPVIEW.IDX` (32 KB a step, 16 KB on a 68000,
+  or a dozen lines),
   the scan, merging `ALL.REF`, sorting (a stable merge sort that stops
   after a few dozen moves) and saving. The GEM program runs it in slices
   of 40 ms between events (`common/ui/bgwork.c`), so even the accessory
@@ -194,7 +214,10 @@ Rules for `src/core`:
   saving, `EHYPVIEW.ID$`) and closes it again before it ends, reading on
   from where the last step stopped or adding to the end (`PF_APPEND`):
   the program in front can end between two steps and close what the
-  accessory left open (guidelines 2.2).
+  accessory left open (guidelines 2.2). The new index is gathered in
+  memory and written in one go when it fits: up to 512 KB in the
+  accessory's heap and 1 MB in the program (`big_alloc`: TT RAM first) on
+  a 68030, 16 KB at a time on a 68000 (guidelines 6.5).
 - **Default roots.** `PATHS` from `EHYPVIEW.INF` (Settings), then `PATHS`,
   `HYPFOLD` and the folder of `REF` from an existing `ST-GUIDE.INF`, then
   `*:\GUIDES` and `*:\GEMSYS\GUIDES` (`*:` = every hard disk).

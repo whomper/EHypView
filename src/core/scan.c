@@ -112,13 +112,31 @@ struct ehv_scan {
 	file_item *files;
 	unsigned long nfiles, next_file;
 
-	/* the folder being read, ENTRIES entries per step */
+	/* the folder being read, ENTRIES entries per step: its names and,
+	   where the system's listing gives them, their sizes and dates */
 	int listing;
 	dir_item dir;
 	char **names, **subs;
-	pf_info *subinfo;
+	pf_info *infos, *subinfo;
 	long nnames, next_name;
 	unsigned long nsub;
+	int cached;               /* names and infos belong to `seen` */
+
+	/* what the checking pass looked at, for the building one after it:
+	   the folders are read once a job (the AERA guidelines, 6.5) */
+	struct seen_dir {
+		char *path;
+		char **names;
+		pf_info *infos;
+		long n;
+	} *seen;
+	unsigned long nseen, cap_seen;
+	struct seen_root {
+		char *path;
+		int found;
+		pf_info info;
+	} *roots_seen;
+	unsigned long nroots_seen, cap_roots_seen;
 
 	strset visited;
 	ehv_scan_status st;
@@ -220,6 +238,16 @@ void ehv_scan_abort(ehv_scan *s)
 	hyp_close(s->doc);
 	ref_close(s->db);
 	end_listing(s);
+	for (i = 0; i < s->nseen; i++)
+	{
+		free(s->seen[i].path);
+		pf_free_list(s->seen[i].names, s->seen[i].n);
+		free(s->seen[i].infos);
+	}
+	free(s->seen);
+	for (i = 0; i < s->nroots_seen; i++)
+		free(s->roots_seen[i].path);
+	free(s->roots_seen);
 	ehv_index_free(s->idx);
 	if (s->roots != NULL)
 		for (i = 0; i < s->nroots; i++)
@@ -331,15 +359,15 @@ static int cmp_names(const void *a, const void *b)
 }
 
 /* the .REF partner of a .HYP in a sorted name list: the first name
-   that is the .HYP's with ".ref" ignoring case */
-static const char *find_ref(char **names, long n, const char *hyp)
+   that is the .HYP's with ".ref" ignoring case; its place, or -1 */
+static long find_ref(char **names, long n, const char *hyp)
 {
 	size_t stem = strlen(hyp) - 4;
 	char key[260];
 	long lo = 0, hi = n;
 
 	if (stem + 5 > sizeof(key))
-		return NULL;
+		return -1;
 	memcpy(key, hyp, stem);
 	strcpy(key + stem, ".ref");
 	while (lo < hi)
@@ -351,7 +379,7 @@ static const char *find_ref(char **names, long n, const char *hyp)
 		else
 			hi = mid;
 	}
-	return lo < n && atari_casecmp(names[lo], key) == 0 ? names[lo] : NULL;
+	return lo < n && atari_casecmp(names[lo], key) == 0 ? lo : -1;
 }
 
 #define ENTRIES 4            /* folder entries looked at per step */
@@ -362,36 +390,133 @@ static void end_listing(ehv_scan *s)
 		free(s->subs[--s->nsub]);
 	free(s->subs);
 	free(s->subinfo);
-	pf_free_list(s->names, s->nnames);
+	if (!s->cached)
+	{
+		pf_free_list(s->names, s->nnames);
+		free(s->infos);
+	}
 	free(s->dir.path);
 	s->subs = NULL;
 	s->subinfo = NULL;
 	s->names = NULL;
+	s->infos = NULL;
+	s->cached = 0;
 	s->nnames = s->next_name = 0;
 	s->dir.path = NULL;
 	s->listing = 0;
 }
 
+/* names and infos sorted together, by name */
+typedef struct {
+	char *name;
+	pf_info info;
+} named;
+
+static int cmp_named(const void *a, const void *b)
+{
+	return cmp_names(&((const named *) a)->name, &((const named *) b)->name);
+}
+
+static int sort_listing(char **names, pf_info *infos, long n)
+{
+	named *t;
+	long i;
+
+	if (infos == NULL)
+	{
+		qsort(names, (size_t) n, sizeof(char *), cmp_names);
+		return 0;
+	}
+	if ((t = malloc((size_t) n * sizeof(named))) == NULL)
+		return -1;
+	for (i = 0; i < n; i++)
+	{
+		t[i].name = names[i];
+		t[i].info = infos[i];
+	}
+	qsort(t, (size_t) n, sizeof(named), cmp_named);
+	for (i = 0; i < n; i++)
+	{
+		names[i] = t[i].name;
+		infos[i] = t[i].info;
+	}
+	free(t);
+	return 0;
+}
+
+/* keep a folder's listing for the building pass (checking: it may come) */
+static void keep_listing(ehv_scan *s)
+{
+	if (s->nseen == s->cap_seen)
+	{
+		unsigned long ncap = s->cap_seen ? s->cap_seen * 2 : 8;
+		struct seen_dir *p = realloc(s->seen, ncap * sizeof(*p));
+
+		if (p == NULL)
+			return;                  /* read again, then */
+		s->seen = p;
+		s->cap_seen = ncap;
+	}
+	if ((s->seen[s->nseen].path = dupstr(s->dir.path)) == NULL)
+		return;
+	s->seen[s->nseen].names = s->names;
+	s->seen[s->nseen].infos = s->infos;
+	s->seen[s->nseen].n = s->nnames;
+	s->nseen++;
+	s->cached = 1;
+}
+
 /* start reading a folder: its names now, its entries in the steps after */
 static int read_dir(ehv_scan *s, dir_item *d)
 {
-	long n;
+	long n = -1;
+	unsigned long i;
 
 	set_current(s, d->path);
 	s->st.dirs++;
 	s->dir = *d;                     /* the path is the scan's now */
 	d->path = NULL;
-	n = pf_list_dir(s->dir.path, &s->names);
+	s->infos = NULL;
+	for (i = 0; i < s->nseen; i++)
+		if (strcmp(s->seen[i].path, s->dir.path) == 0)
+		{
+			/* read by the checking pass */
+			s->names = s->seen[i].names;
+			s->infos = s->seen[i].infos;
+			n = s->seen[i].n;
+			s->cached = 1;
+			break;
+		}
+	if (i == s->nseen)
+	{
+		n = pf_list_dir_info(s->dir.path, &s->names, &s->infos);
+		if (n > 0 && sort_listing(s->names, s->infos, n) < 0)
+		{
+			free(s->infos);
+			s->infos = NULL;
+			qsort(s->names, (size_t) n, sizeof(char *), cmp_names);
+		}
+		if (n > 0 && s->checking)
+		{
+			s->nnames = n;
+			keep_listing(s);
+		}
+	}
 	if (n <= 0)
 	{
-		pf_free_list(s->names, n);
+		if (!s->cached)
+		{
+			pf_free_list(s->names, n);
+			free(s->infos);
+		}
 		s->names = NULL;
+		s->infos = NULL;
+		s->cached = 0;
 		free(s->dir.path);
 		s->dir.path = NULL;
 		return 0;                    /* unreadable folders are skipped */
 	}
 	s->nnames = n;
-	qsort(s->names, (size_t) n, sizeof(char *), cmp_names);
 	s->subs = malloc((size_t) n * sizeof(char *));
 	s->subinfo = malloc((size_t) n * sizeof(pf_info));
 	s->files = calloc((size_t) n, sizeof(file_item));
@@ -410,13 +535,17 @@ static int read_entries(ehv_scan *s)
 
 	for (k = 0; k < ENTRIES && s->next_name < s->nnames; k++)
 	{
-		const char *name = s->names[s->next_name++];
+		long at = s->next_name++;
+		const char *name = s->names[at];
 		char *full = fs_join(s->dir.path, name);
 		pf_info info;
 
 		if (full == NULL)
 			return -1;
-		if (pf_stat(full, &info) != 0)
+		/* as the listing gave it, else looked up */
+		if (s->infos != NULL)
+			info = s->infos[at];
+		else if (pf_stat(full, &info) != 0)
 		{
 			free(full);
 			continue;
@@ -432,15 +561,17 @@ static int read_entries(ehv_scan *s)
 		} else if (fs_has_ext(name, ".hyp"))
 		{
 			file_item *f = &s->files[s->nfiles++];
-			const char *ref = find_ref(s->names, s->nnames, name);
+			long ref = find_ref(s->names, s->nnames, name);
 
 			f->path = full;
 			f->info = info;
-			if (ref != NULL)
+			if (ref >= 0)
 			{
-				if ((f->ref = fs_join(s->dir.path, ref)) == NULL)
+				if ((f->ref = fs_join(s->dir.path, s->names[ref])) == NULL)
 					return -1;
-				if (pf_stat(f->ref, &f->rinfo) != 0)
+				if (s->infos != NULL)
+					f->rinfo = s->infos[ref];
+				else if (pf_stat(f->ref, &f->rinfo) != 0)
 					memset(&f->rinfo, 0, sizeof(f->rinfo));
 			}
 		} else
@@ -676,6 +807,39 @@ static int index_file(ehv_scan *s, const file_item *f, unsigned short root)
 	return read_guide(s, f, &g) < 0 ? -1 : 0;
 }
 
+/* a root's folder looked up, once a job: the building pass after a
+   checking one takes what it found */
+static int root_stat(ehv_scan *s, const char *path, pf_info *info)
+{
+	unsigned long i;
+	int r;
+
+	for (i = 0; i < s->nroots_seen; i++)
+		if (strcmp(s->roots_seen[i].path, path) == 0)
+		{
+			*info = s->roots_seen[i].info;
+			return s->roots_seen[i].found ? 0 : -1;
+		}
+	r = pf_stat(path, info);
+	if (s->nroots_seen == s->cap_roots_seen)
+	{
+		unsigned long ncap = s->cap_roots_seen ? s->cap_roots_seen * 2 : 8;
+		struct seen_root *p = realloc(s->roots_seen, ncap * sizeof(*p));
+
+		if (p == NULL)
+			return r;
+		s->roots_seen = p;
+		s->cap_roots_seen = ncap;
+	}
+	if ((s->roots_seen[s->nroots_seen].path = dupstr(path)) != NULL)
+	{
+		s->roots_seen[s->nroots_seen].found = r == 0;
+		s->roots_seen[s->nroots_seen].info = *info;
+		s->nroots_seen++;
+	}
+	return r;
+}
+
 /* start the next root: queue every existing folder it expands to */
 static int next_root(ehv_scan *s)
 {
@@ -690,7 +854,7 @@ static int next_root(ehv_scan *s)
 	{
 		pf_info info;
 
-		if (pf_stat(paths[i], &info) == 0 && info.is_dir)
+		if (root_stat(s, paths[i], &info) == 0 && info.is_dir)
 			rc = push_dir(s, paths[i], &info, 0);
 	}
 	inf_free_list(paths, n);

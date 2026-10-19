@@ -74,27 +74,36 @@ char *pf_tmp_name(const char *path)
 
 char *pf_load(const char *path, unsigned long *len)
 {
+	return pf_load_info(path, len, NULL);
+}
+
+char *pf_load_info(const char *path, unsigned long *len, pf_info *out)
+{
 	pf_info info;
 	char *buf;
 	int h;
 
 	if (len != NULL)
 		*len = 0;
-	if (pf_stat(path, &info) != 0)
+	/* opened straight away: its size and date come with it */
+	h = pf_open(path, PF_READ);
+	if (h < 0)
 	{
 		/* a save cut short after the old file went: the new one is whole */
 		char *tmp = pf_tmp_name(path);
-		int ok = tmp != NULL && pf_stat(tmp, &info) == 0 && pf_rename(tmp, path) == 0;
+		int ok = tmp != NULL && pf_stat(tmp, &info) == 0 && !info.is_dir && pf_rename(tmp, path) == 0;
 
 		free(tmp);
-		if (!ok || pf_stat(path, &info) != 0)
+		if (!ok || (h = pf_open(path, PF_READ)) < 0)
 			return NULL;
 	}
-	if (info.is_dir)
+	if (pf_finfo(h, &info) != 0 || info.is_dir)
+	{
+		pf_close(h);
 		return NULL;
-	h = pf_open(path, PF_READ);
-	if (h < 0)
-		return NULL;
+	}
+	if (out != NULL)
+		*out = info;
 	buf = malloc(info.size + 1);
 	if (buf == NULL || read_full(h, (unsigned char *) buf, info.size) != 0)
 	{
@@ -115,6 +124,8 @@ int pf_save(const char *path, const void *data, unsigned long len)
 	const unsigned char *p = data;
 	unsigned long left = len;
 	int h, ok = 1;
+
+	pf_forget();
 
 	if (tmp == NULL)
 		return -1;
@@ -144,4 +155,60 @@ int pf_save(const char *path, const void *data, unsigned long len)
 		pf_remove(tmp);
 	free(tmp);
 	return ok ? 0 : -1;
+}
+
+/* ---------------------------------------------------------------- */
+/* looked up once: the stats of an event's work                       */
+
+#define LOOKS 8
+
+static struct {
+	char *path;
+	int found;
+	pf_info info;
+} looks[LOOKS];
+static int looks_on, looks_next;
+
+void pf_looks(int on)
+{
+	pf_forget();
+	looks_on = on;
+}
+
+void pf_forget(void)
+{
+	int i;
+
+	for (i = 0; i < LOOKS; i++)
+	{
+		free(looks[i].path);
+		looks[i].path = NULL;
+	}
+}
+
+int pf_look(const char *path, pf_info *info)
+{
+	int i, r;
+
+	if (!looks_on)
+		return pf_stat(path, info);
+	for (i = 0; i < LOOKS; i++)
+		if (looks[i].path != NULL && strcmp(looks[i].path, path) == 0)
+		{
+			if (looks[i].found)
+				*info = looks[i].info;
+			return looks[i].found ? 0 : -1;
+		}
+	r = pf_stat(path, info);
+	i = looks_next;
+	looks_next = (looks_next + 1) % LOOKS;
+	free(looks[i].path);
+	if ((looks[i].path = malloc(strlen(path) + 1)) != NULL)
+	{
+		strcpy(looks[i].path, path);
+		looks[i].found = r == 0;
+		if (r == 0)
+			looks[i].info = *info;
+	}
+	return r;
 }

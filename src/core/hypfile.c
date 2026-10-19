@@ -207,7 +207,24 @@ static int parse_index(hyp_doc *doc, unsigned char *tab, unsigned long tabsize,
 	return HYP_OK;
 }
 
-hyp_doc *hyp_open(const char *path, int *err)
+static int recent_on;
+static hyp_doc *recent;              /* the last one closed (hyp_recent) */
+
+void hyp_recent(int on)
+{
+	hyp_forget();
+	recent_on = on;
+}
+
+static void hyp_free(hyp_doc *doc);
+
+void hyp_forget(void)
+{
+	hyp_free(recent);
+	recent = NULL;
+}
+
+static hyp_doc *open_doc(const char *path, int *err, int hold)
 {
 	int h;
 	pf_info info;
@@ -219,8 +236,21 @@ hyp_doc *hyp_open(const char *path, int *err)
 
 	if (err != NULL)
 		*err = HYP_OK;
-	if (pf_stat(path, &info) != 0 || info.is_dir || (h = pf_open(path, PF_READ)) < 0)
+	if (recent != NULL && strcmp(recent->path, path) == 0)
 	{
+		doc = recent;                /* closed a moment ago: as it was */
+		recent = NULL;
+		if (!hold)
+			hyp_let_go(doc);
+		else if (doc->h < 0)
+			doc->h = pf_open(path, PF_READ);   /* -1: hyp_load() tries again */
+		return doc;
+	}
+	/* opened straight away: the size comes with it, no look at the folder */
+	if ((h = pf_open(path, PF_READ)) < 0 || pf_finfo(h, &info) != 0 || info.is_dir)
+	{
+		if (h >= 0)
+			pf_close(h);
 		if (err != NULL)
 			*err = HYP_ERR_OPEN;
 		return NULL;
@@ -232,6 +262,7 @@ hyp_doc *hyp_open(const char *path, int *err)
 		rc = HYP_ERR_MEMORY;
 		goto fail;
 	}
+	doc->h = -1;
 	doc->filesize = info.size;
 
 	if (doc->filesize < HEADER_SIZE || pf_read_at(h, 0, head, HEADER_SIZE) != 0 ||
@@ -280,21 +311,78 @@ hyp_doc *hyp_open(const char *path, int *err)
 			goto fail;
 	}
 
-	pf_close(h);
+	if (hold)
+		doc->h = h;
+	else
+		pf_close(h);
 	return doc;
 
 fail:
 	pf_close(h);
-	hyp_close(doc);
+	if (doc != NULL)
+		doc->h = -1;
+	hyp_free(doc);
 	if (err != NULL)
 		*err = rc;
 	return NULL;
+}
+
+hyp_doc *hyp_open(const char *path, int *err)
+{
+	return open_doc(path, err, 0);
+}
+
+hyp_doc *hyp_open_held(const char *path, int *err)
+{
+	return open_doc(path, err, 1);
+}
+
+void hyp_let_go(hyp_doc *doc)
+{
+	if (doc != NULL && doc->h >= 0)
+	{
+		pf_close(doc->h);
+		doc->h = -1;
+	}
+}
+
+void hyp_keep(hyp_doc *doc)
+{
+	if (doc == NULL)
+		return;
+	if (!recent_on)
+	{
+		hyp_free(doc);
+		return;
+	}
+	hyp_free(recent);
+	recent = doc;
+}
+
+void hyp_recent_let_go(void)
+{
+	hyp_let_go(recent);
 }
 
 void hyp_close(hyp_doc *doc)
 {
 	if (doc == NULL)
 		return;
+	hyp_let_go(doc);
+	if (recent_on)
+	{
+		hyp_free(recent);
+		recent = doc;
+		return;
+	}
+	hyp_free(doc);
+}
+
+static void hyp_free(hyp_doc *doc)
+{
+	if (doc == NULL)
+		return;
+	hyp_let_go(doc);
 	free(doc->path);
 	free(doc->entries);
 	free(doc->names);
@@ -361,7 +449,8 @@ int hyp_load(hyp_doc *doc, unsigned short num, unsigned char **data, unsigned lo
 	if (out == NULL)
 		return HYP_ERR_MEMORY;
 
-	h = pf_open(doc->path, PF_READ);
+	/* the file as held (hyp_open_held), else opened for the object */
+	h = doc->h >= 0 ? doc->h : pf_open(doc->path, PF_READ);
 	if (h < 0)
 	{
 		free(out);
@@ -384,7 +473,8 @@ int hyp_load(hyp_doc *doc, unsigned short num, unsigned char **data, unsigned lo
 			rc = HYP_ERR_DECODE;
 		free(packed);
 	}
-	pf_close(h);
+	if (h != doc->h)
+		pf_close(h);
 
 	if (rc != HYP_OK)
 	{

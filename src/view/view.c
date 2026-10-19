@@ -138,8 +138,9 @@ static int show_entry(ehv_view *v, unsigned short entry, long top)
 	return VIEW_OK;
 }
 
-/* open a document (or reuse the open one) and show `node` */
-static int show(ehv_view *v, const char *path, const char *node, long top, int push)
+/* open a document (or reuse the open one) and show `node`: a new one
+   held open until its page is read, one open for both */
+static int show_in(ehv_view *v, const char *path, const char *node, long top, int push)
 {
 	hyp_doc *doc = v->doc;
 	unsigned short entry;
@@ -147,7 +148,7 @@ static int show(ehv_view *v, const char *path, const char *node, long top, int p
 
 	if (doc == NULL || strcmp(doc->path, path) != 0)
 	{
-		doc = hyp_open(path, &err);
+		doc = hyp_open_held(path, &err);
 		if (doc == NULL)
 		{
 			set_status(v, fs_basename(path), ": ", hyp_strerror(err));
@@ -190,6 +191,14 @@ static int show(ehv_view *v, const char *path, const char *node, long top, int p
 		pop_history(v);           /* nothing is shown instead */
 	else if (rc == VIEW_OK && push)
 		forward_clear(v);
+	return rc;
+}
+
+static int show(ehv_view *v, const char *path, const char *node, long top, int push)
+{
+	int rc = show_in(v, path, node, top, push);
+
+	hyp_let_go(v->doc);
 	return rc;
 }
 
@@ -269,13 +278,18 @@ int view_request(ehv_view *v, const char *args)
 	ehv_context ctx;
 	ehv_target t;
 
+	int rc;
+
 	context(v, &ctx);
 	if (ehv_resolve_request(&ctx, args, &t) < 0)
 	{
+		hyp_recent_let_go();
 		set_status(v, "Out of memory", NULL, NULL);
 		return VIEW_ERROR;
 	}
-	return show_target(v, args, &t);
+	rc = show_target(v, args, &t);
+	hyp_recent_let_go();              /* the file the resolver looked in */
+	return rc;
 }
 
 int view_follow(ehv_view *v, const hyp_run *run)
@@ -312,12 +326,21 @@ int view_follow(ehv_view *v, const hyp_run *run)
 			return VIEW_POPUP;
 		}
 	case HYP_NODE_EXTERNAL:
-		context(v, &ctx);
-		if (ehv_resolve_xref(&ctx, e->name, &t) < 0)
-			return VIEW_ERROR;
-		if (t.status != EHV_NO_FILE && t.status != EHV_NOT_FOUND && run->target_line)
-			t.line = run->target_line;
-		return show_target(v, e->name, &t);
+		{
+			int rc;
+
+			context(v, &ctx);
+			if (ehv_resolve_xref(&ctx, e->name, &t) < 0)
+			{
+				hyp_recent_let_go();
+				return VIEW_ERROR;
+			}
+			if (t.status != EHV_NO_FILE && t.status != EHV_NOT_FOUND && run->target_line)
+				t.line = run->target_line;
+			rc = show_target(v, e->name, &t);
+			hyp_recent_let_go();      /* the file the resolver looked in */
+			return rc;
+		}
 	case HYP_NODE_QUIT:
 	case HYP_NODE_CLOSE:
 		return VIEW_CLOSE;
@@ -342,8 +365,8 @@ static int show_hist(ehv_view *v, const view_hist *h)
 
 	if (v->doc != NULL && strcmp(v->doc->path, h->path) == 0)
 		return show_entry(v, h->node, h->top);
-	/* another hypertext: open it again */
-	doc = hyp_open(h->path, &err);
+	/* another hypertext: open it again, and its page in the same open */
+	doc = hyp_open_held(h->path, &err);
 	if (doc == NULL)
 	{
 		set_status(v, fs_basename(h->path), ": ", hyp_strerror(err));
@@ -353,7 +376,9 @@ static int show_hist(ehv_view *v, const view_hist *h)
 	v->page = NULL;
 	hyp_close(v->doc);
 	v->doc = doc;
-	return show_entry(v, h->node, h->top);
+	err = show_entry(v, h->node, h->top);
+	hyp_let_go(doc);
+	return err;
 }
 
 int view_jump(ehv_view *v, long steps)

@@ -67,6 +67,12 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `python3 common/tools/helpfront.py thumb SHOT.PNG docs/help/WINDOW.IMG 4,36,632,410 32,90 210,68 330,206 412,90 596,90`.
 - Settings (src/gem/settings.c, ^,) is EMail's layout: pages on the left, run by the shared
   `dlg_do`. It edits `START=` and `PATHS=`; the font stays in View > Font... as in ECal and EMail.
+- Disk access (guidelines 6.5): a file is looked at once and opened once a job (`pf_load`,
+  `hyp_open` take size and date from the open file; listings carry them; `pf_look` and
+  `hyp_recent` hold an event's lookups); the INF is read once a start; the index is read in
+  32 KB (68000: 16 KB) pieces and written in one go. `make acc-files-test`
+  (tests/hatari/acc_files.py) counts each job's opens and looks and fails above its budget;
+  run it when file access changes.
 - Before pushing: `make test`, `make asan`, `make m68k-test`,
   `make hatari-test`, `make gui-test`, `make quiet-test` (these two
   need hatari, Xvfb and xdotool) and `make colour-test`, and `make atari`
