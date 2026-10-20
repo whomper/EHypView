@@ -2976,8 +2976,8 @@ static long inf_boot_number(const char *text, const char *key)
 
 /* an accessory takes its memory once, at start-up (common/ui/accmem.c,
    guidelines 2.1): HEAPKB= when the user set it, else MEMKB=, what the
-   last start measured, else 1 MB (2 MB in TT RAM). planes: the screen's */
-static void acc_heap(short planes)
+   last start measured, else 1 MB (2 MB in TT RAM) */
+static void acc_heap(void)
 {
 	long tt = (long) Mxalloc(-1L, 1), pics = 0, heapkb, n;
 	char a[160], b[24], buf[INF_BOOT_MAX];
@@ -2988,16 +2988,16 @@ static void acc_heap(short planes)
 
 	/* the pictures' ST RAM (stmem.h): with no TT RAM the heap is ST RAM
 	   and has them; with some, the heap goes there and the screen can't
-	   be fed from it, so a block of ST RAM for a page's pictures, by
-	   the screen's depth: 32 KB in two colours, 64 KB in 16, 128 KB in
-	   256 or more */
+	   be fed from it, so a block of ST RAM for a page's pictures: a
+	   sixteenth of the ST RAM free, 64 KB to 128 KB (a page of three
+	   pictures in 16 colours needs more than 64 KB) */
 	if (tt >= 256L * 1024)
 	{
-		pics = 16L * 1024 * planes;
-		if (pics < 32L * 1024)
-			pics = 32L * 1024;
+		pics = (long) Mxalloc(-1L, 0) / 16;
 		if (pics > 128L * 1024)
 			pics = 128L * 1024;
+		if (pics < 64L * 1024)
+			pics = 64L * 1024;
 	}
 	stmem_reserve(pics);
 
@@ -3199,7 +3199,7 @@ int main(void)
 	vq_extnd(vdi_h, 1, work_out);
 	planes = work_out[4];
 	if (is_acc)
-		acc_heap(planes);              /* nothing malloc'd before it */
+		acc_heap();                    /* nothing malloc'd before it */
 	{
 		/* for the tests (tests/run_colour.py) */
 		char size[16], depth[24];

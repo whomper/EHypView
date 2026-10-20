@@ -108,8 +108,8 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `acc_mem_note` after the index job: the index and PAGEKB=, what a viewer's
   pages needed, 64 KB until `acc_mem_grow` measures more when a viewer window
   closes; PAGEKB= only grows), with nothing malloc'd before it
-  (`heap_early`; the INF is read into the stack first, after the VDI
-  workstation, which tells the pictures' block its size);
+  (`heap_early`; the INF is read into the stack first; with TT RAM a block
+  of ST RAM for the pictures, else they come from the heap);
   test_index.c checks the library job's steps.
 - The icon is drawn by `tools/icon/make_icon.py` (the family's SM124
   monitor); `make icons` writes src/gem/icon*.h, docs/icon*.png and
