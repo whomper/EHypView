@@ -383,7 +383,7 @@ def main():
         check(count(run, "Fopen") <= 2 * batches + 4,
               "6a: EHYPVIEW.RUN opened %d times (budget %d: each 24 KB batch written once, read back once)"
               % (count(run, "Fopen"), 2 * batches + 4))
-        budget = 3 + 120 + count(idw, "Fopen") + count(run, "Fopen") + (2 if inf_written(calls) else 0)
+        budget = 3 + 120 + opens(idw) + opens(run) + (2 if inf_written(calls) else 0)
         check(opens(calls) <= budget, "6a: %d opens (budget %d: one per file and piece)" % (opens(calls), budget))
         tr, seen = boot("s6b", ["index unchanged"])
         calls, across, events = parse(tr)
