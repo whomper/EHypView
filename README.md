@@ -201,7 +201,7 @@ when EHypView ends, not at every page.
 
 **View > Font...** (⇧^F) chooses the font for the text, with the AERA programs' Font dialog
 (common/ui/fontsel.c), the same as ECal's and EMail's: the families on the left, the styles and the
-sizes (with a Pt: field) beside them, the kind of font, and a sample. It lists the system font in 8×8
+sizes beside them, the kind of font, and a sample. It lists the system font in 8×8
 or 8×16 and, with NVDI, SpeedoGDOS or another GDOS, every fixed-width GDOS font with letters (bitmap,
 Speedo, TrueType, Type 1). Hypertexts are laid out in character cells, so proportional fonts and fonts
 of symbols are left out. ^+ and ^- change the size. A font dropped on a window from a font selector
