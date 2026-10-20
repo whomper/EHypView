@@ -31,7 +31,7 @@
 #define MARK     4                    /* a block's first bytes */
 #define ROOM     (16 * REC_MAX)       /* a scan step's names, past the batch */
 #define MOVES    64                   /* sort moves a step (an ST: a few ms) */
-#define RECORDS  2                    /* names merged a step */
+#define RECORDS  4                    /* names merged a step (an ST: 10 ms) */
 #define MERGE    16384L               /* the merge's pieces, all of them */
 
 unsigned long ehv_names_misread;
@@ -843,7 +843,7 @@ static int batch_step(const ehv_index *idx, ehv_build *b, unsigned long moves)
 		b->sorted = 1;
 		return 1;
 	}
-	r = batch_write(b, ehv_names_piece() * EHV_BLOCK);   /* 32 KB a step, 16 KB on a 68000 */
+	r = batch_write(b, ehv_names_piece() * EHV_BLOCK / 2);   /* 16 KB a step, 8 KB on a 68000 */
 	return r < 0 ? -1 : r == 0;
 }
 
