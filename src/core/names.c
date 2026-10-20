@@ -30,7 +30,7 @@
 #define REC_MAX  (7 + LEN_MAX + 1 + LEN_MAX + 1)
 #define MARK     4                    /* a block's first bytes */
 #define ROOM     (16 * REC_MAX)       /* a scan step's names, past the batch */
-#define MOVES    256                  /* sort moves a step */
+#define MOVES    64                   /* sort moves a step (an ST: a few ms) */
 #define RECORDS  16                   /* names merged a step */
 #define MERGE    16384L               /* the merge's pieces, all of them */
 
