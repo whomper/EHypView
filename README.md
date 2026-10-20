@@ -238,11 +238,11 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
 - **The accessory** has no menu bar: its commands are in the toolbar's ≡ menu, and **About
   EHypView...** in the right button's menu too. Its entry in
   the Desk menu (**EHypView**) opens the viewer, or the library when no page is shown. It takes its
-  memory when it loads, as every AERA accessory does (common/ui/accmem.c): the first time 1 MB
-  (2 MB in TT RAM), never more than a quarter of what is free where 2 MB or more is, else half;
+  memory when it loads, as every AERA accessory does (common/ui/accmem.c): the first time 160 KB
+  (2 MB in TT RAM), never more than a quarter of what is free where 1 MB or more is, else half;
   after that what it measured it needs (`MEMKB=`), or what you set (`HEAPKB=`). Where its memory
-  is TT RAM, 32 to 128 KB of ST RAM for the pictures as well, by the screen's colours; else the
-  pictures come from its memory.
+  is TT RAM, 64 to 128 KB of ST RAM for the pictures as well; else the pictures come from its
+  memory.
 - **A quiet start.** At boot the accessory only registers and takes its memory; it reads nothing.
   It reads its index and looks through the library the first time you open it, or a program asks it
   for a page (`START=opened` in `EHYPVIEW.INF`). `START=now` starts at boot, and a number, that many

@@ -2976,7 +2976,7 @@ static long inf_boot_number(const char *text, const char *key)
 
 /* an accessory takes its memory once, at start-up (common/ui/accmem.c,
    guidelines 2.1): HEAPKB= when the user set it, else MEMKB=, what the
-   last start measured, else 1 MB (2 MB in TT RAM) */
+   last start measured, else 160 KB (2 MB in TT RAM) */
 static void acc_heap(void)
 {
 	long tt = (long) Mxalloc(-1L, 1), pics = 0, heapkb, n;
@@ -3009,7 +3009,11 @@ static void acc_heap(void)
 	/* on a 1 MB machine: 96 KB left, so a program can start beside it
 	   (ASKHELP.PRG, asking for help, needs 86 KB) */
 	acc_heap_leave = 96L * 1024;
-	acc_heap_take(1024L * 1024, 2048L * 1024, heapkb, memkb_boot);
+	/* the first start (no MEMKB= yet): what the index and a page are
+	   measured to need, 160 KB (60 hypertexts: 107 KB at the most while
+	   the index is built), growing by MEMKB= and PAGEKB= after; in TT RAM
+	   more, where it costs the programs nothing */
+	acc_heap_take(160L * 1024, 2048L * 1024, heapkb, memkb_boot);
 	if (n >= 0 && (inf_boot = malloc((size_t) n + 1)) != NULL)
 		memcpy(inf_boot, buf, (size_t) n + 1);
 
