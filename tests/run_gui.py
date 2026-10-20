@@ -39,7 +39,7 @@ TAB, RETURN, BACKSPACE, HELP, UNDO, ESC = 15, 28, 14, 0x62, 0x61, 1
 RIGHT, LEFT, Q, L, W, I, F, CTRL, SHIFT = 0x4D, 0x4B, 0x10, 0x26, 0x11, 0x17, 0x21, 29, 0x2A
 MINUS, EQUALS = 0x0C, 0x0D
 N, D, DELETE = 0x31, 0x20, 0x53
-DOWN = 0x50
+DOWN, UP = 0x50, 0x48
 IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
 COMMA, SEMICOLON, BACKSLASH = 0x33, 0x27, 0x2B
@@ -70,7 +70,7 @@ STEPS = [
     ([("ctrl+shift", F)], ["dialog font"]),
     ([LEFT, UNDO], ["dialog-closed font cancel", "!font *"]),
     ([("ctrl+shift", F)], ["dialog font"]),
-    ([LEFT, RETURN], ["dialog-closed font ok", "font System font 8"]),   # 8 x 8, kept in EHYPVIEW.INF
+    ([TAB, TAB, UP, RETURN], ["dialog-closed font ok", "font System font 8"]),   # Size: 8 x 8, kept in EHYPVIEW.INF
     # Settings (^,): Esc and Undo are Cancel, and nothing is written (3.5)
     ([("ctrl", COMMA)], ["dialog settings *"]),
     ([ESC], ["dialog-closed settings cancel", "!settings *"]),
@@ -671,8 +671,8 @@ ACC_FASTRAM_STEPS = [
 # case is skipped without it). Keyboard only, but for the desktop's Desk
 # menu, so no TOS's layout matters. Boot 1: EHYPVIEW.PRG (--auto) measures
 # the GDOS fonts in its selector (EHYPVIEW.FNT) and quits; the accessory,
-# opened from the desktop, picks the first monospaced GDOS font in its own
-# selector (the "font-family NAME mono|prop" lines say which): under 1.13's
+# opened from the desktop, picks the first GDOS font in its own Font dialog
+# (the "font-chosen NAME" line says which): under 1.13's
 # rule it is taken at the next boot (an alert), under NVDI with PR #32 at
 # once; then the accessory is closed and opened again. Boot 2, with FONT=
 # set: ASKHELP.PRG (--auto) asks the accessory for a page and quits, so the
@@ -684,31 +684,23 @@ DESK_ACC = [("still", 60), ("home",), ("click", 18, 8), ("click", 60, 64)]    # 
 
 
 def pick_gdos_font(rig):
-    """in the accessory's font selector: the first monospaced GDOS font"""
-    base = len(rig.seen)                        # the first family comes before "dialog font"
+    """in the accessory's Font dialog (common/ui/fontsel.c): the family
+    under the system font, the first GDOS font it lists (only the
+    fixed-width ones with letters are)"""
     rig.press(("ctrl+shift", F))
     if not rig.wait_for("dialog font"):
         return False
-
-    def families():
-        return [e[len("font-family "):] for e in rig.events()[base:] if e.startswith("font-family ")]
-
-    for _ in range(80):
-        fams = families()
-        last = fams[-1] if fams else ""
-        if last.endswith(" mono") and last[:-5] != "System font":
-            break
-        n = len(fams)
-        rig.press(DOWN)
-        deadline = time.time() + 8
-        while time.time() < deadline and len(families()) == n:
-            time.sleep(0.2)
-        if len(families()) == n:
-            print("      %s: no monospaced GDOS font in the list (%s)" % (rig.name, ", ".join(fams) or "none"))
-            return False
-    name = last[:-5]
+    rig.press(DOWN)
+    time.sleep(2)
     rig.press(RETURN)
     if not rig.wait_for("dialog-closed font ok"):
+        return False
+    if not rig.wait_for("font-chosen *"):
+        return False
+    chosen = [e for e in rig.events() if e.startswith("font-chosen ")][-1][len("font-chosen "):]
+    name = chosen.rsplit(" ", 1)[0]
+    if name == "System font":
+        print("      %s: no GDOS font in the list" % rig.name)
         return False
     k = rig.wait_any(["alert font-next-boot *", "font %s *" % name])
     if k < 0:

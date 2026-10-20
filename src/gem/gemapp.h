@@ -20,6 +20,7 @@ extern short ap_id, is_acc, quit_now;
 extern short vdi_h, cw, ch, planes, ncolors;  /* cw, ch: the text font's cell */
 extern short tall_pixels;                 /* twice as tall as wide (ST medium) */
 extern short sys_cw, sys_ch;              /* the system font's cell (menus, dialogs) */
+extern short ehv_ui_gl_wchar, ehv_ui_gl_hchar;  /* the same, for common/ui (ui.h) */
 extern short desk_x, desk_y, desk_w, desk_h;
 extern ehv_index *idx;
 
@@ -67,7 +68,7 @@ void app_bookmark_remove(int i);         /* Delete in the library, the menu */
    ';' line written above a new setting. 0 when written */
 int settings_put(const char *key, const char *value, const char *note);
 
-/* fontsel.c: the text font */
+/* font.c: the text font (its dialog: common/ui/fontsel.c) */
 /* the font from inf (its text and date, read once); EHYPVIEW.FNT in dir;
    the accessory: GDOS fonts now or not at all */
 void font_init(const char *dir, const char *inf, const char *text, const pf_info *info, int is_acc);

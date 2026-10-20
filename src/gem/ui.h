@@ -15,8 +15,10 @@
 #define TX_LTR     16
 #define TX_DIM     128
 
+#ifndef KEY_SCAN                       /* gemapp.h has them too */
 #define KEY_SCAN(k)  (((unsigned short) (k)) >> 8)
-#define KEY_ASCII(k) ((unsigned char) ((k) & 0xff))
+#define KEY_ASCII(k) ((k) & 0xff)
+#endif
 
 /* EHypView's own fill() and text_at() take other arguments */
 #define fill      ehv_ui_fill
@@ -29,7 +31,9 @@
 #define st_ram    ehv_ui_st_ram
 #define scr_w     ehv_ui_scr_w
 #define scr_h     ehv_ui_scr_h
-#define gl_wchar  sys_cw
-#define gl_hchar  sys_ch
+/* the AES's cell (EHypView's sys_cw, sys_ch: fontsel.c has statics of
+   that name) */
+#define gl_wchar  ehv_ui_gl_wchar
+#define gl_hchar  ehv_ui_gl_hchar
 
 #endif
