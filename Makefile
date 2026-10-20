@@ -33,7 +33,7 @@ XCFLAGS  = -O2 -fomit-frame-pointer
 # portable core (also built for the Atari) + the host platform layer
 CORE_PORT = src/core/lh5.c src/core/hypfile.c src/core/page.c src/core/charset.c \
             src/core/ref.c src/core/inf.c src/core/pool.c src/core/fsys.c \
-            src/core/index.c src/core/scan.c src/core/resolve.c src/core/plat.c \
+            src/core/index.c src/core/names.c src/core/scan.c src/core/resolve.c src/core/plat.c \
             src/core/search.c src/core/libjob.c
 CORE_SRC  = $(CORE_PORT) src/core/plat_posix.c
 VIEW_SRC  = src/view/view.c src/view/library.c src/view/fontpref.c src/view/bookmark.c

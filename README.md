@@ -69,7 +69,8 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
 
    EHypView looks through these folders in the background, in short steps that pause while you use
    the mouse or keyboard. Its index (`EHYPVIEW.IDX`) has the hypertexts ready without reading them
-   again: only new or changed files are read, and when nothing changed nothing is written.
+   again: only new or changed files are read, and when nothing changed nothing is written. The
+   pages' names stay in it, on the disk, and are read when a link or a search needs them.
 4. Press ^L for the library, Help for the hypertext's help page (in the library, EHypView's guide),
    ^, for the settings, and the right mouse button for a menu.
 
@@ -356,7 +357,7 @@ a tag `v1.1` made with `git tag -a` does the same, with the tag's message as the
 
 ```
 src/core/   the portable core, without GEM: .HYP files and LH5, pages, .REF and
-            ST-GUIDE.INF; the folder scanner and the index; links and help requests;
+            ST-GUIDE.INF; the folder scanner and the index (its names on the disk); links and help requests;
             the full-text search. Built for the Atari and for this computer
 src/view/   the viewer and the library without GEM (links, history, search, the
             font setting), tested on this computer

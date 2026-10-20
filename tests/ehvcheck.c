@@ -203,7 +203,7 @@ static void report_target(const char *what, const char *arg, const ehv_target *t
 	for (i = 0; i < t->nsuggest && i < 3; i++)
 	{
 		const char *s = t->status == EHV_NO_FILE ? idx->guides[t->suggest[i]].key
-			: idx->syms[t->suggest[i]].name;
+			: i < t->similar.n ? t->similar.s[i].name : "";
 
 		if (strlen(sugg) + strlen(s) + 2 < sizeof(sugg))
 		{

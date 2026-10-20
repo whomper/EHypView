@@ -74,8 +74,12 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   viewer window closes and at the end, never per page.
 - Disk access (guidelines 6.5): a file is looked at once and opened once a job (`pf_load`,
   `hyp_open` take size and date from the open file; listings carry them; `pf_look` and
-  `hyp_recent` hold an event's lookups); the INF is read once a start; the index is read in
-  32 KB (68000: 16 KB) pieces and written in one go. `make acc-files-test`
+  `hyp_recent` hold an event's lookups); the INF is read once a start; the index's head
+  (the hypertexts) is read in 32 KB (68000: 16 KB) pieces and written in one go. Its names
+  stay in the file (src/core/names.c: sorted 1 KB blocks, a lookup reads one or two, a search
+  reads them all in pieces with one open), built a 32 KB batch at a time (NAME.RUN when there
+  is more than one) and merged into NAME.ID$, written 32 KB (68000: 16 KB) at a time, which
+  the head finishes and makes EHYPVIEW.IDX. `make acc-files-test`
   (tests/hatari/acc_files.py) counts each job's opens and looks and fails above its budget;
   run it when file access changes.
 - Before pushing: `make test`, `make asan`, `make m68k-test`,

@@ -23,8 +23,7 @@ Each scenario is a boot of its own:
   3. the same, then 5 minutes idle (ACC_FILES_IDLE seconds)
   4. one guide changed and one added, at the next boot
   5. a page asked for by VA_START, as the Help keys do
-  6. (ACC_FILES_BIG=1) 60 guides of 112 pages, a 491 KB index: first and
-     up to date
+  6. (ACC_FILES_BIG=1) 60 guides of 112 pages: first and up to date
 
 Each job's opens and looks must stay in its budget: about one open per
 file the job touches, plus a safe save's rename; no file looked up one
@@ -300,13 +299,15 @@ def main():
     each("1. first index, no EHYPVIEW.IDX", calls, across, events, seen,
          "first event call to 'index saved': " + took(seen, "started", "index saved"))
     # INF, ST-GUIDE.INF (none), the IDX (none), each guide and .REF, the ID$
-    # (and EHYPVIEW.INF again for MEMKB=, read and written once)
-    budget = 3 + guides + refs + 1 + (2 if inf_written(calls) else 0)
+    # twice (its names as they are sorted, then its head), and EHYPVIEW.INF
+    # again for MEMKB=, read and written once
+    budget = 3 + guides + refs + 2 + (2 if inf_written(calls) else 0)
     check(opens(calls) <= budget, "1: %d opens (budget %d: one per file)" % (opens(calls), budget))
     check(looks(calls) <= roots + folders + 1, "1: %d looks (budget %d: the roots and folders once)"
           % (looks(calls), roots + folders + 1))
     rest = not_inf(calls)
-    check(count(rest, "Frename") == 1 and count(rest, "Fwrite") == 1, "1: the index written in one go")
+    check(count(rest, "Frename") == 1 and count(rest, "Fwrite") == 2,
+          "1: the index written in two goes: its names, its head")
     with open(os.path.join(C, "EHYPVIEW.INF"), "rb") as f:
         memkb = [l for l in f.read().decode("latin-1").splitlines() if l.startswith("MEMKB=")]
     check(len(memkb) == 1 and inf_written(calls) and count(calls, "Frename") == 2,
@@ -332,7 +333,9 @@ def main():
     calls, across, events = parse(tr)
     each("4. one guide changed, one added", calls, across, events, seen,
          "first event call to 'index saved': " + took(seen, "started", "index saved"))
-    budget = 3 + 3 + 1          # INF, ST-GUIDE.INF, IDX; BIG2.HYP, BIG2.REF, NEW.HYP; the ID$
+    # INF, ST-GUIDE.INF, IDX's head; BIG2.HYP, BIG2.REF, NEW.HYP; the IDX's
+    # names of the others (one read); the ID$ twice (names, head)
+    budget = 3 + 3 + 1 + 2
     check(opens(calls) <= budget, "4: %d opens (budget %d)" % (opens(calls), budget))
     check(looks(calls) <= roots + folders + 1, "4: %d looks (budget %d: the folders read once)"
           % (looks(calls), roots + folders + 1))
@@ -366,20 +369,28 @@ def main():
         each("6a. 60 guides, first index", calls, across, events, seen,
              "first event call to 'index saved': " + took(seen, "started", "index saved"))
         size = os.path.getsize(os.path.join(C, "EHYPVIEW.IDX"))
-        # the ID$ in one write when the accessory's heap (2 MB at most) has a
-        # piece for it; else a write per piece of at least 256 KB, each an open
-        writes = count(calls, "Fwrite")
-        check(writes <= 1 + size // (256 * 1024), "6a: the %d KB index in %d writes" % (size // 1024, writes))
-        check(opens(calls) <= 3 + 120 + writes, "6a: %d opens (budget %d: one per file and write)"
-              % (opens(calls), 3 + 120 + writes))
+        # the names sorted in batches of 32 KB (16 KB pieces on a 68000):
+        # each batch to EHYPVIEW.RUN in a write or two, then read back
+        # while they are merged into the ID$, written a piece at a time;
+        # then its head in one write
+        piece = 32768 if not MACHINE.startswith("ST") else 16384
+        idw = [c for c in calls if c["file"].endswith("EHYPVIEW.ID$")]
+        run = [c for c in calls if c["file"].endswith("EHYPVIEW.RUN")]
+        writes = count(idw, "Fwrite")
+        check(writes <= 2 + size // piece, "6a: the %d KB index in %d writes (%d KB pieces)"
+              % (size // 1024, writes, piece // 1024))
+        check(count(run, "Fopen") <= 2 * (size // piece + 1),
+              "6a: EHYPVIEW.RUN opened %d times (budget %d: each batch written once, read back once)"
+              % (count(run, "Fopen"), 2 * (size // piece + 1)))
+        budget = 3 + 120 + count(idw, "Fopen") + count(run, "Fopen")
+        check(opens(calls) <= budget, "6a: %d opens (budget %d: one per file and piece)" % (opens(calls), budget))
         tr, seen = boot("s6b", ["index unchanged"])
         calls, across, events = parse(tr)
         each("6b. 60 guides, index up to date", calls, across, events, seen,
              "first event call to 'index unchanged': " + took(seen, "started", "index unchanged"))
-        piece = 32768 if not MACHINE.startswith("ST") else 16384
-        want = 2 + (size + piece - 1) // piece
-        check(opens(calls) <= want, "6b: %d opens (budget %d: the %d KB index in %d KB pieces)"
-              % (opens(calls), want, size // 1024, piece // 1024))
+        want = 3
+        check(opens(calls) <= want, "6b: %d opens (budget %d: INF, ST-GUIDE.INF, the index's head in one go)"
+              % (opens(calls), want))
         check(looks(calls) <= 4, "6b: %d looks (the roots and the folder)" % looks(calls))
 
     say("%d failed" % fails)

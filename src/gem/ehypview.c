@@ -28,6 +28,7 @@
 #include "charset.h"
 #include "scan.h"
 #include "libjob.h"
+#include "names.h"
 #include "resolve.h"
 #include "view.h"
 #include "bookmark.h"
@@ -3133,6 +3134,7 @@ int main(void)
 	AEVENT ev;
 	const inf_file *inf;
 	int fts_busy = 0;
+	unsigned long misread = 0;
 	unsigned long t0 = tos_hz200();       /* not tos_ms(): it measures the clock first */
 
 	is_acc = _is_acc;
@@ -3377,6 +3379,13 @@ int main(void)
 			do
 				fts_busy = libwin_idle();
 			while (fts_busy && bg_more());
+		}
+		if (ehv_names_misread != misread && job == NULL)
+		{
+			/* EHYPVIEW.IDX was written again (by the program, or
+			   the accessory): read again */
+			misread = ehv_names_misread;
+			job_again();
 		}
 		if (which & (MU_MESAG | MU_KEYBD | MU_BUTTON))
 			update_menu();

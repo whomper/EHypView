@@ -34,6 +34,7 @@
 #include "resolve.h"
 #include "inf.h"
 #include "libjob.h"
+#include "names.h"
 
 static int failures, checks;
 static const char *fixdir;
@@ -167,25 +168,57 @@ static long guide_named(const ehv_index *idx, const char *tail)
 	return -1;
 }
 
-/* symbol of a guide by name and kind */
+/* all the names, in their order (a copy) */
+static void all_names(const ehv_index *idx, ehv_hits *out)
+{
+	ehv_names nm;
+	ehv_sym s;
+
+	ehv_hits_init(out);
+	if (ehv_names_open(&nm, idx, 4, 1) < 0)
+		return;
+	while (ehv_names_next(&nm, &s) == 1)
+		ehv_hits_add(out, &s);
+	ehv_names_close(&nm);
+}
+
+/* a guide's names (from_ref < 3: all; else not ALL.REF's) */
+static unsigned long names_of(const ehv_index *idx, long g, int from_ref)
+{
+	ehv_hits h;
+	unsigned long i, n = 0;
+
+	all_names(idx, &h);
+	for (i = 0; i < h.n; i++)
+		if (h.s[i].guide == (unsigned long) g && (from_ref < 0 || h.s[i].from_ref == from_ref))
+			n++;
+	ehv_hits_free(&h);
+	return n;
+}
+
+/* symbol of a guide by name and kind (until the next call) */
+static ehv_hits held;
+
 static const ehv_sym *sym_of(const ehv_index *idx, long g, const char *name, int kind)
 {
 	unsigned long i;
 
+	ehv_hits_free(&held);
 	if (g < 0)
 		return NULL;
-	for (i = idx->guides[g].first_sym; i < idx->guides[g].first_sym + idx->guides[g].nsyms; i++)
-		if (strcmp(idx->syms[i].name, name) == 0 && idx->syms[i].kind == kind)
-			return &idx->syms[i];
+	ehv_index_find_symbol(idx, name, g, &held, 64);
+	for (i = 0; i < held.n; i++)
+		if (strcmp(held.s[i].name, name) == 0 && held.s[i].kind == kind)
+			return &held.s[i];
 	return NULL;
 }
 
-static int has_suggestion_sym(const ehv_index *idx, const ehv_target *t, const char *name)
+static int has_suggestion_sym(const ehv_target *t, const char *name)
 {
-	unsigned int i;
+	unsigned long i;
 
-	for (i = 0; i < t->nsuggest; i++)
-		if (strcmp(idx->syms[t->suggest[i]].name, name) == 0)
+	for (i = 0; i < t->similar.n; i++)
+		if (strcmp(t->similar.s[i].name, name) == 0)
 			return 1;
 	return 0;
 }
@@ -296,6 +329,7 @@ static void test_scan(const ehv_index *idx, const ehv_scan_status *st)
 	long broken = guide_named(idx, "/r2/broken.hyp");
 	unsigned long hits[8], n;
 	const ehv_sym *s;
+	ehv_hits h;
 	unsigned long i;
 	int ghost = 0;
 
@@ -335,11 +369,8 @@ static void test_scan(const ehv_index *idx, const ehv_scan_status *st)
 	s = sym_of(idx, b2, "Zweite", EHV_SYM_ALIAS);
 	CHECK(s && s->from_ref == 2);
 	/* ... but never replaces the guide's own REF data */
-	n = 0;
-	for (i = idx->guides[b1].first_sym; i < idx->guides[b1].first_sym + idx->guides[b1].nsyms; i++)
-		if (idx->syms[i].from_ref == 2)
-			n++;
-	CHECK(n == 0);
+	CHECK(names_of(idx, b1, 2) == 0);
+	CHECK(names_of(idx, b1, -1) == idx->guides[b1].nsyms && idx->guides[b1].nsyms > 0);
 	for (i = 0; i < idx->norphans; i++)
 		if (strcmp(idx->orphans[i], "ghost.hyp") == 0)
 			ghost = 1;
@@ -354,15 +385,21 @@ static void test_scan(const ehv_index *idx, const ehv_scan_status *st)
 	CHECK(ehv_index_find_guides(idx, "nosuch.hyp", hits, 8) == 0);
 	CHECK(ehv_index_find_path(idx, idx->guides[img].path) == img);
 
-	n = ehv_index_find_symbol(idx, "Second", -1, hits, 8);
-	CHECK(n == 2 && idx->syms[hits[0]].guide == (unsigned long) b1);
-	n = ehv_index_find_symbol(idx, "second", -1, hits, 8);
-	CHECK(n == 2);
-	n = ehv_index_find_symbol(idx, "Zweite", -1, hits, 8);
-	CHECK(n == 2 && idx->syms[hits[0]].from_ref == 1);
-	n = ehv_index_find_symbol(idx, "Detail", other, hits, 8);
-	CHECK(n == 1);
-	CHECK(ehv_index_find_symbol(idx, "Detail", b1, hits, 8) == 0);
+	ehv_hits_init(&h);
+	n = ehv_index_find_symbol(idx, "Second", -1, &h, 8);
+	CHECK(n == 2 && h.n == 2 && h.s[0].guide == (unsigned long) b1);
+	ehv_hits_free(&h);
+	n = ehv_index_find_symbol(idx, "second", -1, &h, 8);
+	CHECK(n == 2 && h.n == 2 && strcmp(h.s[0].name, "Second") == 0);
+	ehv_hits_free(&h);
+	n = ehv_index_find_symbol(idx, "Zweite", -1, &h, 8);
+	CHECK(n == 2 && h.s[0].from_ref == 1);
+	ehv_hits_free(&h);
+	n = ehv_index_find_symbol(idx, "Detail", other, &h, 8);
+	CHECK(n == 1 && h.n == 1);
+	ehv_hits_free(&h);
+	CHECK(ehv_index_find_symbol(idx, "Detail", b1, NULL, 8) == 0);
+	CHECK(ehv_index_find_symbol(idx, "Second", -1, NULL, 0) == 2);
 
 	n = ehv_index_suggest_guides(idx, "othr", hits, 8);
 	CHECK(n >= 1 && hits[0] == (unsigned long) other);
@@ -406,7 +443,7 @@ static void test_resolve(const ehv_index *idx)
 
 	CHECK(ehv_resolve_xref(&ctx, "other.hyp/Strat", &t) == EHV_NO_NODE);
 	CHECK(t.guide == other && t.path != NULL && t.node == NULL);
-	CHECK(has_suggestion_sym(idx, &t, "Start"));
+	CHECK(has_suggestion_sym(&t, "Start"));
 	ehv_target_free(&t);
 
 	CHECK(ehv_resolve_xref(&ctx, "othr.hyp/Start", &t) == EHV_NO_FILE);
@@ -437,7 +474,7 @@ static void test_resolve(const ehv_index *idx)
 
 	ctx.current = NULL;
 	CHECK(ehv_resolve_name(&ctx, "Second", &t) == EHV_FOUND);
-	CHECK(t.guide == b1 && t.nalt == 1 && idx->syms[t.alt[0]].guide == (unsigned long) b2);
+	CHECK(t.guide == b1 && t.nalt == 1 && t.alt[0] == (unsigned long) b2);
 	ehv_target_free(&t);
 
 	CHECK(ehv_resolve_name(&ctx, "Anfang", &t) == EHV_FOUND);
@@ -449,11 +486,11 @@ static void test_resolve(const ehv_index *idx)
 	ehv_target_free(&t);
 
 	CHECK(ehv_resolve_name(&ctx, "Secnd", &t) == EHV_NOT_FOUND && t.path == NULL);
-	CHECK(has_suggestion_sym(idx, &t, "Second"));
+	CHECK(has_suggestion_sym(&t, "Second"));
 	ehv_target_free(&t);
 
 	CHECK(ehv_resolve_name(&ctx, "Detial", &t) == EHV_NOT_FOUND);
-	CHECK(has_suggestion_sym(idx, &t, "Detail"));
+	CHECK(has_suggestion_sym(&t, "Detail"));
 	ehv_target_free(&t);
 
 	/* help requests */
@@ -512,15 +549,29 @@ static void test_split_args(void)
 
 static unsigned long own_syms(const ehv_index *idx, long g)
 {
-	unsigned long i, n = 0;
-
-	for (i = idx->guides[g].first_sym; i < idx->guides[g].first_sym + idx->guides[g].nsyms; i++)
-		if (idx->syms[i].from_ref != 2)
-			n++;
-	return n;
+	return names_of(idx, g, 0) + names_of(idx, g, 1);
 }
 
-static void test_cache(const ehv_index *idx, const ref_db *allref)
+/* the same names, in the same order */
+static int same_names(const ehv_index *a, const ehv_index *b)
+{
+	ehv_hits x, y;
+	unsigned long k;
+	int same;
+
+	all_names(a, &x);
+	all_names(b, &y);
+	same = x.n == y.n && x.n == a->nsyms && y.n == b->nsyms;
+	for (k = 0; same && k < x.n; k++)
+		same = strcmp(x.s[k].name, y.s[k].name) == 0 && strcmp(x.s[k].node, y.s[k].node) == 0 &&
+		       x.s[k].guide == y.s[k].guide && x.s[k].kind == y.s[k].kind &&
+		       x.s[k].from_ref == y.s[k].from_ref && x.s[k].line == y.s[k].line;
+	ehv_hits_free(&x);
+	ehv_hits_free(&y);
+	return same;
+}
+
+static void test_cache(ehv_index *idx, const ref_db *allref)
 {
 	const char *cache = tp("cache.idx");
 	ehv_index *loaded, *again;
@@ -550,22 +601,17 @@ static void test_cache(const ehv_index *idx, const ref_db *allref)
 		CHECK((loaded->guides[lg].database == NULL) == (idx->guides[g].database == NULL));
 	}
 	{
-		unsigned long hit;
-
-		CHECK(ehv_index_find_symbol(loaded, "Detail", -1, &hit, 1) == 1);
-		/* ALL.REF's names are kept too (version 2), with the tables */
-		CHECK(ehv_index_find_symbol(loaded, "Zweite", -1, &hit, 1) ==
-		      ehv_index_find_symbol(idx, "Zweite", -1, &hit, 1));
+		CHECK(ehv_index_find_symbol(loaded, "Detail", -1, NULL, 1) == 1);
+		/* ALL.REF's names are kept too, with the tables */
+		CHECK(ehv_index_find_symbol(loaded, "Zweite", -1, NULL, 1) ==
+		      ehv_index_find_symbol(idx, "Zweite", -1, NULL, 1));
 		CHECK(loaded->nsyms == idx->nsyms && loaded->norphans == idx->norphans);
-		CHECK(!loaded->old_file);
 		CHECK(memcmp(loaded->by_key, idx->by_key, idx->nguides * sizeof(unsigned long)) == 0);
 		CHECK(memcmp(loaded->by_path, idx->by_path, idx->nguides * sizeof(unsigned long)) == 0);
-		CHECK(memcmp(loaded->by_name, idx->by_name, idx->nsyms * sizeof(unsigned long)) == 0);
-		for (g = 0; g < idx->nsyms; g++)
-			if (strcmp(loaded->syms[g].name, idx->syms[g].name) != 0 ||
-			    loaded->syms[g].guide != idx->syms[g].guide)
-				break;
-		CHECK(g == idx->nsyms);
+		CHECK(same_names(loaded, idx));
+		/* the names stay in the file: the saved index reads them there too */
+		CHECK(loaded->mem == NULL && loaded->file != NULL && loaded->nblocks > 0);
+		CHECK(idx->mem == NULL && idx->file != NULL && strcmp(idx->file, cache) == 0);
 	}
 
 	/* rescan with the cache: nothing is read again */
@@ -610,7 +656,17 @@ static void test_cache(const ehv_index *idx, const ref_db *allref)
 
 		data[pos] = (char) (k % 3 == 0 ? '\t' : k % 3 == 1 ? '\n' : (char) (save ^ 0x55));
 		write_file(cache, data, (size_t) size);
-		ehv_index_free(ehv_index_load(cache));
+		if ((again = ehv_index_load(cache)) != NULL)
+		{
+			/* its names read, whatever they are now */
+			ehv_hits h;
+
+			all_names(again, &h);
+			ehv_hits_free(&h);
+			ehv_index_find_symbol(again, "Second", -1, NULL, 8);
+			ehv_index_suggest(again, "Secnd", -1, NULL, 8);
+		}
+		ehv_index_free(again);
 		data[pos] = save;
 	}
 	free(data);
@@ -620,31 +676,37 @@ static void test_cache(const ehv_index *idx, const ref_db *allref)
 /* ---------------------------------------------------------------- */
 /* the library's index in short steps (libjob.h)                     */
 
-/* the tables in the order the lookups expect */
+/* the tables and the names in the order the lookups expect */
 static int tables_sorted(const ehv_index *idx)
 {
-	unsigned long k;
+	ehv_hits h;
+	unsigned long k, n = 0;
+	int ok = 1;
 
-	for (k = 0; k + 1 < idx->nsyms; k++)
+	all_names(idx, &h);
+	if (h.n != idx->nsyms)
+		ok = 0;
+	for (k = 0; ok && k + 1 < h.n; k++)
 	{
-		const ehv_sym *a = &idx->syms[idx->by_name[k]], *b = &idx->syms[idx->by_name[k + 1]];
+		const ehv_sym *a = &h.s[k], *b = &h.s[k + 1];
 		int c = atari_casecmp(a->name, b->name);
 
 		if (c > 0)
-			return 0;
+			ok = 0;
 		if (c == 0 && a->kind == b->kind && idx->guides[a->guide].root == idx->guides[b->guide].root &&
-		    idx->by_name[k] > idx->by_name[k + 1])
-			return 0;                      /* not stable */
+		    a->guide > b->guide)
+			ok = 0;                        /* not by guide */
 	}
+	for (k = 0; k < idx->nguides; k++)
+		n += idx->guides[k].nsyms;
+	if (n != idx->nsyms)
+		ok = 0;
+	ehv_hits_free(&h);
 	for (k = 0; k + 1 < idx->nguides; k++)
 		if (strcmp(idx->guides[idx->by_path[k]].path, idx->guides[idx->by_path[k + 1]].path) > 0 ||
 		    atari_casecmp(idx->guides[idx->by_key[k]].key, idx->guides[idx->by_key[k + 1]].key) > 0)
-			return 0;
-	for (k = 0; k < idx->nsyms; k++)          /* grouped by guide */
-		if (k < idx->guides[idx->syms[k].guide].first_sym ||
-		    k >= idx->guides[idx->syms[k].guide].first_sym + idx->guides[idx->syms[k].guide].nsyms)
-			return 0;
-	return 1;
+			ok = 0;
+	return ok;
 }
 
 static int same_index(const ehv_index *a, const ehv_index *b)
@@ -655,13 +717,9 @@ static int same_index(const ehv_index *a, const ehv_index *b)
 		return 0;
 	for (k = 0; k < a->nguides; k++)
 		if (strcmp(a->guides[k].path, b->guides[k].path) != 0 || a->by_key[k] != b->by_key[k] ||
-		    a->by_path[k] != b->by_path[k] || a->guides[k].first_sym != b->guides[k].first_sym)
+		    a->by_path[k] != b->by_path[k] || a->guides[k].nsyms != b->guides[k].nsyms)
 			return 0;
-	for (k = 0; k < a->nsyms; k++)
-		if (strcmp(a->syms[k].name, b->syms[k].name) != 0 || a->by_name[k] != b->by_name[k] ||
-		    a->syms[k].from_ref != b->syms[k].from_ref)
-			return 0;
-	return 1;
+	return same_names(a, b);
 }
 
 /* the lowest file number free: the same before and after a step when
@@ -722,47 +780,106 @@ static ehv_index *run_job_counted(const char *cache, const char *allref, int *ni
 	return idx;
 }
 
-/* the index file in pieces: written from a small buffer, read a small
-   piece a step, each piece one open (the AERA guidelines, 6.5) */
-static void test_pieces(void)
+/* the index file in pieces: written from a small buffer, its head read
+   a small piece a step, each piece one open (the AERA guidelines, 6.5);
+   the names sorted a batch at a time, through NAME.RUN */
+static ehv_index *pieces_index(const char *build_to)
 {
-	ehv_index *idx = ehv_index_new(), *back = NULL;
+	ehv_index *idx = ehv_index_new();
 	ehv_guide g;
-	ehv_loader *l;
-	unsigned long i, o0, size;
-	char name[32];
-	pf_info st;
-	int r;
+	unsigned long i;
+	char name[32], node[32];
 
 	memset(&g, 0, sizeof(g));
 	g.path = "C:\\GUIDES\\PIECES.HYP";
 	g.size = 1234;
 	CHECK(idx != NULL && ehv_index_add_guide(idx, &g) == 0);
+	g.path = "C:\\GUIDES\\MORE.HYP";
+	CHECK(idx != NULL && ehv_index_add_guide(idx, &g) == 1);
+	if (idx != NULL && build_to != NULL)
+		CHECK(ehv_index_build_to(idx, build_to) == 0);
 	for (i = 0; idx != NULL && i < 3000; i++)
 	{
-		sprintf(name, "page number %05lu", i);
-		CHECK(ehv_index_add_sym(idx, 0, EHV_SYM_NODE, 0, name, NULL, 0) == 0);
+		/* in an order that isn't the names' */
+		unsigned long k = (i * 7919UL) % 3000;
+
+		sprintf(name, "page number %05lu", k);
+		sprintf(node, "Node %lu", k / 10);
+		CHECK(ehv_index_add_sym(idx, k % 2, k % 3 == 0 ? EHV_SYM_ALIAS : EHV_SYM_NODE, 0, name,
+					k % 3 == 0 ? node : NULL, 0) == 0);
+		while (ehv_index_build_busy(idx))
+			CHECK(ehv_index_build_step(idx) >= 0);
 	}
 	CHECK(idx != NULL && ehv_index_finish(idx) == 0);
+	return idx;
+}
+
+static void test_pieces(void)
+{
+	ehv_index *idx, *back = NULL, *batched;
+	ehv_loader *l;
+	unsigned long o0, size, head;
+	pf_info st;
+	ehv_hits h;
+	int r, more;
+
+	idx = pieces_index(NULL);
 	if (idx == NULL)
 		return;
+	CHECK(idx->mem != NULL && idx->file == NULL && idx->nsyms == 3000 && tables_sorted(idx));
+	CHECK(idx->guides[0].nsyms == 1500 && idx->guides[1].nsyms == 1500);
+	ehv_hits_init(&h);
+	CHECK(ehv_index_find_symbol(idx, "PAGE NUMBER 01233", -1, &h, 4) == 1 && h.n == 1 &&
+	      h.s[0].guide == 1 && h.s[0].kind == EHV_SYM_ALIAS && strcmp(h.s[0].node, "Node 123") == 0);
+	ehv_hits_free(&h);
+
+	/* sorted a batch at a time, the batches in memory, or in NAME.RUN
+	   and the blocks in NAME.ID$: the same names */
+	ehv_index_batch(4096);
+	batched = pieces_index(NULL);
+	CHECK(batched != NULL && same_names(batched, idx) && tables_sorted(batched));
+	ehv_index_free(batched);
+	batched = pieces_index(tp("batch.idx"));
+	CHECK(batched != NULL && batched->file != NULL && batched->mem == NULL && same_names(batched, idx));
+	CHECK(pf_stat(tp("batch.RUN"), &st) != 0);          /* gone once merged */
+	CHECK(pf_stat(tp("batch.id$"), &st) == 0 && st.size == batched->nblocks * EHV_BLOCK);
+	CHECK(batched != NULL && ehv_index_save(batched, tp("batch.idx")) == 0);
+	CHECK(pf_stat(tp("batch.id$"), &st) != 0 && pf_stat(tp("batch.idx"), &st) == 0);
+	CHECK(batched != NULL && strcmp(batched->file, tp("batch.idx")) == 0 && same_names(batched, idx));
+	ehv_index_free(batched);
+	back = ehv_index_load(tp("batch.idx"));
+	CHECK(back != NULL && same_index(back, idx));
+	ehv_index_free(back);
+	back = NULL;
+	remove(tp("batch.idx"));
+	ehv_index_batch(32768);
 
 	ehv_index_pieces(4096, 16384);
 	o0 = pf_opens;
 	{
 		/* in steps, as the library job does: a buffer at a time, each
-		   one open */
+		   one open at the most */
 		ehv_saver *v = ehv_index_save_begin(idx, tp("pieces.idx"));
 
 		CHECK(v != NULL);
-		while (v != NULL && (r = ehv_index_save_some(v, 1)) == 0)
-			;
-		CHECK(v != NULL && r == 1);
+		more = 0;
+		while (v != NULL)
+		{
+			unsigned long o1 = pf_opens;
+
+			r = ehv_index_save_some(v, 1);
+			more += pf_opens - o1 > 1;
+			if (r != 0)
+				break;
+		}
+		CHECK(v != NULL && r == 1 && more == 0);
 		ehv_index_save_abort(v);
 	}
-	CHECK(pf_stat(tp("pieces.idx"), &st) == 0 && st.size > 3 * 16384);
+	CHECK(pf_stat(tp("pieces.idx"), &st) == 0 && st.size > idx->nblocks * EHV_BLOCK);
+	CHECK(pf_opens - o0 >= 2);
 	size = st.size;
-	CHECK(pf_opens - o0 >= size / 16384 && pf_opens - o0 <= size / 16384 + 2);
+	head = size - idx->nblocks * EHV_BLOCK - 32;
+	CHECK(idx->mem == NULL && idx->file != NULL && same_names(idx, idx));
 
 	o0 = pf_opens;
 	l = ehv_index_load_begin(tp("pieces.idx"));
@@ -774,18 +891,44 @@ static void test_pieces(void)
 		back = ehv_index_load_take(l);
 	else
 		ehv_index_load_abort(l);
+	CHECK(pf_opens - o0 == (head + 4095) / 4096);    /* the head only, a piece a step, each one open */
 	CHECK(back != NULL && same_index(back, idx));
-	CHECK(pf_opens - o0 == (size + 4095) / 4096);    /* a piece a step, each one open */
 
-	/* the whole file in one read and one write when they fit */
+	/* the whole head in one read and one write when they fit */
 	ehv_index_pieces(1024L * 1024, 1024L * 1024);
 	o0 = pf_opens;
 	CHECK(ehv_index_save(idx, tp("pieces.idx")) == 0);
-	CHECK(pf_opens - o0 == 1);
+	CHECK(pf_opens - o0 == 2);                      /* the blocks read, the file written */
 	ehv_index_free(back);
 	o0 = pf_opens;
 	back = ehv_index_load(tp("pieces.idx"));
-	CHECK(back != NULL && same_index(back, idx) && pf_opens - o0 == 1);
+	CHECK(pf_opens - o0 == 1);
+	CHECK(back != NULL && same_index(back, idx));
+
+	/* a name looked up: one open, a block or two read */
+	o0 = pf_opens;
+	CHECK(back != NULL && ehv_index_find_symbol(back, "page number 02999", 0, NULL, 1) == 0 &&
+	      ehv_index_find_symbol(back, "page number 02999", 1, NULL, 1) == 1);
+	CHECK(pf_opens - o0 == 2);
+
+	/* the hypertexts taken from it, one read again */
+	{
+		ehv_index *re = ehv_index_new();
+		ehv_guide g;
+
+		memset(&g, 0, sizeof(g));
+		g.path = "C:\\GUIDES\\NEW.HYP";
+		CHECK(re != NULL && back != NULL && ehv_index_add_guide(re, &back->guides[1]) == 0 &&
+		      ehv_index_take_names(re, back, 1, 0) == 0 && ehv_index_add_guide(re, &g) == 1 &&
+		      ehv_index_add_sym(re, 1, EHV_SYM_NODE, 0, "page number 00001", NULL, 0) == 0 &&
+		      ehv_index_finish(re) == 0);
+		CHECK(re != NULL && re->nsyms == 1501 && re->guides[0].nsyms == 1500 && tables_sorted(re));
+		ehv_hits_init(&h);
+		CHECK(re != NULL && ehv_index_find_symbol(re, "page number 00001", -1, &h, 4) == 2 &&
+		      h.n == 2 && h.s[0].guide == 0 && h.s[1].guide == 1);
+		ehv_hits_free(&h);
+		ehv_index_free(re);
+	}
 	ehv_index_free(back);
 	ehv_index_free(idx);
 	ehv_index_pieces(32768, 32768);
@@ -817,16 +960,16 @@ static void test_libjob(const ref_db *db)
 	CHECK(pf_stat(cache, &before) == 0);
 	ehv_index_free(got);
 	/* every folder looked at once; each hypertext (the damaged ones too)
-	   and .REF opened once,
-	   ALL.REF, and the index (looked for, then written): the AERA
-	   guidelines, 6.5 */
+	   and .REF opened once, ALL.REF, and the index (looked for, its
+	   names written as they are sorted, here in one go, then its head):
+	   the AERA guidelines, 6.5 */
 	looks = job_looks;
 	{
 		unsigned long g, refs = 0;
 
 		for (g = 0; want != NULL && g < want->nguides; g++)
 			refs += want->guides[g].ref_path != NULL;
-		CHECK(job_opens == st.opened + st.failed + refs + 3);
+		CHECK(job_opens == st.opened + st.failed + refs + 4);
 	}
 
 	/* again: the index read is handed out, nothing changed, nothing
@@ -869,8 +1012,9 @@ static void test_libjob(const ref_db *db)
 	got = run_job(cache, allref, &n, &same, &steps);
 	CHECK(got != NULL && n == 2 && !same && tables_sorted(got));
 	/* the folders read once (the checking pass's, taken by the building
-	   one); the index, the changed hypertext, ALL.REF, the new index */
-	CHECK(job_looks == looks && job_opens <= 4);
+	   one); the index's head, the changed hypertext, ALL.REF, the old
+	   index's names (one read), the new index's names and its head */
+	CHECK(job_looks == looks && job_opens <= 6);
 	ehv_index_free(got);
 
 	/* one gone, then back: built again each time */
@@ -891,47 +1035,18 @@ static void test_libjob(const ref_db *db)
 		ehv_index_free(got);
 	}
 
-	/* a version 1 file (EHypView 1.6): read, sorted, written again as 2 */
+	/* a version 2 file (EHypView 1.15, all text): not read, built again */
+	write_file(cache, "EHYPVIEW-INDEX 2\nC\t0\t0\nEND\t0\t0\n", 31);
+	CHECK(ehv_index_load(cache) == NULL);
+	got = run_job(cache, allref, &n, &same, &steps);
+	CHECK(got != NULL && n == 1 && !same && same_index(got, want) && tables_sorted(got));
+	ehv_index_free(got);
 	text = pf_load(cache, &len);
-	CHECK(text != NULL);
-	if (text != NULL)
-	{
-		char *v1 = malloc(len + 1), *line, *o = v1;
-		unsigned long nsyms = 0, nguides = 0;
-
-		for (line = strtok(text, "\n"); line != NULL; line = strtok(NULL, "\n"))
-		{
-			if (strncmp(line, "EHYPVIEW-INDEX", 14) == 0)
-				o += sprintf(o, "EHYPVIEW-INDEX 1\n");
-			else if (line[0] == 'G')
-				o += sprintf(o, "%s\n", line), nguides++;
-			else if (line[0] == 'M')
-				o += sprintf(o, "%s\n", line);
-			if (line[0] == 'N')
-			{
-				char kind[8], ln[8], from[8];
-
-				if (sscanf(line, "N\t%7[^\t]\t%7[^\t]\t%7[^\t]", kind, ln, from) == 3 && strcmp(from, "2") != 0)
-					o += sprintf(o, "%s\n", line), nsyms++;
-			}
-		}
-		o += sprintf(o, "END\t%lu\t%lu\n", nguides, nsyms);
-		write_file(cache, v1, (size_t) (o - v1));
-		free(v1);
-		free(text);
-		got = ehv_index_load(cache);
-		CHECK(got != NULL && got->old_file && tables_sorted(got));
-		ehv_index_free(got);
-		got = run_job(cache, allref, &n, &same, &steps);
-		CHECK(got != NULL && n == 2 && !same && tables_sorted(got));
-		ehv_index_free(got);
-		text = pf_load(cache, &len);
-		CHECK(text != NULL && strncmp(text, "EHYPVIEW-INDEX 2\n", 17) == 0);
-		free(text);
-		got = run_job(cache, allref, &n, &same, &steps);
-		CHECK(got != NULL && n == 1 && same);
-		ehv_index_free(got);
-	}
+	CHECK(text != NULL && len > 32 && strncmp(text + len - 32, "\nEHV ", 5) == 0);
+	free(text);
+	got = run_job(cache, allref, &n, &same, &steps);
+	CHECK(got != NULL && n == 1 && same);
+	ehv_index_free(got);
 	ehv_index_free(want);
 }
 

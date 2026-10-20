@@ -10,6 +10,7 @@
 #include "hypfile.h"
 #include "fsys.h"
 #include "library.h"
+#include "names.h"
 
 #define MAX_PAGE_ROWS 100
 #define ENOUGH_FOR_NO_SIMILAR 20
@@ -31,6 +32,7 @@ void lib_init(ehv_library *lib, const ehv_index *idx)
 void lib_free(ehv_library *lib)
 {
 	ehv_fts_free(lib->fts);
+	ehv_hits_free(&lib->found);
 	free(lib->rows);
 	free(lib->order);
 	free(lib->tint);
@@ -424,102 +426,72 @@ static int contains(const char *s, const char *q)
 	return 0;
 }
 
-typedef struct {
-	unsigned long sym;
-	unsigned int rank;
-} match;
-
-static int cmp_match(const void *x, const void *y)
-{
-	const match *a = x, *b = y;
-	const ehv_sym *s = &cmp_idx->syms[a->sym], *t = &cmp_idx->syms[b->sym];
-	int c;
-
-	if (a->rank != b->rank)
-		return a->rank < b->rank ? -1 : 1;
-	if ((c = atari_casecmp(s->name, t->name)) != 0)
-		return c;
-	if (cmp_idx->guides[s->guide].root != cmp_idx->guides[t->guide].root)
-		return cmp_idx->guides[s->guide].root < cmp_idx->guides[t->guide].root ? -1 : 1;
-	return a->sym < b->sym ? -1 : a->sym > b->sym;
-}
-
-/* rank 0 same name, 1 starts with, 2 contains, 3 similar */
+/*
+ * The names found: rank 0 the same name, 1 starting with it, 2
+ * containing it, 3 similar (when the others are few), each in the names'
+ * order.  The names are read through once, from the index file (a piece
+ * at a time, one open), and kept for the search: a list rebuilt for
+ * another reason (a full-text hit, a bookmark) doesn't read them again.
+ */
 static int build_pages(ehv_library *lib, const char *folded)
 {
 	const ehv_index *idx = lib->idx;
 	size_t ql = strlen(folded);
-	match *m;
-	unsigned long n = 0, i, cap = 64;
-	int pass;
+	unsigned int limit = ql <= 4 ? 1 : ql <= 8 ? 2 : 3;
+	unsigned long plain = 0, i;
+	ehv_hits rank[4];
+	ehv_names nm;
+	ehv_sym s;
+	int k, rc = 0;
 
-	m = malloc(cap * sizeof(match));
-	if (m == NULL)
-		return -1;
-	for (pass = 0; pass < 2; pass++)
+	if (lib->found_of != idx || strcmp(lib->found_q, lib->query) != 0)
 	{
-		unsigned int limit = ql <= 4 ? 1 : ql <= 8 ? 2 : 3;
-
-		/* similar names only when the plain matches are few */
-		if (pass == 1 && (n >= ENOUGH_FOR_NO_SIMILAR || ql < 3))
-			break;
-		for (i = 0; i < idx->nsyms; i++)
+		ehv_hits_free(&lib->found);
+		lib->found_of = NULL;
+		for (k = 0; k < 4; k++)
+			ehv_hits_init(&rank[k]);
+		if (ehv_names_open(&nm, idx, ehv_names_piece(), 1) < 0)
+			return -1;
+		while (rc == 0 && ehv_names_next(&nm, &s) == 1)
 		{
-			const char *name = idx->syms[i].name;
-			int rank;
-
-			if (pass == 0)
-			{
-				if (atari_casecmp(name, lib->query) == 0)
-					rank = 0;
-				else if (atari_ncasecmp(name, lib->query, ql) == 0)
-					rank = 1;
-				else if (contains(name, folded))
-					rank = 2;
-				else
-					continue;
-			} else
-			{
-				if (contains(name, folded) || ehv_similarity(lib->query, name, limit) > limit)
-					continue;
-				rank = 3;
-			}
-			if (n == cap)
-			{
-				match *p = realloc(m, cap * 2 * sizeof(match));
-
-				if (p == NULL)
-				{
-					free(m);
-					return -1;
-				}
-				m = p;
-				cap *= 2;
-			}
-			m[n].sym = i;
-			m[n].rank = (unsigned int) rank;
-			n++;
+			if (atari_casecmp(s.name, lib->query) == 0)
+				k = 0;
+			else if (atari_ncasecmp(s.name, lib->query, ql) == 0)
+				k = 1;
+			else if (contains(s.name, folded))
+				k = 2;
+			else if (plain < ENOUGH_FOR_NO_SIMILAR && ql >= 3 && ehv_similarity(lib->query, s.name, limit) <= limit)
+				k = 3;
+			else
+				continue;
+			if (k < 3)
+				plain++;
+			if (rank[k].n < MAX_PAGE_ROWS && ehv_hits_add(&rank[k], &s) < 0)
+				rc = -1;
 		}
-	}
-	cmp_idx = idx;
-	qsort(m, n, sizeof(match), cmp_match);
-	if (n > MAX_PAGE_ROWS)
-		n = MAX_PAGE_ROWS;
-	lib->npages = n;
-	if (n > 0 && add_row(lib, LIB_GROUP, 0, "Pages") < 0)
-	{
-		free(m);
-		return -1;
-	}
-	for (i = 0; i < n; i++)
-	{
-		if (add_row(lib, LIB_PAGE, m[i].sym, NULL) < 0)
+		ehv_names_close(&nm);
+		/* similar names only when the plain matches are few */
+		for (k = 0; k < 4; k++)
 		{
-			free(m);
+			for (i = 0; i < rank[k].n; i++)
+				if (rc == 0 && lib->found.n < MAX_PAGE_ROWS && (k < 3 || plain < ENOUGH_FOR_NO_SIMILAR))
+					rc = ehv_hits_add(&lib->found, &rank[k].s[i]);
+			ehv_hits_free(&rank[k]);
+		}
+		if (rc < 0)
+		{
+			ehv_hits_free(&lib->found);
 			return -1;
 		}
+		lib->found_of = idx;
+		strcpy(lib->found_q, lib->query);
 	}
-	free(m);
+	lib->npages = lib->found.n;
+	if (lib->found.n > 0 && add_row(lib, LIB_GROUP, 0, "Pages") < 0)
+		return -1;
+	for (i = 0; i < lib->found.n; i++)
+		if (add_row(lib, LIB_PAGE, i, NULL) < 0)
+			return -1;
 	return 0;
 }
 
@@ -666,6 +638,8 @@ int lib_set_index(ehv_library *lib, const ehv_index *idx)
 	lib->fts = NULL;
 	lib->idx = idx;
 	lib->order_of = NULL;             /* made again, even at the same address */
+	lib->found_of = NULL;
+	ehv_hits_free(&lib->found);
 	return rebuild(lib, 0, 0);
 }
 
@@ -839,7 +813,7 @@ int lib_activate(ehv_library *lib, const char **path, const char **node, unsigne
 		return LIB_OPEN;
 	case LIB_PAGE:
 		{
-			const ehv_sym *s = &lib->idx->syms[r->ref];
+			const ehv_sym *s = &lib->found.s[r->ref];
 
 			*path = lib->idx->guides[s->guide].path;
 			*node = s->node;
@@ -919,7 +893,7 @@ void lib_row_text(const ehv_library *lib, unsigned long row, char *buf, unsigned
 		break;
 	case LIB_PAGE:
 		{
-			const ehv_sym *s = &lib->idx->syms[r->ref];
+			const ehv_sym *s = &lib->found.s[r->ref];
 
 			if (s->kind == EHV_SYM_ALIAS)
 				snprintf(buf, size, "  %s -> %s", s->name, s->node);
@@ -971,7 +945,7 @@ void lib_row_detail(const ehv_library *lib, unsigned long row, char *buf, unsign
 		snprintf(buf, size, "%s", lib->idx->guides[r->ref].key);
 		break;
 	case LIB_PAGE:
-		snprintf(buf, size, "%s", guide_title(&lib->idx->guides[lib->idx->syms[r->ref].guide]));
+		snprintf(buf, size, "%s", guide_title(&lib->idx->guides[lib->found.s[r->ref].guide]));
 		break;
 	case LIB_TEXT:
 		{

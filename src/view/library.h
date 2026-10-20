@@ -55,7 +55,7 @@ typedef struct {
 	unsigned char kind;
 	unsigned char flags;  /* GROUP: LIB_FOLDS, LIB_FOLDED          */
 	unsigned char tint;   /* GROUP, GUIDE: the subject's tint      */
-	unsigned long ref;    /* GUIDE: guide; PAGE: symbol; TEXT: hit; BOOKMARK,
+	unsigned long ref;    /* GUIDE: guide; PAGE: in found; TEXT: hit; BOOKMARK,
 	                         RECENT: its index; GROUP: the rows under it */
 	const char *text;     /* GROUP: heading (static or index string) */
 } lib_row;
@@ -84,6 +84,9 @@ typedef struct {
 	long sel;             /* selected row, -1 = none            */
 	long top;             /* first visible row                  */
 	ehv_fts *fts;         /* full-text search, NULL = none       */
+	ehv_hits found;       /* the names the search found (PAGE rows) */
+	char found_q[LIB_QUERY_MAX];     /* for this search, */
+	const ehv_index *found_of;       /* in this index (NULL: none) */
 	unsigned long npages, nguides;   /* matches in the last rebuild */
 	char note[80];        /* text of the NOTE row               */
 

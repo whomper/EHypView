@@ -128,6 +128,10 @@ mouse or the keyboard, and keeps what it found in `EHYPVIEW.IDX`. The next time 
 files are read, and when nothing changed nothing is written. There is no `ALL.REF` to keep up to date
 (yours is still read).
 
+The names of the pages stay in `EHYPVIEW.IDX`, sorted, and are read from the disk when a link or a
+search needs them: in memory EHypView keeps only the list of hypertexts, so it takes little memory
+however many there are.
+
 ## Bookmarks
 
 **Bookmarks > Add bookmark** (^D, or the toolbar's **Bookmarks**) keeps the page shown. The

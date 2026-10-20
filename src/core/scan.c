@@ -152,9 +152,9 @@ struct ehv_scan {
 	unsigned long nchecked;
 	int changed;              /* a guide read again, gone, moved or new */
 
-	/* the hypertext being read or copied, NAMES names per step */
+	/* the hypertext being read, NAMES names per step */
 	int part;                 /* PART_* */
-	long ng, pg;              /* its guide in idx; the one copied from prev */
+	long ng;                  /* its guide in idx */
 	unsigned long next;       /* the next name to take */
 	hyp_doc *doc;
 	ref_db *db;
@@ -165,7 +165,7 @@ struct ehv_scan {
 
 static void end_listing(ehv_scan *s);
 
-enum { PART_NONE, PART_COPY, PART_HYP, PART_REF };
+enum { PART_NONE, PART_HYP, PART_REF };
 
 static char *dupstr(const char *s)
 {
@@ -187,7 +187,7 @@ ehv_scan *ehv_scan_begin_check(const char *const *roots, unsigned int nroots, co
 {
 	ehv_scan *s = ehv_scan_begin(roots, nroots, previous);
 
-	if (s != NULL && previous != NULL && !previous->old_file)
+	if (s != NULL && previous != NULL)
 		s->checking = 1;
 	return s;
 }
@@ -285,8 +285,7 @@ static void restart(ehv_scan *s)
 	set_current(s, NULL);
 	/* room for what prev had, and a little more: growing the arrays
 	   later would copy them, thousands of names at once */
-	ehv_index_reserve(s->idx, s->prev->nguides + s->prev->nguides / 8 + 8,
-			  s->prev->nsyms + s->prev->nsyms / 8 + 64);
+	ehv_index_reserve(s->idx, s->prev->nguides + s->prev->nguides / 8 + 8);
 }
 
 /*
@@ -659,30 +658,14 @@ static int read_guide(ehv_scan *s, const file_item *f, ehv_guide *g)
 	return 0;
 }
 
-/* some more names of the hypertext being read or copied */
+/* some more names of the hypertext being read */
 static int more_names(ehv_scan *s)
 {
 	unsigned int n;
 
 	for (n = 0; n < NAMES; n++)
 	{
-		if (s->part == PART_COPY)
-		{
-			const ehv_guide *src = &s->prev->guides[s->pg];
-			const ehv_sym *sy;
-
-			if (s->next >= src->nsyms)
-			{
-				s->part = PART_NONE;
-				return 0;
-			}
-			sy = &s->prev->syms[src->first_sym + s->next++];
-			if (sy->from_ref == 2)
-				continue;               /* ALL.REF's are merged afresh */
-			if (ehv_index_add_sym(s->idx, (unsigned long) s->ng, sy->kind, sy->line, sy->name,
-					sy->node, sy->from_ref) < 0)
-				return -1;
-		} else if (s->part == PART_HYP)
+		if (s->part == PART_HYP)
 		{
 			const hyp_entry *e;
 
@@ -782,10 +765,11 @@ static int index_file(ehv_scan *s, const file_item *f, unsigned short root)
 
 			if (old->size == info.size && old->mtime == info.mtime && same_ref(old, f->ref, &rinfo))
 			{
-				/* the guide now, its names in the steps after */
+				/* the guide; its names stay in prev's blocks, merged
+				   from there when the names are sorted */
 				long ng = ehv_index_add_guide(s->idx, old);
 
-				if (ng < 0)
+				if (ng < 0 || ehv_index_take_names(s->idx, s->prev, (unsigned long) pg, (unsigned long) ng) < 0)
 					return -1;
 				if (ng != pg || old->root != root)
 					s->changed = 1;      /* in another place in the list */
@@ -793,10 +777,6 @@ static int index_file(ehv_scan *s, const file_item *f, unsigned short root)
 				s->st.reused++;
 				if (old->error != HYP_OK)
 					s->st.failed++;
-				s->ng = ng;
-				s->pg = pg;
-				s->next = 0;
-				s->part = PART_COPY;
 				return 0;
 			}
 		}
@@ -874,6 +854,13 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 {
 	while (budget-- > 0)
 	{
+		if (ehv_index_build_busy(s->idx))
+		{
+			/* the names gathered put away first (index.h) */
+			if (ehv_index_build_step(s->idx) < 0)
+				return -1;
+			continue;
+		}
 		if (s->part != PART_NONE)
 		{
 			if (more_names(s) < 0)
@@ -929,8 +916,15 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 	return 0;
 }
 
+int ehv_scan_build_to(ehv_scan *s, const char *cache)
+{
+	return ehv_index_build_to(s->idx, cache);
+}
+
 int ehv_scan_next_is_big(const ehv_scan *s)
 {
+	if (ehv_index_build_busy(s->idx))
+		return 1;                             /* writing names to NAME.RUN */
 	if (s->part == PART_REF)
 		return s->db == NULL;                 /* reading the .REF */
 	if (s->part != PART_NONE || s->listing)
@@ -944,7 +938,7 @@ int ehv_scan_changed(const ehv_scan *s)
 {
 	if (s->checking)
 		return 0;                    /* all checked: as before */
-	return s->changed || s->prev == NULL || s->prev->old_file || s->idx->nguides != s->prev->nguides;
+	return s->changed || s->prev == NULL || s->idx->nguides != s->prev->nguides;
 }
 
 ehv_index *ehv_scan_take(ehv_scan *s)

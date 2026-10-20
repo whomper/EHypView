@@ -24,7 +24,7 @@ struct ehv_libjob {
 	ehv_index *fresh;               /* built by the scan */
 	ehv_index *ready;               /* to be taken */
 	ref_db *ref;
-	unsigned long next_module;
+	ehv_refmerge refm;
 	ehv_finish *fin;
 	ehv_saver *saver;
 	int started, unchanged, rebuild, saved;
@@ -199,7 +199,7 @@ int ehv_libjob_step(ehv_libjob *j)
 			/* checking first, or building */
 			j->scan = j->rebuild ? ehv_scan_begin((const char *const *) j->roots, j->nroots, j->prev)
 				: ehv_scan_begin_check((const char *const *) j->roots, j->nroots, j->prev);
-			if (j->scan == NULL)
+			if (j->scan == NULL || ehv_scan_build_to(j->scan, j->cache) < 0)
 				return EHV_JOB_FAILED;
 		}
 		r = ehv_scan_step(j->scan, 1);
@@ -243,7 +243,7 @@ int ehv_libjob_step(ehv_libjob *j)
 		}
 		if (j->ref != NULL)
 		{
-			r = ehv_index_merge_ref_some(j->fresh, j->ref, &j->next_module, 4);
+			r = ehv_index_merge_ref_some(j->fresh, j->ref, &j->refm, 4);
 			if (r < 0)
 				return EHV_JOB_FAILED;
 			if (r == 1)

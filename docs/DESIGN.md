@@ -103,6 +103,7 @@ src/core/      portable C, no GEM: builds on the Atari and on the host
   pool.c       string pool for the index
   fsys.c       directories, paths, case-insensitive file lookup
   index.c      the guide index: lookups, "similar" suggestions, cache
+  names.c      the index's names: sorted blocks on the disk, built in batches
   scan.c       step-wise folder scanner (all subfolders), default roots
   resolve.c    links, bare names and help requests -> file + page
   plat.h       the platform layer: every disk access goes through it
@@ -198,11 +199,26 @@ Rules for `src/core`:
   - `ALL.REF` fills in the same for guides that have no REF of their own.
     Entries for files that don't exist are listed so the user can see
     them; that is RefCheck's job done automatically.
-- **Cache.** The index is saved as a text file, `EHYPVIEW.IDX` (version 2:
-  the names of `ALL.REF` and the sorted lookup tables are in it, so loading
-  sorts nothing). A rescan re-reads only files whose size, date or REF
-  changed. An index from version 1 (to EHypView 1.6) is read and sorted,
-  and saved again as version 2.
+- **Cache.** The index is saved as `EHYPVIEW.IDX` (version 3): the
+  names in blocks of 1 KB, sorted by name ignoring case, then a text head
+  with the hypertexts, each block's first name and the sorted lookup
+  tables, then a line saying where the head is. Loading reads the head
+  only: the names stay on the disk, and a lookup reads the block or two a
+  name is in (one open), a search or a suggestion all of them in pieces,
+  with one open. Each block starts with the index's mark, so one read
+  from a file written again since (by the program, or the accessory)
+  is noticed, and the index read again. A rescan re-reads only files
+  whose size, date or REF changed; the others' names are merged from the
+  old file's blocks. The text files of EHypView 1.15 and before (versions
+  1 and 2) aren't read: the index is built again.
+- **Names in little memory.** They are gathered a batch at a time (32 KB),
+  each batch sorted (a stable merge sort in steps) and written to
+  `EHYPVIEW.RUN` when another follows; then the batches, the last one
+  where it was gathered, and the old index's blocks are merged into
+  `EHYPVIEW.ID$` (32 KB written at a time, 16 KB on a 68000). So building
+  takes about 120 KB however big the library, and the index in memory
+  about 300 bytes a hypertext and a name a block (until 1.15 every name
+  was in memory: 1.1 MB at the most for 60 hypertexts).
 - **In steps.** `src/core/libjob.c` keeps the index up to date one short
   step at a time: reading `EHYPVIEW.IDX` (32 KB a step, 16 KB on a 68000,
   or a dozen lines),
@@ -214,8 +230,8 @@ Rules for `src/core`:
   saving, `EHYPVIEW.ID$`) and closes it again before it ends, reading on
   from where the last step stopped or adding to the end (`PF_APPEND`):
   the program in front can end between two steps and close what the
-  accessory left open (guidelines 2.2). The new index is gathered in
-  memory and written in one go when it fits: up to 512 KB in the
+  accessory left open (guidelines 2.2). The new index's head is gathered
+  in memory and written in one go when it fits: up to 512 KB in the
   accessory's heap and 1 MB in the program (`big_alloc`: TT RAM first) on
   a 68030, 16 KB at a time on a 68000 (guidelines 6.5).
 - **Default roots.** `PATHS` from `EHYPVIEW.INF` (Settings), then `PATHS`,

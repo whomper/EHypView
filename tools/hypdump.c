@@ -397,7 +397,12 @@ static ehv_index *get_index(const index_opts *o, int verbose)
 
 			idx = ehv_index_new();
 			for (g = 0; idx != NULL && g < prev->nguides; g++)
-				ehv_index_copy_guide(idx, prev, g);
+			{
+				long ng = ehv_index_add_guide(idx, &prev->guides[g]);
+
+				if (ng >= 0)
+					ehv_index_take_names(idx, prev, g, (unsigned long) ng);
+			}
 			if (idx != NULL)
 			{
 				ehv_index_merge_ref(idx, allref);
@@ -524,7 +529,7 @@ static int cmd_resolve(int argc, char **argv)
 		putchar('\n');
 	}
 	for (i = 0; i < t.nalt; i++)
-		printf("also in: %s\n", idx->guides[idx->syms[t.alt[i]].guide].path);
+		printf("also in: %s\n", idx->guides[t.alt[i]].path);
 	for (i = 0; i < t.nsuggest; i++)
 	{
 		printf("did you mean: ");
@@ -532,8 +537,8 @@ static int cmd_resolve(int argc, char **argv)
 			printf("%s", idx->guides[t.suggest[i]].path);
 		else
 		{
-			put_str(idx->syms[t.suggest[i]].name);
-			printf(" (%s)", idx->guides[idx->syms[t.suggest[i]].guide].path);
+			put_str(t.similar.s[i].name);
+			printf(" (%s)", idx->guides[t.similar.s[i].guide].path);
 		}
 		putchar('\n');
 	}
