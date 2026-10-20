@@ -2864,6 +2864,9 @@ static void acc_heap(void)
 	inf_boot_read();
 	heapkb = inf_boot_number("HEAPKB=");
 	memkb_boot = inf_boot_number("MEMKB=");
+	/* on a 1 MB machine: 96 KB left, so a program can start beside it
+	   (ASKHELP.PRG, asking for help, needs 86 KB) */
+	acc_heap_leave = 96L * 1024;
 	acc_heap_take(1024L * 1024, 2048L * 1024, heapkb, memkb_boot);
 
 	/* for the tests: what it took, where, and what it left the programs */
