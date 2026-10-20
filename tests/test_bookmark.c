@@ -115,10 +115,41 @@ static void test_inf(void)
 	bm_free(&bm);
 }
 
+static void test_recent(void)
+{
+	ehv_bookmarks r, again;
+	inf_file *inf;
+	char key[16];
+
+	bm_init(&r);
+	CHECK(bm_touch(&r, "C:\\A.HYP", "Main", "A - Main", 3) == 1 && r.n == 1);
+	CHECK(bm_touch(&r, "C:\\A.HYP", "Main", "A - Main", 3) == 0);        /* first already */
+	CHECK(bm_touch(&r, "C:\\B.HYP", "Start", "B - Start", 3) == 1);
+	CHECK(r.n == 2 && strcmp(r.b[0].path, "C:\\B.HYP") == 0 && strcmp(r.b[1].path, "C:\\A.HYP") == 0);
+	/* the same hypertext, another page: that one, first */
+	CHECK(bm_touch(&r, "c:\\a.hyp", "Index", "A - Index", 3) == 1);
+	CHECK(r.n == 2 && strcmp(r.b[0].node, "Index") == 0 && strcmp(r.b[1].path, "C:\\B.HYP") == 0);
+	CHECK(bm_touch(&r, "C:\\C.HYP", "Main", "C", 3) == 1 && bm_touch(&r, "C:\\D.HYP", "Main", "D", 3) == 1);
+	CHECK(r.n == 3 && strcmp(r.b[0].path, "C:\\D.HYP") == 0 && strcmp(r.b[2].node, "Index") == 0);
+	CHECK(bm_touch(&r, "C:\\E|.HYP", "Main", "E", 3) == -1);
+	bm_key_as("RECENT", 4, key, sizeof(key));
+	CHECK(strcmp(key, "RECENT5") == 0);
+
+	inf = inf_parse("RECENT1=C:\\X.HYP|Main|X\r\nRECENT2=\r\nRECENT3=C:\\Y.HYP|P|Y\r\n"
+			"RECENT4=C:\\Z.HYP|P|Z\r\nBOOKMARK1=C:\\B.HYP|P|B\r\n", NULL);
+	bm_init(&again);
+	bm_read_as(&again, inf, "RECENT", 3);       /* RECENT4 is past the 3 */
+	CHECK(again.n == 2 && strcmp(again.b[1].path, "C:\\Y.HYP") == 0);
+	inf_free(inf);
+	bm_free(&again);
+	bm_free(&r);
+}
+
 int main(void)
 {
 	test_add_find_remove();
 	test_inf();
+	test_recent();
 	printf("%d checks, %d failures\n", checks, failures);
 	return failures != 0;
 }
