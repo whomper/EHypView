@@ -31,12 +31,20 @@
 #define MARK     4                    /* a block's first bytes */
 #define ROOM     (16 * REC_MAX)       /* a scan step's names, past the batch */
 #define MOVES    64                   /* sort moves a step (an ST: a few ms) */
-#define RECORDS  4                    /* names merged a step (an ST: 10 ms) */
 #define MERGE    16384L               /* the merge's pieces, all of them */
 
 unsigned long ehv_names_misread;
 
 static unsigned long batch_bytes = 24576L;
+
+/* a 68000's pieces are 16 KB (ehv_index_pieces()): its steps are kept
+   smaller, as each name merged or written costs it some 2.5 ms (an ST,
+   quiet-test): 4 names merged a step, not 16, a batch written 4 KB a
+   step, not 32 */
+static int small_steps(void)
+{
+	return ehv_names_piece() < 32;
+}
 
 void ehv_index_batch(unsigned long bytes)
 {
@@ -843,8 +851,7 @@ static int batch_step(const ehv_index *idx, ehv_build *b, unsigned long moves)
 		b->sorted = 1;
 		return 1;
 	}
-	/* 16 KB a step, 4 KB on a 68000 (each name copied: 60 ms an ST) */
-	r = batch_write(b, ehv_names_piece() * EHV_BLOCK / (ehv_names_piece() >= 32 ? 2 : 4));
+	r = batch_write(b, small_steps() ? 4096 : ehv_names_piece() * EHV_BLOCK);
 	return r < 0 ? -1 : r == 0;
 }
 
@@ -1275,7 +1282,7 @@ int ehv_names_finish_some(ehv_index *idx, unsigned int budget)
 		}
 		if (!b->started && merge_begin(idx, b) < 0)
 			return -1;
-		if ((r = merge_some(idx, b, RECORDS)) < 0)
+		if ((r = merge_some(idx, b, small_steps() ? 4 : 16)) < 0)
 			return -1;
 		if (r == 0)
 			continue;
