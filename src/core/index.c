@@ -1087,7 +1087,9 @@ static int save_steps(ehv_saver *v, unsigned int budget)
 			v->phase = S_GUIDES;
 			break;
 		case S_GUIDES:
-			for (k = 0; k < LINES && v->i < idx->nguides; k++)
+			/* two a step: their numbers, written out, divide in
+			   software on a 68000 */
+			for (k = 0; k < 2 && v->i < idx->nguides; k++)
 				put_guide(&v->o, idx, v->i++);
 			if (v->i >= idx->nguides)
 				v->phase = S_ORPHANS;
