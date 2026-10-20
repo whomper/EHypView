@@ -120,10 +120,13 @@ static void job_wait_index(void);
 static char start_dir[160];           /* where the program started: CRASH.LOG */
 static char home_dir[160];            /* FOLDER=: EHYPVIEW.IDX and .FNT */
 static char settings_path[40];        /* X:\EHYPVIEW.INF, the boot drive's root */
-static char inf_boot[8192];            /* it, as the accessory's start read it (acc_heap) */
-static long inf_boot_len = -1;         /* -1: none, too big, or taken */
+static char *inf_boot;                 /* it, as the accessory's start read it (acc_heap) */
 static pf_info inf_boot_info;
 static void acc_mem_note(int failed);
+static void acc_mem_grow(void);
+static char memkb_grown[16];           /* MEMKB= for recent_save's write to carry */
+static const char memkb_note[] = "the memory the accessory takes at boot, in KB, as it measured it "
+	"(HEAPKB= sets it yourself)";
 
 /*
  * Events for the emulator console (NatFeats NF_STDERR; a no-op on real
@@ -985,6 +988,7 @@ static void close_window(void)
 		wind_close(cur->h);
 		wind_delete(cur->h);
 		log_event("closed", "viewer", NULL);
+		acc_mem_grow();
 		recent_save();
 	}
 	cur->h = -1;
@@ -2482,18 +2486,12 @@ static void own_set(char *text)
 static void own_reload(void)
 {
 	memset(&own_info, 0, sizeof(own_info));
-	if (inf_boot_len >= 0)
+	if (inf_boot != NULL)
 	{
 		/* the accessory's copy from before its heap: the file as read */
-		char *t = malloc((size_t) inf_boot_len + 1);
-
-		if (t != NULL)
-		{
-			memcpy(t, inf_boot, (size_t) inf_boot_len + 1);
-			own_info = inf_boot_info;
-		}
-		inf_boot_len = -1;
-		own_set(t);
+		own_info = inf_boot_info;
+		own_set(inf_boot);
+		inf_boot = NULL;
 		return;
 	}
 	own_set(pf_load_info(settings_path, NULL, &own_info));
@@ -2590,6 +2588,19 @@ static int list_save(const ehv_bookmarks *list, const char *prefix, unsigned int
 		}
 		free(text);
 		text = t;
+	}
+	if (r == 0 && memkb_grown[0] != '\0' && list == &recent)
+	{
+		char *t = inf_put(text != NULL ? text : inf_head, "MEMKB", memkb_grown, memkb_note);
+
+		if (t == NULL)
+			r = -1;
+		else
+		{
+			free(text);
+			text = t;
+			memkb_grown[0] = '\0';
+		}
 	}
 	if (r == 0 && text != NULL)
 		r = pf_save(settings_path, text, (unsigned long) strlen(text));
@@ -2920,75 +2931,80 @@ static void index_pieces(void)
 
 /*
  * EHYPVIEW.INF as the accessory's start found it: read before its heap
- * is taken, without malloc (HEAPKB=, MEMKB=), and taken by own_reload()
- * then, so the file is still read once a start (guidelines 6.5)
+ * is taken, without malloc, into the stack (HEAPKB=, MEMKB=), copied to
+ * the heap then and taken by own_reload(), so the file is still read
+ * once a start (guidelines 6.5)
  */
+#define INF_BOOT_MAX 8192
 static long memkb_boot;                /* MEMKB= as the start found it */
 
-static void inf_boot_read(void)
+static long inf_boot_read(char *buf)
 {
 	int h;
-	long n;
+	long n = -1;
 
 	settings_path[0] = (char) ('A' + boot_drive());
 	strcpy(settings_path + 1, ":\\EHYPVIEW.INF");
 	if ((h = pf_open(settings_path, PF_READ)) < 0)
-		return;
-	if (pf_finfo(h, &inf_boot_info) == 0 && inf_boot_info.size < sizeof(inf_boot) &&
-	    (n = pf_read(h, inf_boot, (long) sizeof(inf_boot) - 1)) >= 0)
-	{
-		inf_boot[n] = '\0';
-		inf_boot_len = n;
-	}
+		return -1;
+	if (pf_finfo(h, &inf_boot_info) == 0 && inf_boot_info.size < INF_BOOT_MAX &&
+	    (n = pf_read(h, buf, INF_BOOT_MAX - 1)) >= 0)
+		buf[n] = '\0';
 	pf_close(h);
+	return n;
 }
 
 /* KEY= (with its '=') in that copy, as a number; 0 when it isn't there */
-static long inf_boot_number(const char *key)
+static long inf_boot_number(const char *text, const char *key)
 {
 	const char *k;
 	size_t kl = strlen(key);
 
-	for (k = inf_boot; inf_boot_len >= 0 && *k != '\0'; k++)
-		if ((k == inf_boot || k[-1] == '\n') && atari_ncasecmp(k, key, kl) == 0)
+	for (k = text; *k != '\0'; k++)
+		if ((k == text || k[-1] == '\n') && atari_ncasecmp(k, key, kl) == 0)
 			return atol(k + kl);
 	return 0;
 }
 
 /* an accessory takes its memory once, at start-up (common/ui/accmem.c,
    guidelines 2.1): HEAPKB= when the user set it, else MEMKB=, what the
-   last start measured, else 1 MB (2 MB in TT RAM) */
-static void acc_heap(void)
+   last start measured, else 1 MB (2 MB in TT RAM). planes: the screen's */
+static void acc_heap(short planes)
 {
-	long st = (long) Mxalloc(-1L, 0), heapkb;
-	char a[160], b[24];
+	long tt = (long) Mxalloc(-1L, 1), pics = 0, heapkb, n;
+	char a[160], b[24], buf[INF_BOOT_MAX];
 
 	/* the About box's icon's ST RAM (st_ram() in gemui.c), now: taken
 	   later, it would belong to the program in front (guidelines 2.2) */
 	ehv_ui_st_ram(0);
 
-	/* then the pictures' ST RAM (stmem.h): a sixteenth of what is free
-	   there, 64 to 128 KB (a page's pictures; the rest is the screen's
-	   and the programs'); TOS 1.x has no Mxalloc, and only ST RAM */
-	if (st == -32)
-		st = (long) Malloc(-1L);
-	st /= 16;
-	if (st > 128L * 1024)
-		st = 128L * 1024;
-	if (st < 64L * 1024)
-		st = 64L * 1024;
-	stmem_reserve(st);
+	/* the pictures' ST RAM (stmem.h): with no TT RAM the heap is ST RAM
+	   and has them; with some, the heap goes there and the screen can't
+	   be fed from it, so a block of ST RAM for a page's pictures, by
+	   the screen's depth: 32 KB in two colours, 64 KB in 16, 128 KB in
+	   256 or more */
+	if (tt >= 256L * 1024)
+	{
+		pics = 16L * 1024 * planes;
+		if (pics < 32L * 1024)
+			pics = 32L * 1024;
+		if (pics > 128L * 1024)
+			pics = 128L * 1024;
+	}
+	stmem_reserve(pics);
 
-	inf_boot_read();
-	heapkb = inf_boot_number("HEAPKB=");
-	memkb_boot = inf_boot_number("MEMKB=");
+	n = inf_boot_read(buf);
+	heapkb = n >= 0 ? inf_boot_number(buf, "HEAPKB=") : 0;
+	memkb_boot = n >= 0 ? inf_boot_number(buf, "MEMKB=") : 0;
 	/* on a 1 MB machine: 96 KB left, so a program can start beside it
 	   (ASKHELP.PRG, asking for help, needs 86 KB) */
 	acc_heap_leave = 96L * 1024;
 	acc_heap_take(1024L * 1024, 2048L * 1024, heapkb, memkb_boot);
+	if (n >= 0 && (inf_boot = malloc((size_t) n + 1)) != NULL)
+		memcpy(inf_boot, buf, (size_t) n + 1);
 
 	/* for the tests: what it took, where, and what it left the programs */
-	sprintf(a, "pictures %ldK heap %ldK%s%s", st / 1024, acc_heap_bytes / 1024, acc_heap_tt ? " TT" : "",
+	sprintf(a, "pictures %ldK heap %ldK%s%s", pics / 1024, acc_heap_bytes / 1024, acc_heap_tt ? " TT" : "",
 		heapkb >= 64 ? " (HEAPKB=)" : memkb_boot >= 32 ? " (MEMKB=)" : "");
 	sprintf(b, "free %ldK", (long) Malloc(-1L) / 1024);
 	log_event("acc-memory", a, b);
@@ -3004,6 +3020,14 @@ static void acc_heap(void)
 /* the accessory's index job done: what it needs, measured, as MEMKB=
    for the next start (once a start, when it moved); twice what it had
    when the job ran out of it */
+/* MEMKB= to write: what it holds now (the index), a page and its
+   pictures being read, and the peak so far */
+static long acc_mem_need(int failed)
+{
+	return failed && heap_peak > acc_heap_bytes - acc_heap_bytes / 8 ? acc_mem_full_kb() :
+		acc_mem_kb(heap_use + 192L * 1024, 64L * 1024);
+}
+
 static void acc_mem_note(int failed)
 {
 	static int noted;
@@ -3013,18 +3037,32 @@ static void acc_mem_note(int failed)
 	if (!is_acc || noted || acc_heap_bytes == 0)
 		return;
 	noted = 1;
-	/* what it holds now (the index), a page and its pictures being
-	   read, and the job's peak */
-	kb = failed && heap_peak > acc_heap_bytes - acc_heap_bytes / 8 ? acc_mem_full_kb() :
-		acc_mem_kb(heap_use + 192L * 1024, 64L * 1024);
+	kb = acc_mem_need(failed);
 	acc_mem_line(line, sizeof(line), kb);
 	log_event("acc-memory", line, NULL);
 	if (acc_mem_moved(kb, memkb_boot))
 	{
 		sprintf(v, "%ld", kb);
-		settings_put("MEMKB", v, "the memory the accessory takes at boot, in KB, as it measured it "
-			     "(HEAPKB= sets it yourself)");
+		settings_put("MEMKB", v, memkb_note);
 		memkb_boot = kb;
+	}
+}
+
+/* a viewer window closed: a page, its pictures or a search may have
+   needed more than the index job did; only ever more, and written with
+   the pages read (recent_save), not by a write of its own */
+static void acc_mem_grow(void)
+{
+	long kb;
+
+	if (!is_acc || acc_heap_bytes == 0 || memkb_boot == 0)
+		return;
+	kb = acc_mem_need(0);
+	if (kb > memkb_boot && acc_mem_moved(kb, memkb_boot))
+	{
+		sprintf(memkb_grown, "%ld", kb);
+		memkb_boot = kb;
+		recent_changed = 1;
 	}
 }
 
@@ -3113,7 +3151,6 @@ int main(void)
 	}
 	if (is_acc)
 	{
-		acc_heap();
 		menu_id = menu_register(ap_id, "  EHypView");
 		log_event("acc", menu_id >= 0 ? "registered" : "no menu entry", NULL);
 	}
@@ -3133,6 +3170,8 @@ int main(void)
 	tall_pixels = work_out[4] >= work_out[3] * 3 / 2;	/* pixel height, width (microns) */
 	vq_extnd(vdi_h, 1, work_out);
 	planes = work_out[4];
+	if (is_acc)
+		acc_heap(planes);              /* nothing malloc'd before it */
 	{
 		/* for the tests (tests/run_colour.py) */
 		char size[16], depth[24];
