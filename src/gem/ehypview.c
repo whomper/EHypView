@@ -2773,9 +2773,11 @@ static void job_step(void)
 		return;
 #ifdef AES_PROFILE
 	{
-		static const char *const tag[] = { "idx-load", "idx-scan", "idx-sort", "idx-save", "idx-done" };
+		/* "+": a step that opens a file or reads a folder */
+		static const char *const tag[] = { "idx-load", "idx-scan", "idx-sort", "idx-save", "idx-done",
+						   "idx-load+", "idx-scan+", "idx-sort+", "idx-save+", "idx-done+" };
 
-		aes_profile_tag(tag[ehv_libjob_phase(job)]);
+		aes_profile_tag(tag[ehv_libjob_phase(job) + (ehv_libjob_next_is_big(job) ? 5 : 0)]);
 	}
 #endif
 	r = ehv_libjob_step(job);
