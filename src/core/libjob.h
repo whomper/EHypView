@@ -51,6 +51,7 @@ ehv_libjob *ehv_libjob_begin(const char *cache, const char *const *roots, unsign
 int ehv_libjob_step(ehv_libjob *j);
 ehv_index *ehv_libjob_take(ehv_libjob *j);
 int ehv_libjob_phase(const ehv_libjob *j);
+const char *ehv_libjob_doing(const ehv_libjob *j);   /* in words, for a profile */
 int ehv_libjob_next_is_big(const ehv_libjob *j);  /* opens a file or reads a folder: a slice's first */
 const ehv_scan_status *ehv_libjob_scan_status(const ehv_libjob *j);  /* NULL unless scanning */
 int ehv_libjob_unchanged(const ehv_libjob *j);   /* done, with the index read kept */

@@ -119,6 +119,7 @@ typedef struct ehv_finish ehv_finish;
 ehv_finish *ehv_index_finish_begin(ehv_index *idx);
 int ehv_index_finish_some(ehv_finish *f, unsigned int budget);
 void ehv_index_finish_abort(ehv_finish *f);
+const char *ehv_index_finish_doing(const ehv_finish *f);    /* in words, for a profile */
 
 /*
  * Merge aliases and labels from ALL.REF (or any REF file) into guides

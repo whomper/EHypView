@@ -2782,15 +2782,17 @@ static void job_step(void)
 	{
 		/* a step of 30 ms or more, for the record */
 		int ph = ehv_libjob_phase(job), big = ehv_libjob_next_is_big(job);
-		unsigned long t0 = tos_ms();
+		char b[48];
+		unsigned long t0;
 
+		sprintf(b, "phase %d%s: %s", ph, big ? " big" : "", ehv_libjob_doing(job));
+		t0 = tos_ms();
 		r = ehv_libjob_step(job);
 		if (tos_ms() - t0 >= 30)
 		{
-			char a[32], b[16];
+			char a[16];
 
 			sprintf(a, "%lu ms", tos_ms() - t0);
-			sprintf(b, "phase %d%s", ph, big ? " big" : "");
 			log_event("slow-step", a, b);
 		}
 	}

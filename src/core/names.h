@@ -17,6 +17,9 @@ int ehv_names_finish_some(ehv_index *idx, unsigned int budget);
    a slice of its own with it) */
 int ehv_names_next_io(const ehv_index *idx);
 
+/* what the merge does next, in words (for a program's profile) */
+const char *ehv_names_doing(const ehv_index *idx);
+
 /* the building's memory and NAME.RUN gone (ehv_index_free()) */
 void ehv_names_build_free(ehv_index *idx);
 

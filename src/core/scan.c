@@ -916,6 +916,11 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 	return 0;
 }
 
+int ehv_index_build_busy_scan(const ehv_scan *s)
+{
+	return ehv_index_build_busy(s->idx);
+}
+
 int ehv_scan_build_to(ehv_scan *s, const char *cache)
 {
 	return ehv_index_build_to(s->idx, cache);

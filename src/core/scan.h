@@ -76,6 +76,7 @@ int ehv_scan_changed(const ehv_scan *scan);
 /* where the index built sorts its names: beside the cache file
    (ehv_index_build_to()); call after ehv_scan_begin*() */
 int ehv_scan_build_to(ehv_scan *scan, const char *cache);
+int ehv_index_build_busy_scan(const ehv_scan *scan);   /* its names being put away */
 
 /* the next step opens a file or reads a folder: slower than the others,
    so a program may begin a slice of its own with it */

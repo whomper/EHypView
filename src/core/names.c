@@ -1194,6 +1194,17 @@ int ehv_names_next_io(const ehv_index *idx)
 	return 0;
 }
 
+const char *ehv_names_doing(const ehv_index *idx)
+{
+	const ehv_build *b = idx->build;
+
+	if (b == NULL || b->done)
+		return "names done";
+	if (!b->started)
+		return b->nrec > 0 && !b->sorted ? "last batch sorted" : "merge begun";
+	return ehv_names_next_io(idx) ? "names read or written" : "names merged";
+}
+
 int ehv_names_finish_some(ehv_index *idx, unsigned int budget)
 {
 	ehv_build *b = idx->build;
