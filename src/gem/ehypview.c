@@ -129,9 +129,47 @@ static void acc_mem_note(int failed);
  * Events for the emulator console (NatFeats NF_STDERR; a no-op on real
  * hardware).  tests/run_gui.py follows them to check what happened.
  */
+#ifdef STACK_PROBE
+/* a test build's stack, painted at start: how deep it has been, printed
+   with each event (make STACK_PROBE=1: tests/run_*.py collect them) */
+#define PROBE_DEPTH 46000L
+static unsigned char *probe_top;
+
+static void probe_paint(void)
+{
+	volatile unsigned char *p;
+
+	probe_top = (unsigned char *) __builtin_frame_address(0);
+	for (p = probe_top - PROBE_DEPTH; p < probe_top - 256; p++)
+		*p = 0xA5;
+}
+
+static long probe_depth(void)
+{
+	volatile unsigned char *p = probe_top - PROBE_DEPTH;
+
+	while (p < probe_top && *p == 0xA5)
+		p++;
+	return (long) (probe_top - (unsigned char *) p);
+}
+#endif
+
 void log_event(const char *what, const char *a, const char *b)
 {
 	char line[300];
+#ifdef STACK_PROBE
+	static long deepest;
+	long d = probe_top != NULL ? probe_depth() : 0;
+
+	if (d > deepest)
+	{
+		char n[48];
+
+		deepest = d;
+		snprintf(n, sizeof(n), "STACK %ld after %s\n", d, what);
+		nf_debug(n);
+	}
+#endif
 
 	snprintf(line, sizeof(line), "EHV %s %s%s%s", what, a ? a : "", b ? " " : "", b ? b : "");
 	crash_note(line + 4);             /* the last one goes in CRASH.LOG */
@@ -3060,6 +3098,10 @@ int main(void)
 	unsigned long t0 = tos_hz200();       /* not tos_ms(): it measures the clock first */
 
 	is_acc = _is_acc;
+#ifdef STACK_PROBE
+	if (!is_acc)                       /* the program only: the accessory hung at boot with it (not looked into) */
+		probe_paint();
+#endif
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;

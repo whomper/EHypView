@@ -173,15 +173,19 @@ GCCINC  := $(shell $(XCC) -print-file-name=include 2>/dev/null)
 # (be32() in the HYP and REF readers, a struct's bytes) even with
 # -mstrict-align: its bswap pass, turned off here (as -fno-store-merging
 # does for stores; it says so in a note on every file).  Not with
+# for size (a quarter smaller than -O2): the accessory's code is memory
+# taken from the programs; functions and data nobody calls are left out
+# (--gc-sections)
+XOPT    ?= -Os
 # -fno-expensive-optimizations: GCC 13 then miscompiles scan.c
 XCPU    ?= -m68000 -mstrict-align -fdisable-tree-bswap
-XFLAGS   = $(XCPU) $(XEXTRA) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin \
+XFLAGS   = $(XCPU) $(XEXTRA) $(XOPT) -fomit-frame-pointer -ffreestanding -fno-builtin \
            -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-store-merging \
-           -fno-asynchronous-unwind-tables -Wall -Wextra -Werror=implicit-function-declaration \
+           -fno-asynchronous-unwind-tables -ffunction-sections -fdata-sections -Wall -Wextra -Werror=implicit-function-declaration \
            -DEHV_TOS -nostdinc -isystem $(GCCINC) -Icommon/atari/include -Icommon/atari -Isrc/core \
            -Icommon/ui -Icommon/src
 XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
-           -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
+           -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
 ATARI    = build/atari
 HATARI_DIR = build/hatari
@@ -190,8 +194,12 @@ RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
 XHDRS    = $(wildcard src/core/*.h common/atari/*.h common/atari/include/*.h common/ui/*.h)
 
+# the stack: 16 KB, five times the deepest the rigs found (3.2 KB, a
+# STACK_PROBE build: make atari XEXTRA=-DSTACK_PROBE, then the "STACK"
+# lines of tests/run_gui.py's logs); crt0's default is 48 KB
+STACK_SIZE ?= 16384
 $(ATARI)/%.o: common/atari/%.S | $(ATARI)
-	$(XCC) $(XCPU) -c -o $@ $<
+	$(XCC) $(XCPU) -DSTACK_SIZE=$(STACK_SIZE) -c -o $@ $<
 $(ATARI)/crash_s.o: common/atari/crash.S | $(ATARI)
 	$(XCC) $(XCPU) -c -o $@ $<
 $(ATARI)/crash.o: common/atari/crash.c $(XHDRS) | $(ATARI)
