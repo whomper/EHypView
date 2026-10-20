@@ -24,6 +24,7 @@ void lib_init(ehv_library *lib, const ehv_index *idx)
 	memset(lib, 0, sizeof(*lib));
 	lib->idx = idx;
 	lib->sel = -1;
+	lib->pane_kind = PANE_ALL;
 	lib_rebuild(lib);
 }
 
@@ -31,6 +32,9 @@ void lib_free(ehv_library *lib)
 {
 	ehv_fts_free(lib->fts);
 	free(lib->rows);
+	free(lib->order);
+	free(lib->tint);
+	free(lib->panes);
 	memset(lib, 0, sizeof(*lib));
 	lib->sel = -1;
 }
@@ -51,15 +55,53 @@ static int add_row(ehv_library *lib, unsigned char kind, unsigned long ref, cons
 	}
 	r = &lib->rows[lib->nrows++];
 	r->kind = kind;
+	r->flags = r->tint = 0;
 	r->ref = ref;
 	r->text = text;
 	return 0;
 }
 
-static int selectable(unsigned char kind)
+static int selectable(const lib_row *r)
 {
-	return kind == LIB_GUIDE || kind == LIB_PAGE || kind == LIB_ACTION || kind == LIB_TEXT ||
-		kind == LIB_BOOKMARK;
+	return r->kind == LIB_GUIDE || r->kind == LIB_PAGE || r->kind == LIB_ACTION || r->kind == LIB_TEXT ||
+		r->kind == LIB_BOOKMARK || r->kind == LIB_RECENT || (r->kind == LIB_GROUP && (r->flags & LIB_FOLDS));
+}
+
+/* the headings folded: their names, hashed in any case */
+static unsigned long hash(const char *s)
+{
+	unsigned long h = 5381;
+
+	for (; *s != '\0'; s++)
+		h = (h << 5) + h + (unsigned char) atari_tolower((unsigned char) *s);
+	return h;
+}
+
+static int is_folded(const ehv_library *lib, const char *text)
+{
+	unsigned long h = hash(text);
+	unsigned int i;
+
+	for (i = 0; i < lib->nfolded; i++)
+		if (lib->folded[i] == h)
+			return 1;
+	return 0;
+}
+
+static void set_folded(ehv_library *lib, const char *text, int on)
+{
+	unsigned long h = hash(text);
+	unsigned int i;
+
+	for (i = 0; i < lib->nfolded; i++)
+		if (lib->folded[i] == h)
+		{
+			if (!on)
+				lib->folded[i] = lib->folded[--lib->nfolded];
+			return;
+		}
+	if (on && lib->nfolded < LIB_FOLD_MAX)
+		lib->folded[lib->nfolded++] = h;
 }
 
 /* s holds q, in any case (q as typed) */
@@ -73,11 +115,12 @@ static int has_text(const char *s, const char *q)
 	return n == 0;
 }
 
-/* the bookmarks: all of them, or those whose title or page has the query */
-static int build_bookmarks(ehv_library *lib)
+/* the bookmarks: all of them, or those whose title or page has the
+   query; under a heading that folds in the Outline */
+static int build_bookmarks(ehv_library *lib, int folds)
 {
 	unsigned int i;
-	int heading = 0;
+	long heading = -1;
 
 	for (i = 0; lib->bm != NULL && i < lib->bm->n; i++)
 	{
@@ -85,12 +128,33 @@ static int build_bookmarks(ehv_library *lib)
 
 		if (!has_text(b->title, lib->query) && !has_text(b->node, lib->query))
 			continue;
-		if (!heading && add_row(lib, LIB_GROUP, 0, "Bookmarks") < 0)
-			return -1;
-		heading = 1;
-		if (add_row(lib, LIB_BOOKMARK, i, NULL) < 0)
+		if (heading < 0)
+		{
+			if (add_row(lib, LIB_GROUP, 0, "Bookmarks") < 0)
+				return -1;
+			heading = (long) lib->nrows - 1;
+			if (folds)
+			{
+				lib->rows[heading].flags = LIB_FOLDS;
+				if (is_folded(lib, "Bookmarks"))
+					lib->rows[heading].flags |= LIB_FOLDED;
+			}
+		}
+		lib->rows[heading].ref++;
+		if (!(lib->rows[heading].flags & LIB_FOLDED) && add_row(lib, LIB_BOOKMARK, i, NULL) < 0)
 			return -1;
 	}
+	return 0;
+}
+
+/* the pages read last, newest first */
+static int build_recent(ehv_library *lib)
+{
+	unsigned int i;
+
+	for (i = 0; lib->recent != NULL && i < lib->recent->n; i++)
+		if (add_row(lib, LIB_RECENT, i, NULL) < 0)
+			return -1;
 	return 0;
 }
 
@@ -115,50 +179,220 @@ static int cmp_guides(const void *x, const void *y)
 	return strcmp(g->path, h->path);
 }
 
-static int build_all(ehv_library *lib)
+/* the readable hypertexts in the order listed, and their tints: made
+   again for each new index */
+static int make_order(ehv_library *lib)
 {
 	const ehv_index *idx = lib->idx;
-	unsigned long *order, n = 0, i;
+	unsigned long i, n = 0;
+	unsigned int t = 0;
 	const char *group = NULL;
-	int first = 1;
 
-	order = malloc((idx->nguides + 1) * sizeof(unsigned long));
-	if (order == NULL)
+	if (idx != NULL && lib->order != NULL && lib->order_of == idx)
+		return 0;
+	free(lib->order);
+	free(lib->tint);
+	lib->order = NULL;
+	lib->tint = NULL;
+	lib->norder = 0;
+	lib->order_of = NULL;
+	if (idx == NULL)
+		return 0;
+	lib->order = malloc((idx->nguides + 1) * sizeof(unsigned long));
+	lib->tint = malloc(idx->nguides + 1);
+	if (lib->order == NULL || lib->tint == NULL)
 		return -1;
 	for (i = 0; i < idx->nguides; i++)
+	{
+		lib->tint[i] = 0;
 		if (idx->guides[i].error == HYP_OK)
-			order[n++] = i;
+			lib->order[n++] = i;
+	}
 	cmp_idx = idx;
-	qsort(order, n, sizeof(unsigned long), cmp_guides);
+	qsort(lib->order, n, sizeof(unsigned long), cmp_guides);
 	for (i = 0; i < n; i++)
 	{
-		const char *subj = idx->guides[order[i]].subject;
+		const char *subj = idx->guides[lib->order[i]].subject;
 
-		if (first || (subj == NULL) != (group == NULL) ||
-			(subj != NULL && atari_casecmp(subj, group) != 0))
+		if (subj == NULL)
+			continue;
+		if (group == NULL || atari_casecmp(subj, group) != 0)
+		{
+			t = t < 255 ? t + 1 : 1;
+			group = subj;
+		}
+		lib->tint[lib->order[i]] = (unsigned char) t;
+	}
+	lib->norder = n;
+	lib->order_of = idx;
+	return 0;
+}
+
+static int same_group(const char *a, const char *b)
+{
+	return (a == NULL) == (b == NULL) && (a == NULL || atari_casecmp(a, b) == 0);
+}
+
+/*
+ * The hypertexts, from the order: all under their headings (which fold
+ * when `folds`), or, for a pane of one subject, only its own and no
+ * heading.
+ */
+static int build_groups(ehv_library *lib, int folds, const lib_pane *only)
+{
+	const ehv_index *idx = lib->idx;
+	unsigned long i, n = 0;
+	long heading = -1;
+	const char *group = NULL;
+
+	for (i = 0; i < lib->norder; i++)
+	{
+		unsigned long g = lib->order[i];
+		const char *subj = idx->guides[g].subject;
+
+		if (only != NULL)
+		{
+			if (only->kind == PANE_OTHER ? subj != NULL :
+			    subj == NULL || atari_casecmp(subj, only->text) != 0)
+				continue;
+		} else if (heading < 0 || !same_group(subj, group))
 		{
 			if (add_row(lib, LIB_GROUP, 0, subj != NULL ? subj : "Other hypertexts") < 0)
-			{
-				free(order);
 				return -1;
+			heading = (long) lib->nrows - 1;
+			lib->rows[heading].tint = lib->tint[g];
+			if (folds)
+			{
+				lib->rows[heading].flags = LIB_FOLDS;
+				if (is_folded(lib, lib->rows[heading].text))
+					lib->rows[heading].flags |= LIB_FOLDED;
 			}
 			group = subj;
-			first = 0;
 		}
-		if (add_row(lib, LIB_GUIDE, order[i], NULL) < 0)
+		n++;
+		if (heading >= 0)
 		{
-			free(order);
-			return -1;
+			lib->rows[heading].ref++;
+			if (lib->rows[heading].flags & LIB_FOLDED)
+				continue;
 		}
+		if (add_row(lib, LIB_GUIDE, g, NULL) < 0)
+			return -1;
+		lib->rows[lib->nrows - 1].tint = lib->tint[g];
 	}
 	lib->nguides = n;
-	free(order);
-	if (n == 0)
+	if (lib->norder == 0)
 	{
 		snprintf(lib->note, sizeof(lib->note), "No hypertexts found yet.");
 		return add_row(lib, LIB_NOTE, 0, NULL);
 	}
 	return 0;
+}
+
+/* ---------------------------------------------------------------- */
+/* the Subjects pane                                                 */
+
+static int add_pane(ehv_library *lib, unsigned char kind, unsigned char tint, unsigned long count,
+		    const char *text)
+{
+	lib_pane *p;
+
+	if (lib->npanes == lib->cap_panes)
+	{
+		unsigned long ncap = lib->cap_panes ? lib->cap_panes * 2 : 16;
+
+		p = realloc(lib->panes, ncap * sizeof(lib_pane));
+		if (p == NULL)
+			return -1;
+		lib->panes = p;
+		lib->cap_panes = ncap;
+	}
+	p = &lib->panes[lib->npanes++];
+	p->kind = kind;
+	p->tint = tint;
+	p->count = count;
+	p->text = text;
+	return 0;
+}
+
+/* Bookmarks, Recently read, All hypertexts, each subject, the ones with
+   none; the one chosen found again by its name */
+static int build_panes(ehv_library *lib)
+{
+	const ehv_index *idx = lib->idx;
+	unsigned long i, other = 0;
+	long k;
+
+	lib->npanes = 0;
+	if (lib->bm != NULL && lib->bm->n > 0 && add_pane(lib, PANE_BOOKMARKS, 0, lib->bm->n, "Bookmarks") < 0)
+		return -1;
+	if (lib->recent != NULL && lib->recent->n > 0 &&
+	    add_pane(lib, PANE_RECENT, 0, lib->recent->n, "Recently read") < 0)
+		return -1;
+	if (idx != NULL && add_pane(lib, PANE_ALL, 0, lib->norder, "All hypertexts") < 0)
+		return -1;
+	for (i = 0; i < lib->norder; i++)
+	{
+		const ehv_guide *g = &idx->guides[lib->order[i]];
+
+		if (g->subject == NULL)
+			other++;
+		else if (lib->panes[lib->npanes - 1].kind == PANE_SUBJECT &&
+			 atari_casecmp(lib->panes[lib->npanes - 1].text, g->subject) == 0)
+			lib->panes[lib->npanes - 1].count++;
+		else if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, g->subject) < 0)
+			return -1;
+	}
+	if (other > 0 && add_pane(lib, PANE_OTHER, 0, other, "Other hypertexts") < 0)
+		return -1;
+
+	lib->pane = -1;
+	for (k = 0; k < (long) lib->npanes && lib->pane < 0; k++)
+		if (lib->panes[k].kind == lib->pane_kind &&
+		    (lib->pane_kind != PANE_SUBJECT || atari_casecmp(lib->panes[k].text, lib->pane_name) == 0))
+			lib->pane = k;
+	for (k = 0; k < (long) lib->npanes && lib->pane < 0; k++)
+		if (lib->panes[k].kind == PANE_ALL)
+			lib->pane = k;
+	if (lib->pane < 0 && lib->npanes > 0)
+		lib->pane = 0;
+	return 0;
+}
+
+/* the rows of the pane chosen */
+static int build_pane(ehv_library *lib)
+{
+	const lib_pane *p = lib->pane >= 0 ? &lib->panes[lib->pane] : NULL;
+	unsigned int i;
+
+	if (p != NULL && p->kind == PANE_BOOKMARKS)
+	{
+		for (i = 0; i < lib->bm->n; i++)
+			if (add_row(lib, LIB_BOOKMARK, i, NULL) < 0)
+				return -1;
+		return 0;
+	}
+	if (p != NULL && p->kind == PANE_RECENT)
+		return build_recent(lib);
+	if (lib->idx == NULL)
+	{
+		snprintf(lib->note, sizeof(lib->note), "Looking for hypertexts...");
+		return add_row(lib, LIB_NOTE, 0, NULL);
+	}
+	return build_groups(lib, 0, p != NULL && (p->kind == PANE_SUBJECT || p->kind == PANE_OTHER) ? p : NULL);
+}
+
+/* the Outline: the pages read last, the bookmarks, the groups */
+static int build_outline(ehv_library *lib)
+{
+	if (build_recent(lib) < 0 || build_bookmarks(lib, 1) < 0)
+		return -1;
+	if (lib->idx == NULL)
+	{
+		snprintf(lib->note, sizeof(lib->note), "Looking for hypertexts...");
+		return add_row(lib, LIB_NOTE, 0, NULL);
+	}
+	return build_groups(lib, 1, NULL);
 }
 
 /* ---------------------------------------------------------------- */
@@ -313,6 +547,7 @@ static int build_query(ehv_library *lib)
 		heading = 1;
 		if (add_row(lib, LIB_GUIDE, i, NULL) < 0)
 			return -1;
+		lib->rows[lib->nrows - 1].tint = lib->tint != NULL ? lib->tint[i] : 0;
 		ng++;
 	}
 	lib->nguides = ng;
@@ -346,38 +581,59 @@ static long first_selectable(const ehv_library *lib, long from, int kind)
 	long i;
 
 	for (i = from < 0 ? 0 : from; (unsigned long) i < lib->nrows; i++)
-		if (selectable(lib->rows[i].kind) && (kind < 0 || lib->rows[i].kind == kind))
+		if (selectable(&lib->rows[i]) && (kind < 0 || lib->rows[i].kind == kind))
 			return i;
 	return -1;
+}
+
+/* the row chosen first: a hypertext, bookmark, page...: not a heading
+   nor a page read lately, unless there is nothing else */
+static long first_choice(const ehv_library *lib)
+{
+	unsigned long i;
+
+	for (i = 0; i < lib->nrows; i++)
+		if (selectable(&lib->rows[i]) && lib->rows[i].kind != LIB_GROUP && lib->rows[i].kind != LIB_RECENT)
+			return (long) i;
+	return first_selectable(lib, 0, -1);
 }
 
 static int rebuild(ehv_library *lib, int keep_selection, int want_text)
 {
 	unsigned char kind = 0;
 	unsigned long ref = 0;
+	char heading[64];
 	int had = keep_selection && lib->sel >= 0 && (unsigned long) lib->sel < lib->nrows;
 	int rc;
 
+	heading[0] = '\0';
 	if (had)
 	{
 		kind = lib->rows[lib->sel].kind;
 		ref = lib->rows[lib->sel].ref;
+		if (kind == LIB_GROUP)
+			snprintf(heading, sizeof(heading), "%s", lib->rows[lib->sel].text);
 	}
 	lib->nrows = 0;
 	lib->npages = lib->nguides = 0;
 	lib->note[0] = '\0';
 	lib->sel = -1;
-	if (build_bookmarks(lib) < 0)
+	if (make_order(lib) < 0 || build_panes(lib) < 0)
 		return -1;
-	if (lib->idx == NULL)
+	if (lib->query[0] != '\0')
 	{
-		snprintf(lib->note, sizeof(lib->note), "Looking for hypertexts...");
-		if (add_row(lib, LIB_NOTE, 0, NULL) < 0)
+		if (build_bookmarks(lib, 0) < 0)
 			return -1;
-		lib->sel = first_selectable(lib, 0, -1);
-		return 0;
-	}
-	rc = lib->query[0] == '\0' ? build_all(lib) : build_query(lib);
+		if (lib->idx == NULL)
+		{
+			snprintf(lib->note, sizeof(lib->note), "Looking for hypertexts...");
+			rc = add_row(lib, LIB_NOTE, 0, NULL);
+		} else
+			rc = build_query(lib);
+	} else if (lib->layout == LIB_PANES)
+		rc = build_pane(lib);
+	else
+		rc = build_outline(lib);
 	if (rc < 0)
 		return -1;
 	if (want_text)
@@ -387,11 +643,12 @@ static int rebuild(ehv_library *lib, int keep_selection, int want_text)
 		unsigned long i;
 
 		for (i = 0; i < lib->nrows; i++)
-			if (lib->rows[i].kind == kind && lib->rows[i].ref == ref)
+			if (lib->rows[i].kind == kind && selectable(&lib->rows[i]) &&
+			    (kind == LIB_GROUP ? strcmp(lib->rows[i].text, heading) == 0 : lib->rows[i].ref == ref))
 				lib->sel = (long) i;
 	}
 	if (lib->sel < 0)
-		lib->sel = first_selectable(lib, 0, -1);
+		lib->sel = first_choice(lib);
 	if (lib->top >= (long) lib->nrows)
 		lib->top = 0;
 	return 0;
@@ -408,6 +665,7 @@ int lib_set_index(ehv_library *lib, const ehv_index *idx)
 	ehv_fts_free(lib->fts);
 	lib->fts = NULL;
 	lib->idx = idx;
+	lib->order_of = NULL;             /* made again, even at the same address */
 	return rebuild(lib, 0, 0);
 }
 
@@ -415,6 +673,96 @@ int lib_set_bookmarks(ehv_library *lib, const ehv_bookmarks *bm)
 {
 	lib->bm = bm;
 	return rebuild(lib, 1, 0);
+}
+
+int lib_set_recent(ehv_library *lib, const ehv_bookmarks *recent)
+{
+	lib->recent = recent;
+	return rebuild(lib, 1, 0);
+}
+
+int lib_set_layout(ehv_library *lib, int layout)
+{
+	if (layout != LIB_PANES)
+		layout = LIB_OUTLINE;
+	if (layout == lib->layout)
+		return 0;
+	lib->layout = layout;
+	lib->top = 0;
+	return rebuild(lib, 1, 0);
+}
+
+int lib_fold(ehv_library *lib, int how)
+{
+	long h = lib->sel;
+	int folded, want;
+
+	if (h < 0 || (unsigned long) h >= lib->nrows)
+		return 0;
+	if (lib->rows[h].kind != LIB_GROUP)
+	{
+		if (how != 0)
+			return 0;
+		while (h >= 0 && lib->rows[h].kind != LIB_GROUP)
+			h--;
+		if (h < 0)
+			return 0;
+	}
+	if (!(lib->rows[h].flags & LIB_FOLDS))
+		return 0;
+	folded = (lib->rows[h].flags & LIB_FOLDED) != 0;
+	want = how < 0 ? !folded : how == 0;
+	if (want == folded)
+	{
+		if (h == lib->sel)
+			return 0;
+		lib->sel = h;                  /* folded already: to its heading */
+		return 1;
+	}
+	set_folded(lib, lib->rows[h].text, want);
+	lib->sel = h;
+	return rebuild(lib, 1, 0) < 0 ? -1 : 1;
+}
+
+long lib_pane_select(ehv_library *lib, long i)
+{
+	if (lib->npanes == 0)
+		return -1;
+	if (i < 0)
+		i = 0;
+	if (i >= (long) lib->npanes)
+		i = (long) lib->npanes - 1;
+	if (i == lib->pane)
+		return i;
+	lib->pane = i;
+	lib->pane_kind = lib->panes[i].kind;
+	snprintf(lib->pane_name, sizeof(lib->pane_name), "%s", lib->panes[i].text);
+	lib->top = 0;
+	rebuild(lib, 0, 0);
+	return lib->pane;
+}
+
+long lib_pane_move(ehv_library *lib, long delta)
+{
+	return lib_pane_select(lib, lib->pane + delta);
+}
+
+const ehv_guide *lib_row_guide(const ehv_library *lib, unsigned long row)
+{
+	const lib_row *r;
+	const ehv_bookmarks *from;
+	long g;
+
+	if (row >= lib->nrows || lib->idx == NULL)
+		return NULL;
+	r = &lib->rows[row];
+	if (r->kind == LIB_GUIDE)
+		return &lib->idx->guides[r->ref];
+	from = r->kind == LIB_BOOKMARK ? lib->bm : r->kind == LIB_RECENT ? lib->recent : NULL;
+	if (from == NULL || r->ref >= from->n)
+		return NULL;
+	g = ehv_index_find_path(lib->idx, from->b[r->ref].path);
+	return g >= 0 ? &lib->idx->guides[g] : NULL;
 }
 
 int lib_selected_bookmark(const ehv_library *lib)
@@ -444,7 +792,7 @@ long lib_move(ehv_library *lib, long delta)
 		return lib->sel;
 	for (i = lib->sel + step; i >= 0 && (unsigned long) i < lib->nrows; i += step)
 	{
-		if (selectable(lib->rows[i].kind))
+		if (selectable(&lib->rows[i]))
 		{
 			last = i;
 			if (++moved == (delta < 0 ? -delta : delta))
@@ -457,7 +805,7 @@ long lib_move(ehv_library *lib, long delta)
 
 long lib_select(ehv_library *lib, long row)
 {
-	if (row < 0 || (unsigned long) row >= lib->nrows || !selectable(lib->rows[row].kind))
+	if (row < 0 || (unsigned long) row >= lib->nrows || !selectable(&lib->rows[row]))
 		return lib->sel;
 	lib->sel = row;
 	return row;
@@ -472,12 +820,14 @@ int lib_activate(ehv_library *lib, const char **path, const char **node, unsigne
 	if (lib->sel < 0 || (unsigned long) lib->sel >= lib->nrows)
 		return LIB_NOTHING;
 	r = &lib->rows[lib->sel];
-	if (r->kind == LIB_BOOKMARK)
+	if (r->kind == LIB_BOOKMARK || r->kind == LIB_RECENT)
 	{
-		if (lib->bm == NULL || r->ref >= lib->bm->n)
+		const ehv_bookmarks *from = r->kind == LIB_BOOKMARK ? lib->bm : lib->recent;
+
+		if (from == NULL || r->ref >= from->n)
 			return LIB_NOTHING;
-		*path = lib->bm->b[r->ref].path;
-		*node = lib->bm->b[r->ref].node;
+		*path = from->b[r->ref].path;
+		*node = from->b[r->ref].node;
 		return LIB_OPEN;
 	}
 	if (lib->idx == NULL)
@@ -598,6 +948,10 @@ void lib_row_text(const ehv_library *lib, unsigned long row, char *buf, unsigned
 		if (lib->bm != NULL && r->ref < lib->bm->n)
 			snprintf(buf, size, "  %s", lib->bm->b[r->ref].title);
 		break;
+	case LIB_RECENT:
+		if (lib->recent != NULL && r->ref < lib->recent->n)
+			snprintf(buf, size, "  %s", lib->recent->b[r->ref].title);
+		break;
 	}
 }
 
@@ -632,5 +986,55 @@ void lib_row_detail(const ehv_library *lib, unsigned long row, char *buf, unsign
 		if (lib->bm != NULL && r->ref < lib->bm->n)
 			snprintf(buf, size, "%s", fs_basename(lib->bm->b[r->ref].path));
 		break;
+	case LIB_RECENT:
+		if (lib->recent != NULL && r->ref < lib->recent->n)
+			snprintf(buf, size, "%s", fs_basename(lib->recent->b[r->ref].path));
+		break;
+	}
+}
+
+const char *lib_version(const char *v)
+{
+	const char *w;
+
+	if (v == NULL)
+		return "";
+	while (*v == ' ')
+		v++;
+	if (atari_ncasecmp(v, "$VER:", 5) == 0)
+		for (v += 5; *v == ' '; v++)
+			;
+	/* "basic.hyp 1.0 (13.10.2026)": the file's name left out */
+	for (w = v; *w != '\0' && *w != ' '; w++)
+		;
+	if (w - v > 4 && atari_ncasecmp(w - 4, ".hyp", 4) == 0)
+		for (v = w; *v == ' '; v++)
+			;
+	return v;
+}
+
+void lib_row_about(const ehv_library *lib, unsigned long row, char *buf, unsigned long size)
+{
+	const ehv_guide *g;
+	const char *ver, *base;
+
+	if (size == 0)
+		return;
+	buf[0] = '\0';
+	if (row >= lib->nrows || lib->rows[row].kind != LIB_GUIDE)
+		return;
+	g = &lib->idx->guides[lib->rows[row].ref];
+	ver = lib_version(g->version);
+	if (g->author != NULL && g->author[0] != '\0' && ver[0] != '\0')
+		snprintf(buf, size, "%s \xfa %s", g->author, ver);
+	else if (g->author != NULL && g->author[0] != '\0')
+		snprintf(buf, size, "%s", g->author);
+	else if (ver[0] != '\0')
+		snprintf(buf, size, "%s", ver);
+	else
+	{
+		/* its folder */
+		base = fs_basename(g->path);
+		snprintf(buf, size, "%.*s", (int) (base - g->path), g->path);
 	}
 }

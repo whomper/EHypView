@@ -60,6 +60,8 @@ void libwin_index_changed(void);          /* a new index (or progress) */
 void libwin_free(void);
 void libwin_font_changed(void);
 void libwin_bookmarks(const ehv_bookmarks *bm);  /* added or removed: shown again */
+void libwin_recent(const ehv_bookmarks *recent); /* the pages read last */
+void libwin_layout(int layout);                  /* LIB_OUTLINE, LIB_PANES (LIBRARY=) */
 void app_bookmark_remove(int i);         /* Delete in the library, the menu */
 
 /* ehypview.c: EHYPVIEW.INF, in the boot drive's root (the AERA

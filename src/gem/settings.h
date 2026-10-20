@@ -8,6 +8,7 @@
 
 #define SETTINGS_START 1               /* START= changed */
 #define SETTINGS_PATHS 2               /* PATHS= changed: look through the library again */
+#define SETTINGS_LAYOUT 4              /* LIBRARY= changed: the library's layout */
 
 /*
  * Settings... (^,): inf_path is EHYPVIEW.INF, folder EHypView's folder

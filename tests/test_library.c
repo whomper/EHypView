@@ -115,9 +115,9 @@ static void test_all(const ehv_index *idx)
 	CHECK(lib.sel == 1);
 	CHECK(lib_move(&lib, 1) == 2);
 	CHECK(lib_move(&lib, 10) == 5);           /* over the heading, stops at the end */
-	CHECK(lib_move(&lib, -1) == 3);
-	CHECK(lib_move(&lib, -10) == 1);
-	CHECK(lib_select(&lib, 4) == 1);          /* headings are not selectable */
+	CHECK(lib_move(&lib, -1) == 4);           /* the heading: it folds */
+	CHECK(lib_move(&lib, -10) == 0);
+	CHECK(lib_select(&lib, 4) == 4);
 	CHECK(lib_select(&lib, 5) == 5);
 	CHECK(lib_activate(&lib, &path, &node, &line) == LIB_OPEN);
 	CHECK(ends_with(path, "big.hyp") && node == NULL && line == 0);
@@ -154,7 +154,8 @@ static void test_bookmarks(const ehv_index *idx)
 	CHECK(strcmp(t, "OTHER.HYP") == 0);
 	CHECK(lib.rows[3].kind == LIB_GROUP && strcmp(lib.rows[3].text, "Test/EHypView") == 0);
 	CHECK(lib_move(&lib, 1) == 2 && lib_selected_bookmark(&lib) == 1);
-	CHECK(lib_move(&lib, 1) == 4 && lib_selected_bookmark(&lib) == -1);   /* over the heading */
+	CHECK(lib_move(&lib, 1) == 3 && lib_selected_bookmark(&lib) == -1);   /* the heading */
+	CHECK(lib_move(&lib, 1) == 4);
 
 	/* typing: the ones whose title or page has the text, in any case */
 	CHECK(lib_set_query(&lib, "detail") == 0);
@@ -179,6 +180,94 @@ static void test_bookmarks(const ehv_index *idx)
 	CHECK(lib_set_bookmarks(&lib, NULL) == 0 && lib.nrows == 6);
 	lib_free(&lib);
 	bm_free(&bm);
+}
+
+static long pane_of(const ehv_library *lib, const char *name)
+{
+	unsigned long i;
+
+	for (i = 0; i < lib->npanes; i++)
+		if (strcmp(lib->panes[i].text, name) == 0)
+			return (long) i;
+	return -1;
+}
+
+static void test_layouts(const ehv_index *idx)
+{
+	ehv_library lib;
+	ehv_bookmarks recent;
+	char t[120];
+	const char *path, *node;
+	unsigned short line;
+	long p;
+
+	/* the Outline: headings fold, with their counts and tints */
+	lib_init(&lib, idx);
+	CHECK(lib.layout == LIB_OUTLINE && lib.nrows == 6 && lib.sel == 1);
+	CHECK(lib.rows[0].flags == LIB_FOLDS && lib.rows[0].ref == 3 && lib.rows[0].tint == 1);
+	CHECK(lib.rows[1].tint == 1 && lib.rows[4].ref == 1 && lib.rows[4].tint == 0 && lib.rows[5].tint == 0);
+	CHECK(lib_fold(&lib, 1) == 0);            /* a hypertext: nothing to unfold */
+	CHECK(lib_fold(&lib, 0) == 1);            /* its group */
+	CHECK(lib.nrows == 3 && lib.sel == 0 && lib.rows[0].flags == (LIB_FOLDS | LIB_FOLDED));
+	CHECK(lib.rows[0].ref == 3 && lib.nguides == 4);
+	CHECK(lib_move(&lib, 1) == 1 && lib_move(&lib, 1) == 2);
+	CHECK(lib_set_query(&lib, "image") == 0 && lib.rows[0].flags == 0);   /* searching: none fold */
+	CHECK(lib.rows[1].kind == LIB_GUIDE && lib.rows[1].tint == 1);
+	CHECK(lib_set_query(&lib, "") == 0 && lib.nrows == 3);                /* still folded */
+	lib_select(&lib, 0);
+	CHECK(lib_fold(&lib, -1) == 1 && lib.nrows == 6 && lib.sel == 0);
+	CHECK(lib_fold(&lib, 1) == 0);
+
+	/* its second line */
+	lib_row_about(&lib, 1, t, sizeof(t));
+	CHECK(strcmp(t, "EHypView project \xfa 1.0 (13.10.2026)") == 0);
+	lib_row_about(&lib, 5, t, sizeof(t));
+	CHECK(ends_with(t, TREE "/"));            /* no author nor version: its folder */
+	CHECK(strcmp(lib_version("$VER: basic.hyp 1.0 (13.10.2026)"), "1.0 (13.10.2026)") == 0);
+	CHECK(strcmp(lib_version("2.16"), "2.16") == 0 && strcmp(lib_version(NULL), "") == 0);
+	CHECK(lib_row_guide(&lib, 1) == &idx->guides[lib.rows[1].ref] && lib_row_guide(&lib, 0) == NULL);
+
+	/* the pages read last, first; the first hypertext chosen */
+	bm_init(&recent);
+	bm_add(&recent, "C:\\GUIDES\\BASIC.HYP", "Second", "Basic test - Second page");
+	bm_add(&recent, "C:\\GUIDES\\OTHER.HYP", "Main", "Other test - Main");
+	CHECK(lib_set_recent(&lib, &recent) == 0);
+	CHECK(lib.nrows == 8 && lib.rows[0].kind == LIB_RECENT && lib.rows[1].kind == LIB_RECENT);
+	CHECK(lib.sel == 2);                      /* the heading it was on */
+	lib_free(&lib);
+	lib_init(&lib, idx);
+	lib_set_recent(&lib, &recent);
+	CHECK(lib.sel == 3);
+	lib_row_detail(&lib, 1, t, sizeof(t));
+	CHECK(strcmp(t, "OTHER.HYP") == 0);
+	CHECK(lib_select(&lib, 0) == 0 && lib_activate(&lib, &path, &node, &line) == LIB_OPEN);
+	CHECK(strcmp(path, "C:\\GUIDES\\BASIC.HYP") == 0 && strcmp(node, "Second") == 0);
+	CHECK(lib_row_guide(&lib, 0) == NULL);    /* not in the index */
+	CHECK(lib_move(&lib, 1) == 1 && lib_move(&lib, 1) == 2);
+
+	/* two panes: the subjects, All chosen at first */
+	CHECK(lib_set_layout(&lib, LIB_PANES) == 0);
+	CHECK(lib.npanes == 4 && lib.panes[0].kind == PANE_RECENT && lib.panes[0].count == 2);
+	CHECK(lib.panes[1].kind == PANE_ALL && lib.panes[1].count == 4 && lib.pane == 1);
+	CHECK(lib.panes[2].kind == PANE_SUBJECT && lib.panes[2].count == 3 && lib.panes[2].tint == 1);
+	CHECK(lib.panes[3].kind == PANE_OTHER && lib.panes[3].count == 1);
+	CHECK(lib.nrows == 6 && lib.rows[0].kind == LIB_GROUP && lib.rows[0].flags == 0);
+	p = pane_of(&lib, "Test/EHypView");
+	CHECK(lib_pane_select(&lib, p) == p && lib.nrows == 3 && lib.rows[0].kind == LIB_GUIDE && lib.sel == 0);
+	CHECK(lib.nguides == 3);
+	CHECK(lib_pane_move(&lib, 1) == p + 1 && lib.nrows == 1);
+	lib_row_detail(&lib, 0, t, sizeof(t));
+	CHECK(strcmp(t, "big") == 0);
+	CHECK(lib_pane_move(&lib, 5) == 3 && lib_pane_move(&lib, -10) == 0);
+	CHECK(lib.nrows == 2 && lib.rows[0].kind == LIB_RECENT);
+	lib_pane_select(&lib, p);
+	CHECK(lib_set_index(&lib, idx) == 0 && lib.pane == p && lib.nrows == 3);   /* kept */
+	CHECK(lib_set_query(&lib, "second") == 0 && lib.rows[0].kind == LIB_GROUP && lib.npages == 2);
+	CHECK(lib_set_query(&lib, "") == 0 && lib.nrows == 3);
+	CHECK(lib_set_recent(&lib, NULL) == 0 && lib.npanes == 3 && lib.pane == p - 1);
+	CHECK(lib_set_layout(&lib, LIB_OUTLINE) == 0 && lib.nrows == 6);
+	lib_free(&lib);
+	bm_free(&recent);
 }
 
 static void test_names(const ehv_index *idx)
@@ -332,6 +421,7 @@ int main(int argc, char **argv)
 	{
 		test_all(idx);
 		test_bookmarks(idx);
+		test_layouts(idx);
 		test_names(idx);
 		test_fulltext(idx);
 	}
