@@ -99,22 +99,59 @@ int bm_remove(ehv_bookmarks *bm, unsigned int i)
 	return 0;
 }
 
+void bm_key_as(const char *prefix, unsigned int i, char *buf, unsigned long size)
+{
+	snprintf(buf, size, "%s%u", prefix, i + 1);
+}
+
 void bm_key(unsigned int i, char *buf, unsigned long size)
 {
-	snprintf(buf, size, "BOOKMARK%u", i + 1);
+	bm_key_as("BOOKMARK", i, buf, size);
+}
+
+int bm_touch(ehv_bookmarks *bm, const char *path, const char *node, const char *title, unsigned int max)
+{
+	unsigned int i;
+	ehv_bookmark b;
+	int k;
+
+	if (max > BM_MAX)
+		max = BM_MAX;
+	for (i = 0; i < bm->n; i++)
+		if (atari_casecmp(bm->b[i].path, path) == 0)
+			break;
+	if (i == 0 && bm->n > 0 && strcmp(bm->b[0].node, node) == 0 && strncmp(bm->b[0].title, title, BM_TITLE_MAX) == 0)
+		return 0;
+	if (i < bm->n)
+		bm_remove(bm, i);
+	while (bm->n >= max && bm->n > 0)
+		bm_remove(bm, bm->n - 1);
+	k = bm_add(bm, path, node, title);
+	if (k < 0)
+		return -1;
+	/* to the front */
+	b = bm->b[k];
+	memmove(&bm->b[1], &bm->b[0], (size_t) k * sizeof(bm->b[0]));
+	bm->b[0] = b;
+	return 1;
 }
 
 void bm_read(ehv_bookmarks *bm, const inf_file *inf)
 {
+	bm_read_as(bm, inf, "BOOKMARK", BM_MAX);
+}
+
+void bm_read_as(ehv_bookmarks *bm, const inf_file *inf, const char *prefix, unsigned int max)
+{
 	unsigned int i;
 
 	bm_free(bm);
-	for (i = 0; inf != NULL && i < BM_MAX; i++)
+	for (i = 0; inf != NULL && i < max && i < BM_MAX; i++)
 	{
 		char key[16], *v, *a, *b;
 		const char *s;
 
-		bm_key(i, key, sizeof(key));
+		bm_key_as(prefix, i, key, sizeof(key));
 		s = inf_get(inf, key);
 		if (s == NULL || s[0] == '\0' || (v = copy(s, strlen(s))) == NULL)
 			continue;

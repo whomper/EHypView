@@ -11,6 +11,18 @@
  * as the search runs.  Bookmarks come first, all of them with an empty
  * search, the ones whose title or page matches while typing.  No GEM
  * here; src/gem/libwin.c draws it.
+ *
+ * Two layouts (LIBRARY= in EHYPVIEW.INF, Settings):
+ *
+ *   Outline    the pages read last (LIB_RECENT, drawn as a strip),
+ *              then the groups, each folded or unfolded from its
+ *              heading, with the number of hypertexts in it;
+ *   Two panes  the Subjects on the left (Bookmarks, Recently read,
+ *              All hypertexts, each subject), the one chosen on the
+ *              right: the rows are only that one's.
+ *
+ * Each subject has a tint (1, 2, ... in the order shown; 0: none), the
+ * colour the window gives its square and its hypertexts' books.
  */
 #ifndef EHV_LIBRARY_H
 #define EHV_LIBRARY_H
@@ -27,14 +39,41 @@
 #define LIB_TEXT    4     /* a full-text hit                    */
 #define LIB_NOTE    5     /* a message                          */
 #define LIB_BOOKMARK 6    /* a bookmark                         */
+#define LIB_RECENT  7     /* a page read lately                 */
+
+/* layouts */
+#define LIB_OUTLINE 0
+#define LIB_PANES   1
+
+/* a heading's flags */
+#define LIB_FOLDS   1     /* can be folded (Outline, no search) */
+#define LIB_FOLDED  2     /* folded: its rows left out          */
 
 #define LIB_QUERY_MAX 48
 
 typedef struct {
 	unsigned char kind;
-	unsigned long ref;    /* GUIDE: guide; PAGE: symbol; TEXT: hit; BOOKMARK: its index */
+	unsigned char flags;  /* GROUP: LIB_FOLDS, LIB_FOLDED          */
+	unsigned char tint;   /* GROUP, GUIDE: the subject's tint      */
+	unsigned long ref;    /* GUIDE: guide; PAGE: symbol; TEXT: hit; BOOKMARK,
+	                         RECENT: its index; GROUP: the rows under it */
 	const char *text;     /* GROUP: heading (static or index string) */
 } lib_row;
+
+/* a line of the Subjects pane */
+#define PANE_BOOKMARKS 0
+#define PANE_RECENT    1
+#define PANE_ALL       2
+#define PANE_SUBJECT   3
+#define PANE_OTHER     4  /* hypertexts without a subject */
+
+typedef struct {
+	unsigned char kind, tint;
+	unsigned long count;
+	const char *text;     /* the subject (an index string), or a name */
+} lib_pane;
+
+#define LIB_FOLD_MAX 32
 
 typedef struct {
 	const ehv_index *idx;
@@ -47,6 +86,20 @@ typedef struct {
 	ehv_fts *fts;         /* full-text search, NULL = none       */
 	unsigned long npages, nguides;   /* matches in the last rebuild */
 	char note[80];        /* text of the NOTE row               */
+
+	int layout;           /* LIB_OUTLINE, LIB_PANES             */
+	const ehv_bookmarks *recent;     /* pages read last; may be NULL */
+	unsigned long *order; /* readable hypertexts, as listed     */
+	unsigned long norder;
+	unsigned char *tint;  /* each hypertext's subject's tint    */
+	const ehv_index *order_of;       /* the index order was made for */
+	lib_pane *panes;      /* the Subjects pane                  */
+	unsigned long npanes, cap_panes;
+	long pane;            /* the one chosen                     */
+	unsigned char pane_kind;         /* it, kept over a new index      */
+	char pane_name[64];
+	unsigned long folded[LIB_FOLD_MAX];   /* the headings folded, hashed */
+	unsigned int nfolded;
 } ehv_library;
 
 void lib_init(ehv_library *lib, const ehv_index *idx);
@@ -57,6 +110,26 @@ int lib_set_index(ehv_library *lib, const ehv_index *idx);
 
 /* new bookmarks (added or removed): rebuilds */
 int lib_set_bookmarks(ehv_library *lib, const ehv_bookmarks *bm);
+
+/* new pages read lately (most recent first): rebuilds */
+int lib_set_recent(ehv_library *lib, const ehv_bookmarks *recent);
+
+/* LIB_OUTLINE or LIB_PANES: rebuilds */
+int lib_set_layout(ehv_library *lib, int layout);
+
+/* Outline: fold (0), unfold (1) or turn (-1) the chosen heading, or the
+   group of the chosen row (folded, the heading is chosen); 1 when it
+   changed */
+int lib_fold(ehv_library *lib, int how);
+
+/* Two panes: choose line i of the Subjects pane, or move by delta;
+   the rows follow.  The one chosen */
+long lib_pane_select(ehv_library *lib, long i);
+long lib_pane_move(ehv_library *lib, long delta);
+
+/* the hypertext a row is about (GUIDE, or BOOKMARK and RECENT when the
+   index has it), or NULL */
+const ehv_guide *lib_row_guide(const ehv_library *lib, unsigned long row);
 
 /* the bookmark the selected row is, or -1 */
 int lib_selected_bookmark(const ehv_library *lib);
@@ -90,5 +163,11 @@ void lib_row_text(const ehv_library *lib, unsigned long row, char *buf, unsigned
 
 /* text on the right of a row (file name, hypertext), "" if none */
 void lib_row_detail(const ehv_library *lib, unsigned long row, char *buf, unsigned long size);
+
+/* a hypertext's second line: author and version, else its folder */
+void lib_row_about(const ehv_library *lib, unsigned long row, char *buf, unsigned long size);
+
+/* a version as shown: "$VER:" and the file name left out */
+const char *lib_version(const char *v);
 
 #endif

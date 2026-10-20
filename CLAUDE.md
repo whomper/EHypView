@@ -66,7 +66,12 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   of the guide in the program (640 x 480) and make it again with
   `python3 common/tools/helpfront.py thumb SHOT.PNG docs/help/WINDOW.IMG 4,36,632,410 32,90 210,68 330,206 412,90 596,90`.
 - Settings (src/gem/settings.c, ^,) is EMail's layout: pages on the left, run by the shared
-  `dlg_do`. It edits `START=` and `PATHS=`; the font stays in View > Font... as in ECal and EMail.
+  `dlg_do`. It edits `START=`, `LIBRARY=` and `PATHS=`; the font stays in View > Font... as in ECal
+  and EMail.
+- The library (src/view/library.c, the model, tested on the host; src/gem/libwin.c draws it) has two
+  layouts, `LIBRARY=outline` (the default: Continue, folding groups, two-line rows) and `panes`
+  (Subjects | rows | details). The pages read last are `RECENT1=`... in the INF, written when a
+  viewer window closes and at the end, never per page.
 - Disk access (guidelines 6.5): a file is looked at once and opened once a job (`pf_load`,
   `hyp_open` take size and date from the open file; listings carry them; `pf_look` and
   `hyp_recent` hold an event's lookups); the INF is read once a start; the index is read in

@@ -12,8 +12,9 @@ Help.
 - **Finds every hypertext by itself:** the folders named in `ST-GUIDE.INF` or in its own Settings, and
   `\GUIDES` and `\GEMSYS\GUIDES` on every drive, with all their subfolders, scanned in the background
   and kept in an index. There is no `ALL.REF` to maintain (yours is still read).
-- **A library with one search box:** every hypertext found, grouped by subject. Typing finds page
-  names, aliases and keywords at once; Return searches the full text of every page of every hypertext.
+- **A library with one search box:** every hypertext found, grouped by subject, as an outline that
+  folds or in two panes, with the pages you read last a click away. Typing finds page names, aliases
+  and keywords at once; Return searches the full text of every page of every hypertext.
 - **Links that lead somewhere:** into any hypertext in the index, wherever it is. One that leads nowhere
   says so and suggests the closest names ("did you mean").
 - **Help for your other programs:** a program that asks for help (`VA_START`, `AC_HELP`) gets its page.
@@ -33,7 +34,7 @@ Help.
   a right-click menu, a Settings dialog, drag and drop, the clipboard and iconify.
 - **Its own guide:** `EHYPVIEW.HYP`, with the AERA programs' front page, from **Help > EHypView guide**.
 
-![EHypView on a Falcon: the library lists the AERA programs' guides by subject (EMail, EFTP, EContact, ECal, EHypView) over the viewer, which shows a page of EHypView's own guide under its toolbar](docs/screenshot.png)
+![EHypView on a Falcon: the library, as an outline, lists the AERA programs' guides by subject over the viewer, which shows a page of EHypView's own guide under its toolbar](docs/screenshot.png)
 
 ## Getting started
 
@@ -162,12 +163,27 @@ Tabs are still to come: [docs/DESIGN.md](docs/DESIGN.md) has the goals and the
 ### The library
 
 **File > Library and search** (^L, or the toolbar's **Library**) lists every hypertext found, grouped
-by subject under a heading and a rule, with one search field at the top. Each row has a small picture
-of what it is (a book for a hypertext, a ribbon for a bookmark, a page for a page, a magnifier for the
-full-text search) and the file or hypertext it is in on the right. It is also what you see when no
-page was asked for.
+by subject, with one search field at the top. Each subject has its colour; each row has a small
+picture of what it is (a book for a hypertext, its spine in the subject's colour, a ribbon for a
+bookmark, a page for a page, a magnifier for the full-text search). It is also what you see when no
+page was asked for. Settings chooses one of two layouts (`LIBRARY=`):
+
+- **Outline**, the first one. Under the search field, **Continue**: a button for each page you read
+  last (one for each hypertext, the newest first). Then Bookmarks and one group for each subject,
+  each heading with the subject's colour, the number of hypertexts in it and a triangle: a click on
+  it, or Return, folds the group; Left and Right fold and open it from the keyboard. A hypertext takes
+  two lines, its title over its author and version, with the file on the right.
+- **Two panes.** The subjects on the left (Bookmarks, Recently read, All hypertexts, each subject), the
+  hypertexts of the one chosen on the right, and under them what the row chosen is: its title, author
+  and version, the file and its `.REF`, with **Open** and **Index**. Left or Tab goes to the subjects,
+  Right, Tab or Return back to the rows. A window narrower than 56 characters shows the Outline.
+
+![The library in two panes: the subjects on the left, the guides of the one chosen on the right, and what the guide chosen is, with Open and Index](docs/library-panes.png)
 
 ![The library searching for "remind": the page Reminders in ECal's guide, and the full-text search for the word](docs/library.png)
+
+The pages read last are written to `EHYPVIEW.INF` (`RECENT1=`...) when a viewer window closes and
+when EHypView ends, not at every page.
 
 - **Type to search.** Matching page names, aliases and keywords show at once (exact matches first, then
   names starting with what you typed, then names containing it, then similar ones), with matching
@@ -204,13 +220,13 @@ accessory from the next boot, and its Font dialog lists the ones it knows "from 
 **Options > Settings...** (^,; in the accessory, the toolbar's ≡ menu) shows what `EHYPVIEW.INF` holds,
 on two pages, as EMail's and ECal's Settings do. OK keeps the changes; Cancel, Esc and Undo forget them.
 
-![The Settings dialog over the viewer: the General page, with when the accessory looks through the library and EHypView's folder](docs/settings.png)
+![The Settings dialog over the viewer: the Library page, with the library's layout and the folders to look in as well](docs/settings.png)
 
 - **General:** when the accessory looks through the library (`START=`): when first opened, at start,
   after a minute or after 5 minutes; and EHypView's folder (`FOLDER=`), where the index is kept.
-- **Library:** up to three more folders to look for hypertexts in, with their subfolders (`PATHS=`). A
-  folder that isn't there is asked about: **Keep** it (a drive put in later) or **Change** it. OK
-  with new folders looks through the library again.
+- **Library:** its layout, Outline or Two panes (`LIBRARY=`); up to three more folders to look for
+  hypertexts in, with their subfolders (`PATHS=`). A folder that isn't there is asked about: **Keep**
+  it (a drive put in later) or **Change** it. OK with new folders looks through the library again.
 
 The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in the Bookmarks menu.
 

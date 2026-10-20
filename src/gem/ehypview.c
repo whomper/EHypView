@@ -50,6 +50,7 @@
 #include "bgwork.h"
 #include "bigbuf.h"
 #include "settings.h"
+#include "library.h"
 #include "version.h"
 
 #define VA_START   0x4711
@@ -95,6 +96,10 @@ static viewer *cur = &viewers[0];
 
 static ehv_bookmarks bookmarks;        /* EHYPVIEW.INF's BOOKMARKn */
 static unsigned int bm_written;        /* how many BOOKMARKn lines it has */
+#define RECENT_MAX 5
+static ehv_bookmarks recent;           /* the pages read last, RECENTn */
+static unsigned int recent_written;    /* how many RECENTn lines it has */
+static int recent_changed;             /* not written yet */
 static short menu_scr_w, menu_scr_h;   /* for building the menu bar again */
 
 /*
@@ -657,12 +662,34 @@ static void update_info(void)
 	wind_set_str(cur->h, WF_INFO, cur->info);
 }
 
+/* the page shown: for the tests, and first of the pages read last
+   (written when its window closes, or at the end) */
+static void page_read(void)
+{
+	char title[160], *t;
+	size_t len;
+
+	if (cur->view.page == NULL)
+		return;
+	log_event("page", cur->view.doc->path, cur->view.doc->entries[cur->view.page->num].name);
+	view_title(&cur->view, title, sizeof(title));        /* " database - page " */
+	for (t = title; *t == ' '; t++)
+		;
+	for (len = strlen(t); len > 0 && t[len - 1] == ' '; len--)
+		t[len - 1] = '\0';
+	if (bm_touch(&recent, cur->view.doc->path, cur->view.doc->entries[cur->view.page->num].name, t,
+		     RECENT_MAX) > 0)
+	{
+		recent_changed = 1;
+		libwin_recent(&recent);
+	}
+}
+
 /* after the view changed page */
 static void page_changed(void)
 {
 	restore();
-	if (cur->view.page != NULL)
-		log_event("page", cur->view.doc->path, cur->view.doc->entries[cur->view.page->num].name);
+	page_read();
 	make_layout();
 	clamp_scroll();
 	if (cur->h > 0)
@@ -681,6 +708,8 @@ static void page_changed(void)
 
 static void after(int rc);
 static void close_window(void);
+static void recent_save(void);
+static int library_layout(void);
 
 /* the screen position of link run r of the page (its top left) */
 static void link_pos(long r, short *x, short *y)
@@ -918,6 +947,7 @@ static void close_window(void)
 		wind_close(cur->h);
 		wind_delete(cur->h);
 		log_event("closed", "viewer", NULL);
+		recent_save();
 	}
 	cur->h = -1;
 	cur->icon = 0;
@@ -965,8 +995,8 @@ void viewer_show(const char *path, const char *node, unsigned short line)
 		open_window();
 		if (rc != VIEW_OK)
 			log_event("status", cur->view.status, NULL);
-		else if (cur->view.page != NULL)
-			log_event("page", cur->view.doc->path, cur->view.doc->entries[cur->view.page->num].name);
+		else
+			page_read();
 		return;
 	}
 	viewer_top();
@@ -1188,8 +1218,7 @@ static void new_window(int follow)
 	}
 	sprintf(n, "%d", viewer_windows());
 	log_event("window", "new", n);
-	if (cur->view.page != NULL)
-		log_event("page", cur->view.doc->path, cur->view.doc->entries[cur->view.page->num].name);
+	page_read();
 }
 
 /* the bookmark of the current page, or -1 */
@@ -1349,8 +1378,14 @@ static void command(int cmd)
 		font_dialog();
 		return;
 	case CMD_SETTINGS:
-		if (settings_dialog(settings_path, home_dir) & SETTINGS_PATHS)
-			job_again();
+		{
+			int changed = settings_dialog(settings_path, home_dir);
+
+			if (changed & SETTINGS_LAYOUT)
+				libwin_layout(library_layout());
+			if (changed & SETTINGS_PATHS)
+				job_again();
+		}
 		return;
 	case CMD_GUIDE:
 		app_guide(NULL);
@@ -2465,27 +2500,51 @@ static void bookmarks_load(void)
 		if (inf_get(inf, key) != NULL)
 			bm_written = i + 1;
 	}
+	/* the pages read last: the file's, unless some read here aren't in
+	   it yet */
+	if (!recent_changed)
+	{
+		bm_read_as(&recent, inf, "RECENT", RECENT_MAX);
+		recent_written = 0;
+		for (i = 0; inf != NULL && i < RECENT_MAX; i++)
+		{
+			char key[16];
+
+			bm_key_as("RECENT", i, key, sizeof(key));
+			if (inf_get(inf, key) != NULL)
+				recent_written = i + 1;
+		}
+	}
+	libwin_layout(library_layout());
+	libwin_recent(&recent);
 	libwin_bookmarks(&bookmarks);
 	menu_rebuild();
 }
 
-/* BOOKMARK1 to BOOKMARKn written back, in one go: the ones no longer
-   used left empty */
-static int bookmarks_save(void)
+/* LIBRARY=: the library's layout (Settings) */
+static int library_layout(void)
+{
+	const char *v = own_inf != NULL ? inf_get(own_inf, "LIBRARY") : NULL;
+
+	return v != NULL && atari_casecmp(v, "panes") == 0 ? LIB_PANES : LIB_OUTLINE;
+}
+
+/* BOOKMARK1 to BOOKMARKn (or RECENTn) written back, in one go: the ones
+   no longer used left empty */
+static int list_save(const ehv_bookmarks *list, const char *prefix, unsigned int *written,
+		     const char *note1, const char *note)
 {
 	char *text = pf_load(settings_path, NULL);	/* the program may have written since */
-	unsigned int i, last = bookmarks.n > bm_written ? bookmarks.n : bm_written;
+	unsigned int i, last = list->n > *written ? list->n : *written;
 	int r = 0;
 
 	for (i = 0; i < last; i++)
 	{
 		char key[16], val[400], *t;
 
-		bm_key(i, key, sizeof(key));
-		bm_value(&bookmarks, i, val, sizeof(val));
-		t = inf_put(text != NULL ? text : inf_head, key, val, i == 0 ?
-			"a bookmark (^D, the Bookmarks menu, the library): the hypertext, the page and the title, "
-			"between '|'; empty when removed" : "another bookmark, as BOOKMARK1");
+		bm_key_as(prefix, i, key, sizeof(key));
+		bm_value(list, i, val, sizeof(val));
+		t = inf_put(text != NULL ? text : inf_head, key, val, i == 0 ? note1 : note);
 		if (t == NULL)
 		{
 			r = -1;
@@ -2501,8 +2560,29 @@ static int bookmarks_save(void)
 	else
 		free(text);
 	if (r == 0)
-		bm_written = last;
+		*written = last;
 	return r;
+}
+
+static int bookmarks_save(void)
+{
+	return list_save(&bookmarks, "BOOKMARK", &bm_written,
+			 "a bookmark (^D, the Bookmarks menu, the library): the hypertext, the page and the title, "
+			 "between '|'; empty when removed", "another bookmark, as BOOKMARK1");
+}
+
+/* the pages read last, when they changed: as a window closes and at
+   the end (not at each page: the disk is left alone, guidelines 6.5) */
+static void recent_save(void)
+{
+	if (!recent_changed)
+		return;
+	if (list_save(&recent, "RECENT", &recent_written,
+		      "a page read lately, newest first (the library's Continue and Recently read): "
+		      "the hypertext, the page and the title, between '|'", "another page read lately, as RECENT1") == 0)
+		recent_changed = 0;
+	else
+		log_event("status", "Couldn't write EHYPVIEW.INF", NULL);
 }
 
 /* after one was added or removed: kept, and shown everywhere */
@@ -3070,7 +3150,7 @@ int main(void)
 			make_layout();
 			open_window();
 			if (cur->view.page != NULL)
-				log_event("page", cur->view.doc->path, cur->view.doc->entries[cur->view.page->num].name);
+				page_read();
 			else
 				log_event("status", cur->view.status, NULL);
 		} else
@@ -3203,6 +3283,7 @@ int main(void)
 				wind_delete(viewers[i].h);
 			}
 	}
+	recent_save();
 	log_event("quit", NULL, NULL);
 	if (has_menu)
 		menu_bar(menu.tree, 0);
@@ -3222,6 +3303,7 @@ int main(void)
 				viewer_drop(&viewers[i]);
 	}
 	bm_free(&bookmarks);
+	bm_free(&recent);
 	ehv_libjob_free(job);
 	ehv_index_free(idx);
 	crash_remove();

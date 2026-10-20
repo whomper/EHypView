@@ -88,7 +88,28 @@ menu and the keys still reach everything.
 
 **File > Library and search** (^L, or the toolbar's **Library**) lists every hypertext found,
 grouped by subject, with one search field at the top. It is also what you see when no page was
-asked for.
+asked for. It has two layouts; [Settings](#settings) chooses one.
+
+**Outline**, the first one:
+
+- **Continue**, under the search field, has a button for each page you read last, the last page of
+  each hypertext, the newest first. A click opens it.
+- **Groups.** Bookmarks, then one group for each subject. Each heading has the subject's colour and
+  the number of hypertexts in it. A click on the heading, or Return, folds the group and opens it
+  again; Left folds the group of the row chosen, Right opens it.
+- **Hypertexts** take two lines: the title, and under it the author and version (or the folder it
+  is in). The file name is on the right.
+
+**Two panes**:
+
+- **Subjects** on the left: Bookmarks, Recently read, All hypertexts, then each subject with its
+  colour and the number of hypertexts in it. The rows of the one chosen are on the right.
+- **What you chose** is shown under the rows: the title, the author and version, the file and its
+  `.REF`. **Open** opens it; **Index** opens its index page, when it has one.
+- **Keys:** Left or Tab goes to the subjects, where Up and Down choose one; Right, Tab or Return
+  goes back to the rows. A window narrower than 56 characters shows the Outline.
+
+In both layouts:
 
 - **Type to search.** Matching page names, aliases and keywords show at once: exact matches first,
   then names starting with what you typed, then names containing it, then similar ones.
@@ -98,6 +119,9 @@ asked for.
 - **Keys:** Up and Down to choose, Return or a click to open, Backspace to take out a letter,
   Delete to remove the bookmark chosen. ^V pastes into the search, ^X cuts it, ^C copies the
   hypertext chosen. Help opens this guide. Esc leaves the search as it is.
+
+The pages read last are kept in `EHYPVIEW.INF` when a viewer window closes and when EHypView ends,
+not at every page.
 
 EHypView looks through its folders in the background, in short steps that pause while you use the
 mouse or the keyboard, and keeps what it found in `EHYPVIEW.IDX`. The next time only new or changed
@@ -145,9 +169,10 @@ holds, on two pages. OK keeps the changes, Cancel (or Esc, or Undo) forgets them
   minutes**. It takes effect at the next start. The program looks as it starts. Under it,
   EHypView's folder: where the library's index (`EHYPVIEW.IDX`) and the fonts measured
   (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` was started from.
-- **Library:** up to three more folders to look for hypertexts in, each with its subfolders. A
-  folder that isn't there is asked about: **Keep** it (a drive you put in later), or **Change**
-  it. OK with new folders looks through the library again.
+- **Library:** its layout, **Outline** or **Two panes** (see [the library](#the-library)); up to
+  three more folders to look for hypertexts in, each with its subfolders. A folder that isn't
+  there is asked about: **Keep** it (a drive you put in later), or **Change** it. OK with new
+  folders looks through the library again.
 
 The font is chosen with **View > Font...**, and bookmarks from the Bookmarks menu.
 
@@ -222,11 +247,13 @@ it doesn't know, when it writes the file. [Settings](#settings) changes most of 
 |---|---|
 | `FOLDER=` | EHypView's folder, for `EHYPVIEW.IDX` and `EHYPVIEW.FNT`: the program writes the folder it was started from |
 | `START=` | when the accessory looks through the library: `opened`, `now`, or seconds after boot |
+| `LIBRARY=` | the library's layout: `outline` or `panes` |
 | `PATHS=` | more folders to look in, between `;` |
 | `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
 | `HEAPKB=` | the same, set by you: taken instead of `MEMKB=` |
 | `FONT=`, `POINT=` | the font and its size |
 | `BOOKMARK1=` ... | the bookmarks: the hypertext, the page and the title, between `\|` |
+| `RECENT1=` ... | the pages read last, the newest first, the same way |
 
 `ST-GUIDE.INF`, ST-Guide's settings, is read and never written: its `PATHS`, `HYPFOLD`, `REF`,
 `DEFHYP` and `HYPTOP` are used as ST-Guide uses them.

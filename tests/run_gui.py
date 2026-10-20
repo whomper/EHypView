@@ -509,8 +509,10 @@ DESK, FILE, EDIT, VIEW, NAV, BOOK = (56, 9), (120, 9), (168, 9), (216, 9), (280,
 OPTIONS, HELPMENU = (444, 9), (504, 9)
 
 # the Settings dialog, centred on the screen: its pages on the left, the
-# START= popup on General, the first folder field on Library
-SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 201), (320, 217), (300, 252), (300, 211)
+# START= popup on General; on Library the layout's popup and its second
+# choice, the first folder field
+SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 187), (320, 203), (300, 236), (300, 237)
+SET_LAYOUT, SET_LAYOUT_PANES = (340, 181), (330, 214)
 
 
 def item(title, n):
@@ -530,6 +532,28 @@ TB_INDEX, TB_SEEALSO, TB_LIBRARY, TB_BOOKMARKS, TB_MENU = (279, TB_Y), (349, TB_
 
 def tb(button, kind="click"):
     return (kind, button[0], button[1])
+
+
+# the library's layouts (LIBRARY=), by the keys: the Outline folds a
+# group and opens a page read lately from Continue; Two panes chooses a
+# subject on the left and a hypertext on the right.  The pages read are
+# kept (RECENTn) at the end
+OUTLINE_STEPS = [
+    ([], ["library 0", "library-layout outline", "index 5 guides"]),
+    ([LEFT], ["fold Test/EHypView folded"]),           # the group of the hypertext chosen
+    ([RIGHT], ["fold Test/EHypView open"]),
+    ([UP, RETURN], ["page %s Detail" % OTHER]),        # above the heading: Continue
+    ([("ctrl", Q)], ["quit"]),
+]
+PANES_STEPS = [
+    ([], ["library 0", "library-layout panes", "index 5 guides"]),
+    ([LEFT], ["library-focus subjects"]),
+    ([DOWN], ["pane Test/EHypView *"]),
+    ([RETURN], ["library-focus rows"]),
+    ([RETURN], ["page %s Main" % BASIC]),             # its first hypertext
+    ([("ctrl", L)], ["library *"]),
+    ([("ctrl", Q)], ["quit"]),
+]
 
 
 MOUSE_STEPS = [
@@ -582,13 +606,16 @@ MOUSE_STEPS = [
     ([("click",) + SET_START], ["menu settings-start"]),
     ([("click",) + SET_START_NOW], ["settings-start now"]),
     ([("click",) + SET_LIBRARY], ["settings-page library"]),
+    ([("click",) + SET_LAYOUT], ["menu settings-layout"]),
+    ([("click",) + SET_LAYOUT_PANES], ["settings-layout panes"]),
     ([("click",) + SET_FIELD] + typed("C:\\FIXT\\SUB"), []),
     ([TAB] + typed("C:\\NOWHERE"), []),
     ([RETURN], ["alert no-folder C:\\NOWHERE"]),
     ([ESC], ["alert-closed no-folder change"]),
     ([RETURN], ["alert no-folder C:\\NOWHERE"]),
     ([RETURN], ["alert-closed no-folder keep", "dialog-closed settings ok", "settings START now",
-                "settings PATHS C:\\FIXT\\SUB;C:\\NOWHERE", "index again", "index 5 guides"]),
+                "settings LIBRARY panes", "settings PATHS C:\\FIXT\\SUB;C:\\NOWHERE", "index again",
+                "index 5 guides"]),
     # the guide, when it is nowhere: where to put it
     ([item(HELPMENU, 0)], ["menu guide", "alert no-guide"]),
     ([RETURN], []),
@@ -839,7 +866,8 @@ def check_inf(path, settings):
         got = str(e)
     lines = got.split("\r\n")
     ok = got.endswith("\r\n") and "\n" not in got.replace("\r\n", "")
-    ok = ok and all(s in lines for s in settings)
+    ok = ok and all(any(l.startswith(s[:-1]) for l in lines) if s.endswith("*") else s in lines
+                    for s in settings)
     ok = ok and all(i > 0 and lines[i - 1].startswith(";")
                     for i, l in enumerate(lines) if l and not l.startswith(";"))
     print("%s  %s: %r" % ("ok  " if ok else "FAIL", os.path.basename(path), got))
@@ -869,6 +897,19 @@ def main():
                      "BOOKMARK1=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail\n")
         ok = run_scenario("libstart", d, LIBRARY_START)
     if ok:
+        d = copy_dir("outline", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n",
+                     "; the font\nFONT=System font\n; its size\nPOINT=8\n; a page read lately\n"
+                     "RECENT1=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail\n")
+        ok = run_scenario("outline", d, OUTLINE_STEPS)
+    if ok:
+        d = copy_dir("panes", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n",
+                     "; the font\nFONT=System font\n; its size\nPOINT=8\n; the layout\nLIBRARY=panes\n"
+                     "; a page read lately\nRECENT1=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail\n")
+        ok = run_scenario("panes", d, PANES_STEPS)
+        ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
+                              ["LIBRARY=panes", "RECENT1=C:\\FIXT\\BASIC.HYP|Main|*",
+                               "RECENT2=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail"])
+    if ok:
         if have_display():
             d = copy_dir("mouse", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
             xvfb = start_xvfb()
@@ -877,7 +918,7 @@ def main():
             finally:
                 xvfb.terminate()
             ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
-                                  ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE"])
+                                  ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE", "LIBRARY=panes"])
         else:
             print("skip  mouse: needs Xvfb and xdotool")
     if ok:

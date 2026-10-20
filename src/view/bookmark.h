@@ -10,6 +10,9 @@
  *
  * (path, page, title: GEMDOS names can't hold a '|').  An empty value is
  * a removed one.  No GEM here, so it is tested on the host.
+ *
+ * The pages read last (the library's Continue, Recently read) are kept
+ * the same way, RECENT1 to RECENT5, newest first: one a hypertext.
  */
 #ifndef EHV_BOOKMARK_H
 #define EHV_BOOKMARK_H
@@ -49,6 +52,17 @@ void bm_read(ehv_bookmarks *bm, const inf_file *inf);
 
 /* "BOOKMARKn" for slot i (0-based) */
 void bm_key(unsigned int i, char *buf, unsigned long size);
+
+/* the same for another list: prefix "RECENT", at most max of them */
+void bm_read_as(ehv_bookmarks *bm, const inf_file *inf, const char *prefix, unsigned int max);
+void bm_key_as(const char *prefix, unsigned int i, char *buf, unsigned long size);
+
+/*
+ * A page read: first in the list, in place of the one of the same
+ * hypertext (any case), the last one dropped beyond max.  1 when the
+ * list changed, 0 when it was first already, -1 when it can't be kept.
+ */
+int bm_touch(ehv_bookmarks *bm, const char *path, const char *node, const char *title, unsigned int max);
 
 /* the value for slot i: "path|node|title", or "" past the last one.
    The length, or 0 when it doesn't fit */

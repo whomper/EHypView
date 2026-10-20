@@ -9,7 +9,8 @@
  *
  *   General   START=: when the accessory looks through the library;
  *             FOLDER=, shown: where the index is kept
- *   Library   PATHS=: folders to look in as well as ST-GUIDE.INF's
+ *   Library   LIBRARY=: its layout, Outline or Two panes;
+ *             PATHS=: folders to look in as well as ST-GUIDE.INF's
  *
  * The font is View > Font... (⇧^F), as in ECal and EMail, and the
  * bookmarks are kept from the Bookmarks menu and the library.
@@ -27,6 +28,7 @@
 #include "inf.h"
 #include "plat.h"
 #include "bgwork.h"
+#include "charset.h"
 
 #define DMAX 32
 #define TMAX 8
@@ -34,7 +36,7 @@
 #define PLEN 40                    /* characters a folder field holds */
 
 #define W 57                       /* the dialog, in characters */
-#define H 16
+#define H 18
 #define SW 13                      /* the list of pages */
 #define SX (SW + 2)                /* where a page's settings start */
 
@@ -139,6 +141,20 @@ static void start_show(void)
 }
 
 /* ---------------------------------------------------------------- */
+/* LIBRARY=, the same way                                            */
+
+static const char *const layout_val[] = { "outline", "panes" };
+static const char *const layout_name[] = { "Outline", "Two panes" };
+#define NLAYOUT 2
+static short layout_sel, layout_was;
+static char layout_label[30];
+
+static void layout_show(void)
+{
+	sprintf(layout_label, " %-13s\x02", layout_name[layout_sel]);
+}
+
+/* ---------------------------------------------------------------- */
 /* the pages                                                         */
 
 static void show_page(short p, int draw)
@@ -172,7 +188,7 @@ static void show_page(short p, int draw)
 	}
 }
 
-static short o_start, o_ok, o_cancel;
+static short o_start, o_layout, o_ok, o_cancel;
 static char folder_text[PLEN + 1];
 
 static void build(const char *folder)
@@ -223,18 +239,23 @@ static void build(const char *folder)
 	from = nobj;
 	d_text(SX, 2, "Library");
 	d_add(G_BOX, 0, 0, 0x00001171L, SX, (short) (3 | (2 << 8)), 40, (short) (0 | (1 << 8)));
-	d_text(SX, 4, "Also look for hypertexts in (PATHS=):");
+	d_text(SX, 4, "Layout:");
+	layout_show();
+	o_layout = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(layout_label, "", "", 0x1180),
+			 SX + 9, 4, 15, 1);
+	((TEDINFO *) tree[o_layout].ob_spec)->te_thickness = -1;
+	d_text(SX, (short) (6 | (gap << 8)), "Also look for hypertexts in (PATHS=):");
 	for (k = 0; k < NPATH; k++)
-		d_field(SX, (short) ((5 + k) | ((2 + k * (sys_ch / 4 + 2)) << 8)), paths[k]);
-	d_text(SX, (short) (9 | (gap << 8)), "Each with its subfolders, as well as");
-	d_text(SX, (short) (10 | (gap << 8)), "PATHS, HYPFOLD and REF in ST-GUIDE.INF,");
-	d_text(SX, (short) (11 | (gap << 8)), "and \\GUIDES and \\GEMSYS\\GUIDES on every");
-	d_text(SX, (short) (12 | (gap << 8)), "drive.");
+		d_field(SX, (short) ((7 + k) | ((gap + 2 + k * (sys_ch / 4 + 2)) << 8)), paths[k]);
+	d_text(SX, (short) (11 | (gap << 8)), "Each with its subfolders, as well as");
+	d_text(SX, (short) (12 | (gap << 8)), "PATHS, HYPFOLD and REF in ST-GUIDE.INF,");
+	d_text(SX, (short) (13 | (gap << 8)), "and \\GUIDES and \\GEMSYS\\GUIDES on every");
+	d_text(SX, (short) (14 | (gap << 8)), "drive.");
 	for (i = from; i < nobj; i++)
 		page_of[i] = 2;
 
-	o_cancel = d_add(G_BUTTON, SELECTABLE | EXIT, 0, (long) "Cancel", W - 24, 14, 10, 1);
-	o_ok = d_add(G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long) "OK", W - 12, 14, 10, 1);
+	o_cancel = d_add(G_BUTTON, SELECTABLE | EXIT, 0, (long) "Cancel", W - 24, 16, 10, 1);
+	o_ok = d_add(G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long) "OK", W - 12, 16, 10, 1);
 	tree[last_child].ob_next = 0;
 	tree[nobj - 1].ob_flags |= LASTOB;
 	for (i = 0; i < nobj; i++)
@@ -266,6 +287,31 @@ static void start_pick(void)
 	objc_offset(tree, o_start, &x, &y);
 	objc_draw(tree, o_start, 0, x - 1, y - 1, tree[o_start].ob_width + 2, tree[o_start].ob_height + 2);
 	log_event("settings-start", start_val[r], NULL);
+}
+
+/* the popup of layouts, the same way */
+static void layout_pick(void)
+{
+	static char lab[NLAYOUT][20];
+	const char *l[NLAYOUT];
+	short x, y, k, r;
+
+	for (k = 0; k < NLAYOUT; k++)
+	{
+		sprintf(lab[k], "%c %s", k == layout_sel ? '\x08' : ' ', layout_name[k]);
+		l[k] = lab[k];
+	}
+	objc_offset(tree, o_layout, &x, &y);
+	log_event("menu", "settings-layout", NULL);
+	r = popup(x, (short) (y + tree[o_layout].ob_height + 1), l, NLAYOUT);
+	objc_draw(tree, 0, 8, popup_area.x, popup_area.y, popup_area.w, popup_area.h);
+	if (r < 0)
+		return;
+	layout_sel = r;
+	layout_show();
+	objc_offset(tree, o_layout, &x, &y);
+	objc_draw(tree, o_layout, 0, x - 1, y - 1, tree[o_layout].ob_width + 2, tree[o_layout].ob_height + 2);
+	log_event("settings-layout", layout_val[r], NULL);
 }
 
 /* the folders typed, as one PATHS= value: blanks trimmed, empty ones
@@ -330,6 +376,11 @@ int settings_dialog(const char *inf_path, const char *folder)
 	/* what the file says now: the program may have changed it */
 	start_from(inf != NULL ? inf_get(inf, "START") : NULL);
 	{
+		const char *v = inf != NULL ? inf_get(inf, "LIBRARY") : NULL;
+
+		layout_sel = v != NULL && atari_casecmp(v, "panes") == 0 ? 1 : 0;
+	}
+	{
 		char **list;
 		unsigned int n = inf_split_list(inf != NULL ? inf_get(inf, "PATHS") : NULL, &list);
 
@@ -339,6 +390,7 @@ int settings_dialog(const char *inf_path, const char *folder)
 	}
 	inf_free(inf);
 	start_was = start_sel;
+	layout_was = layout_sel;
 	paths_join(was, sizeof(was));
 	build(folder);
 
@@ -370,6 +422,11 @@ int settings_dialog(const char *inf_path, const char *folder)
 			start_pick();
 			continue;
 		}
+		if (r == o_layout)
+		{
+			layout_pick();
+			continue;
+		}
 		if (r == o_ok && !paths_check())
 		{
 			tree[o_ok].ob_state &= (unsigned short) ~SELECTED;
@@ -393,6 +450,14 @@ int settings_dialog(const char *inf_path, const char *folder)
 		changed |= SETTINGS_START;
 	}
 	log_event("settings", "START", start_sel < NSTART ? start_val[start_sel] : "other");
+	if (layout_sel != layout_was)
+	{
+		settings_put("LIBRARY", layout_val[layout_sel], "the library's layout: outline (the groups, each "
+			     "folding, under the pages read last) or panes (the subjects on the left, the hypertexts "
+			     "of the one chosen on the right)");
+		changed |= SETTINGS_LAYOUT;
+	}
+	log_event("settings", "LIBRARY", layout_val[layout_sel]);
 	paths_join(now, sizeof(now));
 	if (strcmp(now, was) != 0)
 	{
