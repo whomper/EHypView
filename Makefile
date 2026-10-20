@@ -42,7 +42,8 @@ HOST     = build/host
 CORE_OBJ = $(patsubst src/core/%.c,$(HOST)/%.o,$(CORE_SRC)) $(HOST)/view.o $(HOST)/library.o $(HOST)/fontpref.o $(HOST)/bookmark.o
 
 all: $(HOST)/hypdump $(HOST)/test_core $(HOST)/test_index $(HOST)/test_view $(HOST)/test_library \
-     $(HOST)/test_menu $(HOST)/test_toolbar $(HOST)/test_colour $(HOST)/test_stmem $(HOST)/test_stmem_acc $(HOST)/test_fonts $(HOST)/test_bookmark
+     $(HOST)/test_menu $(HOST)/test_toolbar $(HOST)/test_colour $(HOST)/test_stmem $(HOST)/test_stmem_acc $(HOST)/test_fonts $(HOST)/test_bookmark \
+     $(HOST)/test_fontsel
 
 $(HOST)/%.o: src/core/%.c src/core/*.h | $(HOST)
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -c -o $@ $<
@@ -71,6 +72,10 @@ $(HOST)/test_library: tests/test_library.c $(HOST)/libehv.a
 
 $(HOST)/test_fonts: tests/test_fonts.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
+
+# the family's Font dialog, its part without GEM (common/tests/fontsel)
+$(HOST)/test_fontsel: common/tests/fontsel/test_fontsel.c common/ui/fontsel.c common/ui/fontsel.h | $(HOST)
+	$(CC) $(CFLAGS) -DFONTSEL_NAMES_ONLY -Icommon/ui -o $@ common/tests/fontsel/test_fontsel.c common/ui/fontsel.c
 
 $(HOST)/test_bookmark: tests/test_bookmark.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
@@ -107,6 +112,7 @@ test: all
 	$(HOST)/test_stmem_acc
 	$(HOST)/test_fonts
 	$(HOST)/test_bookmark
+	$(HOST)/test_fontsel
 	sh tests/run_golden.sh $(HOST)/hypdump
 
 asan:
@@ -222,7 +228,7 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
-           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/settings.o \
+           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/settings.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/colour.o \
            $(ATARI)/bigbuf.o

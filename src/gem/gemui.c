@@ -3,11 +3,13 @@
 /*
  * EHypView - the drawing the AERA programs' shared GEM building blocks
  * take from the app (common/ui/gemui.h), on EHypView's workstation and
- * in its fonts (fontsel.c: font_sys_push, font_sys_pop).
+ * in its fonts (font.c: font_sys_push, font_sys_pop).
  */
 #include <string.h>
 #include "tos.h"
 #include "gemui.h"
+
+short ehv_ui_gl_wchar, ehv_ui_gl_hchar;  /* sys_cw, sys_ch (ehypview.c sets them) */
 
 short scr_w, scr_h;
 

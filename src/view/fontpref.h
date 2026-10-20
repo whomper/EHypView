@@ -2,7 +2,7 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * EHypView - the text font setting (no VDI here, so it is tested on the
- * host; src/gem/fontsel.c measures and sets the fonts).
+ * host; src/gem/font.c sets the fonts, common/ui/fontsel.c measures them).
  *
  * The setting lives in EHYPVIEW.INF next to the program:
  *

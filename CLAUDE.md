@@ -105,12 +105,13 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   monitor); `make icons` writes src/gem/icon*.h, docs/icon*.png and
   icons/EHYPVIEW.RSC (committed). The About box (src/gem/about.c) follows
   EMail's, ECal's and EContact's.
-- The font selector (src/gem/fontsel.c) is ECal's and EMail's; keep them
-  alike. The accessory calls `vst_load_fonts` only in `font_init()`, before
-  its first event call: always under NVDI (the `NVDI` cookie), so its
-  selector lists the program's fonts; under FONTGDOS or SpeedoGDOS only
-  when `FONT=` names a GDOS font, and then it lists EHYPVIEW.FNT's fonts as
-  not loaded, taken at the next boot (guidelines 2.2). Hatari has no GDOS:
+- The Font dialog is the family's, common/ui/fontsel.c (guidelines 5.3);
+  src/gem/font.c keeps EHypView's part (FONT= by name, ^+ ^-, the font
+  protocol through `fontsel_usable`). The accessory calls `vst_load_fonts`
+  only in `font_init()`, before its first event call: always under NVDI
+  (the `NVDI` cookie), so its dialog lists the program's fonts; under
+  FONTGDOS or SpeedoGDOS only when `FONT=` names a GDOS font, and then the
+  dialog lists EHYPVIEW.FNT's fonts "from the next start" (guidelines 2.2). Hatari has no GDOS:
   say so when a change touches it.
 - Control shortcuts test `key_ctrl(kstate, key)` (common/atari/gem.h),
   never `kstate & K_CTRL` alone: a ^key typed while EHypView is busy

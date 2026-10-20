@@ -144,19 +144,20 @@ hypertext's "quit" link closes its own window.
 
 ## Fonts
 
-**View > Font...** (⇧^F) chooses the font for the text, with the same font selector as ECal and EMail:
-the system font in 8 x 8 or 8 x 16 and, with NVDI, SpeedoGDOS or another GDOS, every monospaced GDOS
-font. Hypertexts are laid out in character cells, so proportional fonts are shown but can't be
-picked. ^+ and ^- make the text larger and smaller. A font dropped on a window from a font selector
-(the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and which fonts are
-monospaced in `EHYPVIEW.FNT`.
+**View > Font...** (⇧^F) chooses the font for the text, with the AERA programs' Font dialog, the
+same as in ECal and EMail: the families on the left, each font's styles and sizes beside them, what
+kind of font it is, and a sample. It lists the system font in 8 x 8 or 8 x 16 and, with NVDI,
+SpeedoGDOS or another GDOS, every fixed-width GDOS font with letters. Hypertexts are laid out in
+character cells, so proportional fonts are left out, as are fonts of symbols. ^+ and ^- make the text larger and smaller. A font dropped on a window from a font selector
+(the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and which fonts can be
+used in `EHYPVIEW.FNT`.
 
 The accessory loads GDOS fonts only when the Atari starts: GDOS fonts loaded later would be lost
 when the program in front ends. Under NVDI it always loads them, so its font selector lists the same
 fonts as the program, and a font chosen is used at once. Under FONTGDOS or SpeedoGDOS it loads them
 only when `EHYPVIEW.INF` names one, to spare a 1 MB ST their memory: there a GDOS font chosen in the
 accessory, or in the program while the accessory is loaded, is the accessory's from the next boot,
-and its font selector says which fonts it hasn't loaded.
+and its Font dialog lists the fonts it knows "from the next start".
 
 ## Settings
 
