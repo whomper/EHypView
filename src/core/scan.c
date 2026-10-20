@@ -916,6 +916,34 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 	return 0;
 }
 
+const char *ehv_scan_next_what(const ehv_scan *s)
+{
+	static char what[160];
+
+	if (ehv_index_build_busy(s->idx))
+		return "names put away";
+	if (s->part != PART_NONE)
+		return "names of a hypertext";
+	if (s->listing)
+		return "folder's entries";
+	if (s->next_file < s->nfiles)
+	{
+		snprintf(what, sizeof(what), "file %s", s->files[s->next_file].path);
+		return what;
+	}
+	if (s->ndirs > 0)
+	{
+		snprintf(what, sizeof(what), "folder %s", s->dirs[s->ndirs - 1].path);
+		return what;
+	}
+	if (s->next_root < s->nroots)
+	{
+		snprintf(what, sizeof(what), "root %s", s->roots[s->next_root]);
+		return what;
+	}
+	return "the end";
+}
+
 int ehv_index_build_busy_scan(const ehv_scan *s)
 {
 	return ehv_index_build_busy(s->idx);

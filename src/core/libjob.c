@@ -125,7 +125,7 @@ const char *ehv_libjob_doing(const ehv_libjob *j)
 	if (j->phase == EHV_JOB_SORTING)
 		return j->ref != NULL ? "ALL.REF merged" : j->fin != NULL ? ehv_index_finish_doing(j->fin) : "sort begun";
 	if (j->phase == EHV_JOB_SCANNING)
-		return j->scan != NULL && ehv_index_build_busy_scan(j->scan) ? "names put away" : "scan";
+		return j->scan != NULL ? ehv_scan_next_what(j->scan) : "scan begun";
 	return "";
 }
 
