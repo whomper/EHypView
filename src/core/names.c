@@ -31,7 +31,7 @@
 #define MARK     4                    /* a block's first bytes */
 #define ROOM     (16 * REC_MAX)       /* a scan step's names, past the batch */
 #define MOVES    64                   /* sort moves a step (an ST: a few ms) */
-#define RECORDS  8                    /* names merged a step */
+#define RECORDS  2                    /* names merged a step */
 #define MERGE    16384L               /* the merge's pieces, all of them */
 
 unsigned long ehv_names_misread;
