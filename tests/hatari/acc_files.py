@@ -329,13 +329,15 @@ def main():
     # 4. one changed, one added
     shutil.copy(os.path.join(FIX, "big.hyp"), os.path.join(C, "LIB2", "BIG2.HYP"))
     shutil.copy(os.path.join(FIX, "other.hyp"), os.path.join(C, "LIB2", "NEW.HYP"))
+    old = os.path.getsize(os.path.join(C, "EHYPVIEW.IDX"))
     tr, seen = boot("s4", ["index saved"])
     calls, across, events = parse(tr)
     each("4. one guide changed, one added", calls, across, events, seen,
          "first event call to 'index saved': " + took(seen, "started", "index saved"))
     # INF, ST-GUIDE.INF, IDX's head; BIG2.HYP, BIG2.REF, NEW.HYP; the IDX's
-    # names of the others (one read); the ID$ twice (names, head)
-    budget = 3 + 3 + 1 + 2
+    # names of the others (8 KB a read); the ID$ twice (names, head); and
+    # EHYPVIEW.INF again when MEMKB= moved
+    budget = 3 + 3 + (old + 8191) // 8192 + 2 + (2 if inf_written(calls) else 0)
     check(opens(calls) <= budget, "4: %d opens (budget %d)" % (opens(calls), budget))
     check(looks(calls) <= roots + folders + 1, "4: %d looks (budget %d: the folders read once)"
           % (looks(calls), roots + folders + 1))

@@ -6,7 +6,7 @@
  * memory.  A lookup reads the block or two a name is in; a search reads
  * them all, in pieces.
  *
- * They are built with little memory: gathered a batch at a time (32 KB),
+ * They are built with little memory: gathered a batch at a time (24 KB),
  * each batch sorted and written to NAME.RUN, then the batches, and the
  * names an index read before has for the hypertexts that didn't change,
  * merged into the blocks, NAME.ID$, which the saver makes the cache.
@@ -32,11 +32,11 @@
 #define ROOM     (16 * REC_MAX)       /* a scan step's names, past the batch */
 #define MOVES    256                  /* sort moves a step */
 #define RECORDS  128                  /* names merged a step */
-#define MERGE    32768L               /* the merge's pieces, all of them */
+#define MERGE    16384L               /* the merge's pieces, all of them */
 
 unsigned long ehv_names_misread;
 
-static unsigned long batch_bytes = 32768L;
+static unsigned long batch_bytes = 24576L;
 
 void ehv_index_batch(unsigned long bytes)
 {
@@ -922,11 +922,11 @@ static int merge_begin(ehv_index *idx, ehv_build *b)
 		if (old && i == 0)
 		{
 			/* the old index's names in one read when they are few
-			   (16 KB at the most) */
+			   (8 KB at the most) */
 			unsigned long all = (b->from->nblocks + 1) * EHV_BLOCK;
 
 			if (cap < all)
-				cap = all < 16384 ? all : 16384 > cap ? 16384 : cap;
+				cap = all < 8192 ? all : 8192 > cap ? 8192 : cap;
 			if ((b->scratch = malloc(cap)) == NULL)
 				return -1;
 		}

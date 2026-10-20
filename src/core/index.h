@@ -264,7 +264,7 @@ void ehv_index_load_abort(ehv_loader *l);
  */
 int ehv_index_build_to(ehv_index *idx, const char *cache);
 
-/* the names gathered in memory (about 32 KB, by default) */
+/* the names gathered in memory (about 24 KB, by default) */
 void ehv_index_batch(unsigned long bytes);
 
 /* add a guide; returns its index or -1 when out of memory */

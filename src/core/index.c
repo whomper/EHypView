@@ -744,7 +744,7 @@ unsigned long ehv_names_out(void)
 {
 	unsigned long n = write_buffer / EHV_BLOCK;
 
-	return n < 8 ? 8 : n > 32 ? 32 : n;
+	return n < 8 ? 8 : n > 16 ? 16 : n;
 }
 
 void ehv_index_buffers(void *(*alloc)(unsigned long want, unsigned long *got), void (*release)(void *p))
