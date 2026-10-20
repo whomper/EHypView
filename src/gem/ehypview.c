@@ -2886,15 +2886,20 @@ static void acc_heap(void)
 	/* then the heap: a third of the largest block, or a quarter when
 	   there is no Fast RAM (it all comes out of ST RAM then), at most
 	   2 MB; on a small machine 96 KB (a page and its pictures being
-	   converted), but never more than half: the programs started later
-	   need the rest */
+	   converted), but always leaving 96 KB for the programs started
+	   later (a desk-top program asking for help, on a 1 MB Falcon), and
+	   never under 64 KB */
 	avail = (long) Malloc(-1L);
 	want = tt > 0 ? avail / 3 : avail / 4;
 
 	if (want > 2L * 1024 * 1024)
 		want = 2L * 1024 * 1024;
 	if (want < 96L * 1024)
-		want = avail / 2 < 96L * 1024 ? avail / 2 : 96L * 1024;
+		want = 96L * 1024;
+	if (want > avail - 96L * 1024)
+		want = avail - 96L * 1024;
+	if (want < 64L * 1024)
+		want = avail / 2 < 64L * 1024 ? avail / 2 : 64L * 1024;
 	/* TT RAM first, where there is some (guidelines 6.5); TOS 1.x has no
 	   Mxalloc */
 	p = want <= 0 ? NULL : tt == -32 ? Malloc(want) : Mxalloc(want, 3);
