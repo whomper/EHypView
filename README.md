@@ -221,8 +221,10 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
 - **The accessory** has no menu bar: its commands are in the toolbar's ≡ menu, and **About
   EHypView...** in the right button's menu too. Its entry in
   the Desk menu (**EHypView**) opens the viewer, or the library when no page is shown. It takes its
-  memory when it loads: a third of the largest free block (a quarter when there is no TT RAM), at
-  most 2 MB, and 64 to 128 KB of ST RAM for the pictures.
+  memory when it loads, as every AERA accessory does (common/ui/accmem.c): the first time 1 MB
+  (2 MB in TT RAM), never more than a quarter of what is free where 2 MB or more is, else half;
+  after that what it measured it needs (`MEMKB=`), or what you set (`HEAPKB=`). And 64 to 128 KB
+  of ST RAM for the pictures.
 - **A quiet start.** At boot the accessory only registers and takes its memory; it reads nothing.
   It reads its index and looks through the library the first time you open it, or a program asks it
   for a page (`START=opened` in `EHYPVIEW.INF`). `START=now` starts at boot, and a number, that many
@@ -265,6 +267,9 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
 - **`START=`** says when the accessory starts on its library: `opened` (the first time it is opened
   or asked for a page; the program writes this when there is none), `now`, or seconds after boot.
 - **`PATHS=`** names more folders to look for hypertexts in, between `;`, as well as `ST-GUIDE.INF`'s.
+- **`MEMKB=`** is the memory the accessory takes at boot, in KB, as it measured it once its library
+  was read (written again when that moves by more than an eighth). **`HEAPKB=`**, when you add it,
+  is taken instead.
   `ST-GUIDE.INF` itself is ST-Guide's: EHypView reads it and never writes it.
 
 **Settings** changes `START=` and `PATHS=`.

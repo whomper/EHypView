@@ -223,6 +223,8 @@ it doesn't know, when it writes the file. [Settings](#settings) changes most of 
 | `FOLDER=` | EHypView's folder, for `EHYPVIEW.IDX` and `EHYPVIEW.FNT`: the program writes the folder it was started from |
 | `START=` | when the accessory looks through the library: `opened`, `now`, or seconds after boot |
 | `PATHS=` | more folders to look in, between `;` |
+| `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
+| `HEAPKB=` | the same, set by you: taken instead of `MEMKB=` |
 | `FONT=`, `POINT=` | the font and its size |
 | `BOOKMARK1=` ... | the bookmarks: the hypertext, the page and the title, between `\|` |
 

@@ -244,6 +244,16 @@ def looks(calls):
     return count(calls, "Fsfirst", "Dclosedir")
 
 
+def inf_written(calls):
+    """the accessory's MEMKB= after its first index (common/ui/accmem.c,
+    guideline 2.1): EHYPVIEW.INF read again and written, once a start"""
+    return any(c["fn"] == "Frename" and "EHYPVIEW.IN" in (c["file"] or "") for c in calls)
+
+
+def not_inf(calls):
+    return [c for c in calls if "EHYPVIEW.IN" not in (c["file"] or "")]
+
+
 def probes(name, calls):
     check(count(calls, "Fxattr") <= 1 and count(calls, "Dopendir") <= 1 + count(calls, "Dclosedir"),
           "%s: Fxattr and Dopendir asked once (%d, %d)" % (name, count(calls, "Fxattr"), count(calls, "Dopendir")))
@@ -290,11 +300,17 @@ def main():
     each("1. first index, no EHYPVIEW.IDX", calls, across, events, seen,
          "first event call to 'index saved': " + took(seen, "started", "index saved"))
     # INF, ST-GUIDE.INF (none), the IDX (none), each guide and .REF, the ID$
-    budget = 3 + guides + refs + 1
+    # (and EHYPVIEW.INF again for MEMKB=, read and written once)
+    budget = 3 + guides + refs + 1 + (2 if inf_written(calls) else 0)
     check(opens(calls) <= budget, "1: %d opens (budget %d: one per file)" % (opens(calls), budget))
     check(looks(calls) <= roots + folders + 1, "1: %d looks (budget %d: the roots and folders once)"
           % (looks(calls), roots + folders + 1))
-    check(count(calls, "Frename") == 1 and count(calls, "Fwrite") == 1, "1: the index written in one go")
+    rest = not_inf(calls)
+    check(count(rest, "Frename") == 1 and count(rest, "Fwrite") == 1, "1: the index written in one go")
+    with open(os.path.join(C, "EHYPVIEW.INF"), "rb") as f:
+        memkb = [l for l in f.read().decode("latin-1").splitlines() if l.startswith("MEMKB=")]
+    check(len(memkb) == 1 and inf_written(calls) and count(calls, "Frename") == 2,
+          "1: the memory it needs written once, %s" % (memkb[0] if memkb else "no MEMKB="))
 
     # 2. up to date, 3. then idle
     tr, seen = boot("s2", ["index unchanged"])
