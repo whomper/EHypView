@@ -2890,6 +2890,8 @@ int main(void)
 		log_event("acc", menu_id >= 0 ? "registered" : "no menu entry", NULL);
 	}
 	vdi_h = graf_handle(&sys_cw, &sys_ch, &d, &d);
+	ehv_ui_gl_wchar = sys_cw;
+	ehv_ui_gl_hchar = sys_ch;
 	cw = sys_cw;
 	ch = sys_ch;
 	vdi_h = v_opnvwk_(vdi_h, work_out);

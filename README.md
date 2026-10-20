@@ -183,19 +183,21 @@ page was asked for.
 
 ### Fonts
 
-**View > Font...** (⇧^F) chooses the font for the text, with the same font selector as ECal and EMail.
-You get the system font in 8×8 or 8×16 and, with NVDI, SpeedoGDOS or another GDOS, every monospaced GDOS
-font (bitmap, Speedo, TrueType, Type 1). Hypertexts are laid out in character cells, so proportional
-fonts are shown but can't be picked. ^+ and ^- change the size. A font dropped on a window from a font
-selector (the font protocol) is used too. Your choice is kept in `EHYPVIEW.INF`, and the list of which
-fonts are monospaced in `EHYPVIEW.FNT`.
+**View > Font...** (⇧^F) chooses the font for the text, with the AERA programs' Font dialog
+(common/ui/fontsel.c), the same as ECal's and EMail's: the families on the left, the styles and the
+sizes (with a Pt: field) beside them, the kind of font, and a sample. It lists the system font in 8×8
+or 8×16 and, with NVDI, SpeedoGDOS or another GDOS, every fixed-width GDOS font with letters (bitmap,
+Speedo, TrueType, Type 1). Hypertexts are laid out in character cells, so proportional fonts and fonts
+of symbols are left out. ^+ and ^- change the size. A font dropped on a window from a font selector
+(the font protocol) is used when the dialog would list it. Your choice is kept in `EHYPVIEW.INF`, and
+which fonts can be used in `EHYPVIEW.FNT`.
 
 The accessory loads GDOS fonts only when the Atari starts, as every AERA accessory does: GDOS fonts
 loaded later would be lost when the program in front ends. Under NVDI it always loads them, so its
-font selector lists the same fonts as the program and a font chosen is used at once. Under FONTGDOS or
+Font dialog lists the same fonts as the program and a font chosen is used at once. Under FONTGDOS or
 SpeedoGDOS it loads them only when `EHYPVIEW.INF` names one, to spare a 1 MB ST their memory: there a
 GDOS font chosen in the accessory, or in the program while the accessory is loaded, is used by the
-accessory from the next boot, and its font selector lists the ones it hasn't loaded as such.
+accessory from the next boot, and its Font dialog lists the ones it knows "from the next start".
 
 ### Settings
 
@@ -338,7 +340,7 @@ src/core/   the portable core, without GEM: .HYP files and LH5, pages, .REF and
 src/view/   the viewer and the library without GEM (links, history, search, the
             font setting), tested on this computer
 src/gem/    the GEM program: the viewer and library windows, drawing, the menu bar,
-            the font selector, the Settings dialog, the About box
+            the font (its dialog is common/ui/fontsel.c), the Settings dialog, the About box
 atari/      plat_tos.c: the core's file access on GEMDOS, EHypView's own
 common/     the AERA programs' shared code (from AERA-Atari): the TOS runtime,
             AES/VDI, menu bar, About box, alerts, AV protocol, drag and drop,
