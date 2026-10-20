@@ -843,7 +843,8 @@ static int batch_step(const ehv_index *idx, ehv_build *b, unsigned long moves)
 		b->sorted = 1;
 		return 1;
 	}
-	r = batch_write(b, ehv_names_piece() * EHV_BLOCK / 4);   /* 8 KB a step, 4 KB on a 68000 */
+	/* 16 KB a step, 4 KB on a 68000 (each name copied: 60 ms an ST) */
+	r = batch_write(b, ehv_names_piece() * EHV_BLOCK / (ehv_names_piece() >= 32 ? 2 : 4));
 	return r < 0 ? -1 : r == 0;
 }
 

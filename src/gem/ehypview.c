@@ -2782,19 +2782,19 @@ static void job_step(void)
 	{
 		/* a step of 30 ms or more, for the record */
 		int ph = ehv_libjob_phase(job), big = ehv_libjob_next_is_big(job);
-		const ehv_scan_status *st = ehv_libjob_scan_status(job);
-		char b[160];
-		unsigned long t0;
+		const char *doing = ehv_libjob_doing(job);
+		unsigned long t0 = tos_ms(), took;
 
-		snprintf(b, sizeof(b), "phase %d%s: %s %s", ph, big ? " big" : "", ehv_libjob_doing(job),
-			 st != NULL && st->current != NULL ? st->current : "");
-		t0 = tos_ms();
 		r = ehv_libjob_step(job);
-		if (tos_ms() - t0 >= 30)
+		if ((took = tos_ms() - t0) >= 30)
 		{
-			char a[16];
+			/* written out only then: a profile measures this build */
+			const ehv_scan_status *st = job != NULL ? ehv_libjob_scan_status(job) : NULL;
+			char a[16], b[160];
 
-			sprintf(a, "%lu ms", tos_ms() - t0);
+			sprintf(a, "%lu ms", took);
+			snprintf(b, sizeof(b), "phase %d%s: %s %s", ph, big ? " big" : "", doing,
+				 st != NULL && st->current != NULL ? st->current : "");
 			log_event("slow-step", a, b);
 		}
 	}
