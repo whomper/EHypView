@@ -2779,8 +2779,24 @@ static void job_step(void)
 
 		aes_profile_tag(tag[ehv_libjob_phase(job) + (ehv_libjob_next_is_big(job) ? 5 : 0)]);
 	}
-#endif
+	{
+		/* a step of 30 ms or more, for the record */
+		int ph = ehv_libjob_phase(job), big = ehv_libjob_next_is_big(job);
+		unsigned long t0 = tos_ms();
+
+		r = ehv_libjob_step(job);
+		if (tos_ms() - t0 >= 30)
+		{
+			char a[32], b[16];
+
+			sprintf(a, "%lu ms", tos_ms() - t0);
+			sprintf(b, "phase %d%s", ph, big ? " big" : "");
+			log_event("slow-step", a, b);
+		}
+	}
+#else
 	r = ehv_libjob_step(job);
+#endif
 	if (r == EHV_JOB_INDEX)
 	{
 		char num[16];
