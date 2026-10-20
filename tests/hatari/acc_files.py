@@ -376,8 +376,8 @@ def main():
         # while they are merged into the ID$, written a piece at a time;
         # then its head in one write
         piece = 32768 if not MACHINE.startswith("ST") else 16384
-        idw = [c for c in calls if c["file"].endswith("EHYPVIEW.ID$")]
-        run = [c for c in calls if c["file"].endswith("EHYPVIEW.RUN")]
+        idw = [c for c in calls if (c["file"] or "").endswith("EHYPVIEW.ID$")]
+        run = [c for c in calls if (c["file"] or "").endswith("EHYPVIEW.RUN")]
         writes = count(idw, "Fwrite")
         check(writes <= 2 + size // piece, "6a: the %d KB index in %d writes (%d KB pieces)"
               % (size // 1024, writes, piece // 1024))

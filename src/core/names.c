@@ -31,7 +31,7 @@
 #define MARK     4                    /* a block's first bytes */
 #define ROOM     (16 * REC_MAX)       /* a scan step's names, past the batch */
 #define MOVES    256                  /* sort moves a step */
-#define RECORDS  128                  /* names merged a step */
+#define RECORDS  32                   /* names merged a step */
 #define MERGE    16384L               /* the merge's pieces, all of them */
 
 unsigned long ehv_names_misread;
@@ -1003,8 +1003,9 @@ static int refill_old(ehv_build *b, input *in, int h)
 	return 0;
 }
 
-/* the inputs that are nearly empty, filled again: NAME.RUN and the old
-   index each opened once */
+/* an input nearly empty: all of them half empty are filled again with
+   it, NAME.RUN and the old index each opened once, so they are opened
+   the fewer times */
 static int refill(ehv_build *b)
 {
 	int hr = -1, ho = -1, rc = 0;
@@ -1014,7 +1015,7 @@ static int refill(ehv_build *b)
 	{
 		input *in = &b->in[i];
 
-		if (!needs_more(in))
+		if (in->kind == IN_BATCH || in->done || in->len - in->pos >= in->cap / 2)
 			continue;
 		memmove(in->buf, in->buf + in->pos, in->len - in->pos);
 		in->len -= in->pos;
@@ -1097,18 +1098,15 @@ static int end_block(ehv_build *b)
 	b->bpos = 0;
 	b->cur++;
 	b->nblocks++;
-	return b->cur == b->nout ? flush_out(b) : 0;
+	return 0;
 }
 
 /* a name into the blocks */
 static int emit(ehv_index *idx, ehv_build *b, const unsigned char *r, unsigned long sz)
 {
-	unsigned char *blk;
+	unsigned char *blk = b->out + b->cur * EHV_BLOCK;
 	unsigned long g = rec_guide(r);
 
-	if (b->bpos + sz > EHV_BLOCK && end_block(b) < 0)
-		return -1;
-	blk = b->out + b->cur * EHV_BLOCK;
 	if (b->bpos == 0)
 	{
 		/* a new block: its mark, and its first name kept */
@@ -1134,16 +1132,17 @@ static int emit(ehv_index *idx, ehv_build *b, const unsigned char *r, unsigned l
 	return 0;
 }
 
-/* 1 when all are merged */
+/* 1 when all are merged.  A step reads, writes or merges: each of
+   them is short */
 static int merge_some(ehv_index *idx, ehv_build *b, unsigned long budget)
 {
 	unsigned long i;
 
-	if (refill(b) < 0)
-		return -1;
+	if (b->cur == b->nout)
+		return flush_out(b) < 0 ? -1 : 0;   /* the blocks filled, written */
 	for (i = 0; i < b->nin; i++)
 		if (needs_more(&b->in[i]))
-			return 0;                    /* more of it read first */
+			return refill(b) < 0 ? -1 : 0;   /* more of them read */
 	while (budget-- > 0)
 	{
 		input *best = NULL;
@@ -1159,11 +1158,16 @@ static int merge_some(ehv_index *idx, ehv_build *b, unsigned long budget)
 		if (best == NULL)
 		{
 			/* all of them: the last block, and where they are */
-			if (end_block(b) < 0 || flush_out(b) < 0)
-				return -1;
-			return 1;
+			end_block(b);
+			return flush_out(b) < 0 ? -1 : 1;
 		}
 		sz = rec_size(rb);
+		if (b->bpos + sz > EHV_BLOCK)
+		{
+			end_block(b);
+			if (b->cur == b->nout)
+				return 0;                    /* written in the next step */
+		}
 		if (emit(idx, b, rb, sz) < 0)
 			return -1;
 		best->pos += best->kind == IN_BATCH ? 1 : sz;
