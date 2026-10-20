@@ -31,7 +31,7 @@
 #define MARK     4                    /* a block's first bytes */
 #define ROOM     (16 * REC_MAX)       /* a scan step's names, past the batch */
 #define MOVES    256                  /* sort moves a step */
-#define RECORDS  32                   /* names merged a step */
+#define RECORDS  16                   /* names merged a step */
 #define MERGE    16384L               /* the merge's pieces, all of them */
 
 unsigned long ehv_names_misread;
@@ -1174,6 +1174,23 @@ static int merge_some(ehv_index *idx, ehv_build *b, unsigned long budget)
 		if (needs_more(best))
 			break;
 	}
+	return 0;
+}
+
+int ehv_names_next_io(const ehv_index *idx)
+{
+	const ehv_build *b = idx->build;
+	unsigned long i;
+
+	if (b == NULL || b->done)
+		return 0;
+	if (!b->started)
+		return 1;
+	if (b->cur == b->nout)
+		return 1;
+	for (i = 0; i < b->nin; i++)
+		if (needs_more(&b->in[i]))
+			return 1;
 	return 0;
 }
 

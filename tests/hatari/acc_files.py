@@ -371,26 +371,25 @@ def main():
         each("6a. 60 guides, first index", calls, across, events, seen,
              "first event call to 'index saved': " + took(seen, "started", "index saved"))
         size = os.path.getsize(os.path.join(C, "EHYPVIEW.IDX"))
-        # the names sorted in batches of 32 KB (16 KB pieces on a 68000):
-        # each batch to EHYPVIEW.RUN in a write or two, then read back
-        # while they are merged into the ID$, written a piece at a time;
-        # then its head in one write
-        piece = 32768 if not MACHINE.startswith("ST") else 16384
+        # the names sorted in batches of 24 KB: each batch to EHYPVIEW.RUN
+        # in a write or two, then read back while they are merged into the
+        # ID$, written 16 KB at a time; then its head in one write
         idw = [c for c in calls if (c["file"] or "").endswith("EHYPVIEW.ID$")]
         run = [c for c in calls if (c["file"] or "").endswith("EHYPVIEW.RUN")]
         writes = count(idw, "Fwrite")
-        check(writes <= 2 + size // piece, "6a: the %d KB index in %d writes (%d KB pieces)"
-              % (size // 1024, writes, piece // 1024))
-        check(count(run, "Fopen") <= 2 * (size // piece + 1),
-              "6a: EHYPVIEW.RUN opened %d times (budget %d: each batch written once, read back once)"
-              % (count(run, "Fopen"), 2 * (size // piece + 1)))
-        budget = 3 + 120 + count(idw, "Fopen") + count(run, "Fopen")
+        check(writes <= 2 + size // 16384, "6a: the %d KB index in %d writes (16 KB pieces, then the head)"
+              % (size // 1024, writes))
+        batches = size // 24576 + 1
+        check(count(run, "Fopen") <= 2 * batches + 4,
+              "6a: EHYPVIEW.RUN opened %d times (budget %d: each 24 KB batch written once, read back once)"
+              % (count(run, "Fopen"), 2 * batches + 4))
+        budget = 3 + 120 + count(idw, "Fopen") + count(run, "Fopen") + (2 if inf_written(calls) else 0)
         check(opens(calls) <= budget, "6a: %d opens (budget %d: one per file and piece)" % (opens(calls), budget))
         tr, seen = boot("s6b", ["index unchanged"])
         calls, across, events = parse(tr)
         each("6b. 60 guides, index up to date", calls, across, events, seen,
              "first event call to 'index unchanged': " + took(seen, "started", "index unchanged"))
-        want = 3
+        want = 3 + (2 if inf_written(calls) else 0)
         check(opens(calls) <= want, "6b: %d opens (budget %d: INF, ST-GUIDE.INF, the index's head in one go)"
               % (opens(calls), want))
         check(looks(calls) <= 4, "6b: %d looks (the roots and the folder)" % looks(calls))

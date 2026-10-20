@@ -10,6 +10,7 @@
 #include <string.h>
 #include "charset.h"
 #include "libjob.h"
+#include "names.h"
 #include "plat.h"
 #include "ref.h"
 
@@ -111,7 +112,8 @@ int ehv_libjob_next_is_big(const ehv_libjob *j)
 	case EHV_JOB_SCANNING:
 		return j->scan == NULL || ehv_scan_next_is_big(j->scan);
 	case EHV_JOB_SORTING:
-		return (j->have_ref && j->ref == NULL && j->fin == NULL) || (j->ref == NULL && j->fin == NULL);
+		return (j->have_ref && j->ref == NULL && j->fin == NULL) || (j->ref == NULL && j->fin == NULL) ||
+		       (j->fin != NULL && ehv_names_next_io(j->fresh));
 	case EHV_JOB_SAVING:
 		return j->saver == NULL;
 	}

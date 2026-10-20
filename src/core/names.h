@@ -13,6 +13,10 @@
    failed */
 int ehv_names_finish_some(ehv_index *idx, unsigned int budget);
 
+/* the next step of the merge reads or writes a file (a program begins
+   a slice of its own with it) */
+int ehv_names_next_io(const ehv_index *idx);
+
 /* the building's memory and NAME.RUN gone (ehv_index_free()) */
 void ehv_names_build_free(ehv_index *idx);
 
