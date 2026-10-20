@@ -212,6 +212,7 @@ int ehv_libjob_step(ehv_libjob *j)
 				: ehv_scan_begin_check((const char *const *) j->roots, j->nroots, j->prev);
 			if (j->scan == NULL || ehv_scan_build_to(j->scan, j->cache) < 0)
 				return EHV_JOB_FAILED;
+			return EHV_JOB_MORE;           /* its first step in the next */
 		}
 		r = ehv_scan_step(j->scan, 1);
 		if (r < 0)
