@@ -216,6 +216,8 @@ def main():
         # 1. the first boot: no index yet
         b, a, evs, took = boot(d, "first", ["index %d guides" % GUIDES, "index saved"])
         check("acc registered" in evs, "first boot: the accessory registered")
+        early = [e for e in evs if e.startswith("acc-early ")]
+        check(not early, "first boot: no malloc before its heap (%s)" % (early[0][10:] if early else "none"))
         first = next((i for i, e in enumerate(evs) if e.startswith("started")), None)
         check(first is not None and not any(e.startswith("index") for e in evs[:first]),
               "first boot: nothing indexed before its first event call")

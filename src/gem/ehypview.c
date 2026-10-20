@@ -2828,6 +2828,13 @@ static void acc_heap(void)
 			(long) p > 0 ? (long) p : 0L);
 		sprintf(b, "free %ldK", (long) Malloc(-1L) / 1024);
 		log_event("acc-memory", a, b);
+		/* a malloc before heap_add takes its memory beside the heap, for
+		   good (libc.c): there should be none */
+		if (heap_early != 0)
+		{
+			sprintf(a, "%ld bytes", heap_early);
+			log_event("acc-early", a, "taken before its heap");
+		}
 	}
 }
 
