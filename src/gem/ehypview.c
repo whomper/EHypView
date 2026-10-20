@@ -2782,10 +2782,12 @@ static void job_step(void)
 	{
 		/* a step of 30 ms or more, for the record */
 		int ph = ehv_libjob_phase(job), big = ehv_libjob_next_is_big(job);
-		char b[48];
+		const ehv_scan_status *st = ehv_libjob_scan_status(job);
+		char b[160];
 		unsigned long t0;
 
-		sprintf(b, "phase %d%s: %s", ph, big ? " big" : "", ehv_libjob_doing(job));
+		snprintf(b, sizeof(b), "phase %d%s: %s %s", ph, big ? " big" : "", ehv_libjob_doing(job),
+			 st != NULL && st->current != NULL ? st->current : "");
 		t0 = tos_ms();
 		r = ehv_libjob_step(job);
 		if (tos_ms() - t0 >= 30)
