@@ -36,6 +36,7 @@
 #include "menu.h"
 #include "toolbar.h"
 #include "stmem.h"
+#include "accmem.h"
 #include "crash.h"
 #include "av.h"
 #include "grect.h"
@@ -119,6 +120,10 @@ static void job_wait_index(void);
 static char start_dir[160];           /* where the program started: CRASH.LOG */
 static char home_dir[160];            /* FOLDER=: EHYPVIEW.IDX and .FNT */
 static char settings_path[40];        /* X:\EHYPVIEW.INF, the boot drive's root */
+static char inf_boot[8192];            /* it, as the accessory's start read it (acc_heap) */
+static long inf_boot_len = -1;         /* -1: none, too big, or taken */
+static pf_info inf_boot_info;
+static void acc_mem_note(int failed);
 
 /*
  * Events for the emulator console (NatFeats NF_STDERR; a no-op on real
@@ -2439,6 +2444,20 @@ static void own_set(char *text)
 static void own_reload(void)
 {
 	memset(&own_info, 0, sizeof(own_info));
+	if (inf_boot_len >= 0)
+	{
+		/* the accessory's copy from before its heap: the file as read */
+		char *t = malloc((size_t) inf_boot_len + 1);
+
+		if (t != NULL)
+		{
+			memcpy(t, inf_boot, (size_t) inf_boot_len + 1);
+			own_info = inf_boot_info;
+		}
+		inf_boot_len = -1;
+		own_set(t);
+		return;
+	}
 	own_set(pf_load_info(settings_path, NULL, &own_info));
 }
 
@@ -2677,6 +2696,7 @@ static void job_end(const char *how)
 	job_over = 1;
 	log_event("index", how, NULL);
 	index_news = 1;
+	acc_mem_note(strcmp(how, "failed") == 0);
 }
 
 /* the folders to look in changed (Settings): the job again, from the
@@ -2860,12 +2880,50 @@ static void index_pieces(void)
 		ehv_index_buffers(index_buffer, big_free);
 }
 
-/* an accessory takes its memory once, at start-up (see libc.c) */
+/*
+ * EHYPVIEW.INF as the accessory's start found it: read before its heap
+ * is taken, without malloc (HEAPKB=, MEMKB=), and taken by own_reload()
+ * then, so the file is still read once a start (guidelines 6.5)
+ */
+static long memkb_boot;                /* MEMKB= as the start found it */
+
+static void inf_boot_read(void)
+{
+	int h;
+	long n;
+
+	settings_path[0] = (char) ('A' + boot_drive());
+	strcpy(settings_path + 1, ":\\EHYPVIEW.INF");
+	if ((h = pf_open(settings_path, PF_READ)) < 0)
+		return;
+	if (pf_finfo(h, &inf_boot_info) == 0 && inf_boot_info.size < sizeof(inf_boot) &&
+	    (n = pf_read(h, inf_boot, (long) sizeof(inf_boot) - 1)) >= 0)
+	{
+		inf_boot[n] = '\0';
+		inf_boot_len = n;
+	}
+	pf_close(h);
+}
+
+/* KEY= (with its '=') in that copy, as a number; 0 when it isn't there */
+static long inf_boot_number(const char *key)
+{
+	const char *k;
+	size_t kl = strlen(key);
+
+	for (k = inf_boot; inf_boot_len >= 0 && *k != '\0'; k++)
+		if ((k == inf_boot || k[-1] == '\n') && atari_ncasecmp(k, key, kl) == 0)
+			return atol(k + kl);
+	return 0;
+}
+
+/* an accessory takes its memory once, at start-up (common/ui/accmem.c,
+   guidelines 2.1): HEAPKB= when the user set it, else MEMKB=, what the
+   last start measured, else 1 MB (2 MB in TT RAM) */
 static void acc_heap(void)
 {
-	long st = (long) Mxalloc(-1L, 0), avail, want;
-	long tt = (long) Mxalloc(-1L, 1);      /* Fast RAM; -32: TOS 1.x, none */
-	void *p;
+	long st = (long) Mxalloc(-1L, 0), heapkb;
+	char a[160], b[24];
 
 	/* the About box's icon's ST RAM (st_ram() in gemui.c), now: taken
 	   later, it would belong to the program in front (guidelines 2.2) */
@@ -2883,36 +2941,52 @@ static void acc_heap(void)
 		st = 64L * 1024;
 	stmem_reserve(st);
 
-	/* then the heap: a third of the largest block, or a quarter when
-	   there is no Fast RAM (it all comes out of ST RAM then), at most
-	   2 MB; on a small machine 96 KB (a page and its pictures being
-	   converted), but always leaving 96 KB for the programs started
-	   later (a desk-top program asking for help, on a 1 MB Falcon), and
-	   never under 64 KB */
-	avail = (long) Malloc(-1L);
-	want = tt > 0 ? avail / 3 : avail / 4;
+	inf_boot_read();
+	heapkb = inf_boot_number("HEAPKB=");
+	memkb_boot = inf_boot_number("MEMKB=");
+	/* on a 1 MB machine: 96 KB left, so a program can start beside it
+	   (ASKHELP.PRG, asking for help, needs 86 KB) */
+	acc_heap_leave = 96L * 1024;
+	acc_heap_take(1024L * 1024, 2048L * 1024, heapkb, memkb_boot);
 
-	if (want > 2L * 1024 * 1024)
-		want = 2L * 1024 * 1024;
-	if (want < 96L * 1024)
-		want = 96L * 1024;
-	if (want > avail - 96L * 1024)
-		want = avail - 96L * 1024;
-	if (want < 64L * 1024)
-		want = avail / 2 < 64L * 1024 ? avail / 2 : 64L * 1024;
-	/* TT RAM first, where there is some (guidelines 6.5); TOS 1.x has no
-	   Mxalloc */
-	p = want <= 0 ? NULL : tt == -32 ? Malloc(want) : Mxalloc(want, 3);
-	if ((long) p > 0)
-		heap_add(p, (size_t) want);
+	/* for the tests: what it took, where, and what it left the programs */
+	sprintf(a, "pictures %ldK heap %ldK%s%s", st / 1024, acc_heap_bytes / 1024, acc_heap_tt ? " TT" : "",
+		heapkb >= 64 ? " (HEAPKB=)" : memkb_boot >= 32 ? " (MEMKB=)" : "");
+	sprintf(b, "free %ldK", (long) Malloc(-1L) / 1024);
+	log_event("acc-memory", a, b);
+	/* a malloc before heap_add takes its memory beside the heap, for
+	   good (libc.c): there should be none */
+	if (heap_early != 0)
 	{
-		/* for the tests: what it took, where, and what it left the programs */
-		char a[80], b[24];
+		sprintf(a, "%ld bytes", heap_early);
+		log_event("acc-early", a, "taken before its heap");
+	}
+}
 
-		sprintf(a, "pictures %ldK heap %ldK at %lx", st / 1024, (long) p > 0 ? want / 1024 : 0L,
-			(long) p > 0 ? (long) p : 0L);
-		sprintf(b, "free %ldK", (long) Malloc(-1L) / 1024);
-		log_event("acc-memory", a, b);
+/* the accessory's index job done: what it needs, measured, as MEMKB=
+   for the next start (once a start, when it moved); twice what it had
+   when the job ran out of it */
+static void acc_mem_note(int failed)
+{
+	static int noted;
+	char line[160], v[16];
+	long kb;
+
+	if (!is_acc || noted || acc_heap_bytes == 0)
+		return;
+	noted = 1;
+	/* what it holds now (the index), a page and its pictures being
+	   read, and the job's peak */
+	kb = failed && heap_peak > acc_heap_bytes - acc_heap_bytes / 8 ? acc_mem_full_kb() :
+		acc_mem_kb(heap_use + 192L * 1024, 64L * 1024);
+	acc_mem_line(line, sizeof(line), kb);
+	log_event("acc-memory", line, NULL);
+	if (acc_mem_moved(kb, memkb_boot))
+	{
+		sprintf(v, "%ld", kb);
+		settings_put("MEMKB", v, "the memory the accessory takes at boot, in KB, as it measured it "
+			     "(HEAPKB= sets it yourself)");
+		memkb_boot = kb;
 	}
 }
 

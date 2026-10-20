@@ -249,6 +249,8 @@ it doesn't know, when it writes the file. [Settings](#settings) changes most of 
 | `START=` | when the accessory looks through the library: `opened`, `now`, or seconds after boot |
 | `LIBRARY=` | the library's layout: `outline` or `panes` |
 | `PATHS=` | more folders to look in, between `;` |
+| `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
+| `HEAPKB=` | the same, set by you: taken instead of `MEMKB=` |
 | `FONT=`, `POINT=` | the font and its size |
 | `BOOKMARK1=` ... | the bookmarks: the hypertext, the page and the title, between `\|` |
 | `RECENT1=` ... | the pages read last, the newest first, the same way |

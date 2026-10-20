@@ -99,7 +99,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   through common/ui/bgwork.c. `make quiet-test` measures it with an
   `-DAES_PROFILE` build: no stretch over 50 ms while it reads and indexes.
   No file stays open from one step to the next, nor across any event call,
-  and no GEMDOS memory is taken after `acc_heap()` (guidelines 2.2);
+  and no GEMDOS memory is taken after `acc_heap()` (guidelines 2.2), which
+  is common/ui/accmem.c's `acc_heap_take` (HEAPKB=, else MEMKB=, written by
+  `acc_mem_note` after the index job), with nothing malloc'd before it
+  (`heap_early`; the INF is read into a static buffer first);
   test_index.c checks the library job's steps.
 - The icon is drawn by `tools/icon/make_icon.py` (the family's SM124
   monitor); `make icons` writes src/gem/icon*.h, docs/icon*.png and
