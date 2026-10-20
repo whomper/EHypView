@@ -3024,6 +3024,33 @@ static void crash_quit(const char *what)
 	appl_exit();
 }
 
+/*
+ * The VDI gave no workstation (guidelines 2.1: never draw with handle 0;
+ * NVDI refuses one when memory is short): the program says so and ends;
+ * the accessory stays registered, as it must, and says so when opened
+ */
+static int no_workstation(void)
+{
+	static const char why[] = "[3][EHypView can't draw: the screen's|workstation couldn't be opened,|"
+		"probably for lack of memory.|Close a program or an accessory.][ OK ]";
+	short msg[8];
+	AEVENT e;
+
+	log_event("vdi", "no workstation", NULL);
+	if (!is_acc)
+	{
+		form_alert(1, why);
+		appl_exit();
+		return 1;
+	}
+	for (;;)
+	{
+		evnt_multi_(MU_MESAG, 0, 0, 0, 0, msg, &e);
+		if (msg[0] == AC_OPEN)
+			form_alert(1, why);
+	}
+}
+
 int main(void)
 {
 	short work_out[57], msg[8], d, screen_w, screen_h;
@@ -3054,6 +3081,8 @@ int main(void)
 	cw = sys_cw;
 	ch = sys_ch;
 	vdi_h = v_opnvwk_(vdi_h, work_out);
+	if (vdi_h <= 0)
+		return no_workstation();
 	screen_w = (short) (work_out[0] + 1);
 	screen_h = (short) (work_out[1] + 1);
 	ehv_ui_scr_w = screen_w;
