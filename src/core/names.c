@@ -907,11 +907,10 @@ static int merge_begin(ehv_index *idx, ehv_build *b)
 		each = 2 * EHV_BLOCK;
 	if (each > 8192)
 		each = 8192;
-	if (old && (b->scratch = malloc(each)) == NULL)
-		return -1;
 	for (i = 0; i < n; i++)
 	{
 		input *in = &b->in[i];
+		unsigned long cap = each;
 
 		b->nin++;
 		if (b->nrec > 0 && i == n - 1)
@@ -920,9 +919,20 @@ static int merge_begin(ehv_index *idx, ehv_build *b)
 			in->done = 1;
 			continue;
 		}
-		if ((in->buf = malloc(each)) == NULL)
+		if (old && i == 0)
+		{
+			/* the old index's names in one read when they are few
+			   (16 KB at the most) */
+			unsigned long all = (b->from->nblocks + 1) * EHV_BLOCK;
+
+			if (cap < all)
+				cap = all < 16384 ? all : 16384 > cap ? 16384 : cap;
+			if ((b->scratch = malloc(cap)) == NULL)
+				return -1;
+		}
+		if ((in->buf = malloc(cap)) == NULL)
 			return -1;
-		in->cap = each;
+		in->cap = cap;
 		if (old && i == 0)
 		{
 			in->kind = IN_OLD;

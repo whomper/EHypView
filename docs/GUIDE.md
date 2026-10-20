@@ -254,6 +254,7 @@ it doesn't know, when it writes the file. [Settings](#settings) changes most of 
 | `LIBRARY=` | the library's layout: `outline` or `panes` |
 | `PATHS=` | more folders to look in, between `;` |
 | `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
+| `PAGEKB=` | the part of it its pages needed at the most, in KB: grows when a viewer window closes having needed more |
 | `HEAPKB=` | the same, set by you: taken instead of `MEMKB=` |
 | `FONT=`, `POINT=` | the font and its size |
 | `BOOKMARK1=` ... | the bookmarks: the hypertext, the page and the title, between `\|` |

@@ -125,9 +125,11 @@ static char *inf_boot;                 /* it, as the accessory's start read it (
 static pf_info inf_boot_info;
 static void acc_mem_note(int failed);
 static void acc_mem_grow(void);
-static char memkb_grown[16];           /* MEMKB= for recent_save's write to carry */
+static char memkb_grown[16], pagekb_grown[16];   /* for recent_save's write to carry */
 static const char memkb_note[] = "the memory the accessory takes at boot, in KB, as it measured it "
 	"(HEAPKB= sets it yourself)";
+static const char pagekb_note[] = "the memory the accessory's pages needed at the most, in KB, "
+	"part of MEMKB=";
 
 /*
  * Events for the emulator console (NatFeats NF_STDERR; a no-op on real
@@ -2590,17 +2592,20 @@ static int list_save(const ehv_bookmarks *list, const char *prefix, unsigned int
 		free(text);
 		text = t;
 	}
-	if (r == 0 && memkb_grown[0] != '\0' && list == &recent)
+	for (i = 0; r == 0 && list == &recent && i < 2; i++)
 	{
-		char *t = inf_put(text != NULL ? text : inf_head, "MEMKB", memkb_grown, memkb_note);
+		char *v = i == 0 ? pagekb_grown : memkb_grown, *t;
 
-		if (t == NULL)
+		if (v[0] == '\0')
+			continue;
+		if ((t = inf_put(text != NULL ? text : inf_head, i == 0 ? "PAGEKB" : "MEMKB", v,
+				 i == 0 ? pagekb_note : memkb_note)) == NULL)
 			r = -1;
 		else
 		{
 			free(text);
 			text = t;
-			memkb_grown[0] = '\0';
+			v[0] = '\0';
 		}
 	}
 	if (r == 0 && text != NULL)
@@ -2938,6 +2943,8 @@ static void index_pieces(void)
  */
 #define INF_BOOT_MAX 8192
 static long memkb_boot;                /* MEMKB= as the start found it */
+static long pagekb = 64;               /* PAGEKB=: what a viewer's pages need, KB */
+static long index_use;                 /* the heap in use when the index job ended */
 
 static long inf_boot_read(char *buf)
 {
@@ -2997,6 +3004,8 @@ static void acc_heap(short planes)
 	n = inf_boot_read(buf);
 	heapkb = n >= 0 ? inf_boot_number(buf, "HEAPKB=") : 0;
 	memkb_boot = n >= 0 ? inf_boot_number(buf, "MEMKB=") : 0;
+	if (n >= 0 && inf_boot_number(buf, "PAGEKB=") > pagekb)
+		pagekb = inf_boot_number(buf, "PAGEKB=");
 	/* on a 1 MB machine: 96 KB left, so a program can start beside it
 	   (ASKHELP.PRG, asking for help, needs 86 KB) */
 	acc_heap_leave = 96L * 1024;
@@ -3021,12 +3030,13 @@ static void acc_heap(short planes)
 /* the accessory's index job done: what it needs, measured, as MEMKB=
    for the next start (once a start, when it moved); twice what it had
    when the job ran out of it */
-/* MEMKB= to write: what it holds now (the index), a page and its
-   pictures being read, and the peak so far */
+/* MEMKB= to write: what it holds now (the index), what a page and its
+   pictures needed (PAGEKB=, 64 KB until a viewer measured more), and the
+   peak so far */
 static long acc_mem_need(int failed)
 {
 	return failed && heap_peak > acc_heap_bytes - acc_heap_bytes / 8 ? acc_mem_full_kb() :
-		acc_mem_kb(heap_use + 192L * 1024, 64L * 1024);
+		acc_mem_kb(heap_use + pagekb * 1024, 32L * 1024);
 }
 
 static void acc_mem_note(int failed)
@@ -3047,23 +3057,39 @@ static void acc_mem_note(int failed)
 		settings_put("MEMKB", v, memkb_note);
 		memkb_boot = kb;
 	}
+	/* from now on the peak is the pages' (and the searches'), on top of
+	   the index */
+	index_use = heap_use;
+	heap_peak = heap_use;
 }
 
-/* a viewer window closed: a page, its pictures or a search may have
-   needed more than the index job did; only ever more, and written with
-   the pages read (recent_save), not by a write of its own */
+/* a viewer window closed: what its pages and pictures (and searches)
+   needed above the index, PAGEKB=, only ever more, and MEMKB= with it;
+   written with the pages read (recent_save), not by a write of its own.
+   A heap nearly full may have been short: half as much again */
 static void acc_mem_grow(void)
 {
-	long kb;
+	long seen, kb;
+	char a[48];
 
-	if (!is_acc || acc_heap_bytes == 0 || memkb_boot == 0)
+	if (!is_acc || acc_heap_bytes == 0 || job != NULL || !job_over)
+		return;                        /* the index job's peak isn't a page's */
+	seen = heap_peak - index_use;
+	if (heap_peak > acc_heap_bytes - acc_heap_bytes / 8)
+		seen += seen / 2;
+	kb = (seen + 1023) / 1024 + 16;
+	sprintf(a, "page %ld KB at the most", (seen + 1023) / 1024);
+	log_event("acc-memory", a, NULL);
+	if (kb <= pagekb)
 		return;
+	pagekb = kb;
+	sprintf(pagekb_grown, "%ld", kb);
+	recent_changed = 1;
 	kb = acc_mem_need(0);
-	if (kb > memkb_boot && acc_mem_moved(kb, memkb_boot))
+	if (kb > memkb_boot)
 	{
 		sprintf(memkb_grown, "%ld", kb);
 		memkb_boot = kb;
-		recent_changed = 1;
 	}
 }
 

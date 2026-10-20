@@ -105,7 +105,9 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   No file stays open from one step to the next, nor across any event call,
   and no GEMDOS memory is taken after `acc_heap()` (guidelines 2.2), which
   is common/ui/accmem.c's `acc_heap_take` (HEAPKB=, else MEMKB=, written by
-  `acc_mem_note` after the index job), with nothing malloc'd before it
+  `acc_mem_note` after the index job: the index and PAGEKB=, what a viewer's
+  pages needed, 64 KB until `acc_mem_grow` measures more when a viewer window
+  closes; PAGEKB= only grows), with nothing malloc'd before it
   (`heap_early`; the INF is read into the stack first, after the VDI
   workstation, which tells the pictures' block its size);
   test_index.c checks the library job's steps.

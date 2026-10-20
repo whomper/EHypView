@@ -890,7 +890,7 @@ struct ehv_saver {
 	outbuf o;                       /* written out when full, and at the end */
 	unsigned long full;             /* when it is */
 	int phase, table;
-	int h;                          /* open only within a step (guidelines 2.2) */
+	int h, src;                     /* open only within a step (guidelines 2.2) */
 	int made;                       /* tmp is on the disk */
 	unsigned long i;                /* the guide, block or table line next */
 	unsigned long head;             /* bytes of the head written */
@@ -903,7 +903,7 @@ ehv_saver *ehv_index_save_begin(ehv_index *idx, const char *path)
 	if (v == NULL)
 		return NULL;
 	v->idx = idx;
-	v->h = -1;
+	v->h = v->src = -1;
 	v->path = malloc(strlen(path) + 1);
 	v->tmp = pf_tmp_name(path);
 	if (v->path == NULL || v->tmp == NULL)
@@ -951,6 +951,8 @@ void ehv_index_save_abort(ehv_saver *v)
 		return;
 	if (v->h >= 0)
 		pf_close(v->h);
+	if (v->src >= 0)
+		pf_close(v->src);
 	if (v->made && v->phase != S_DONE && (ehv_names_target(v->idx) == NULL ||
 		strcmp(ehv_names_target(v->idx), v->tmp) != 0))
 		pf_remove(v->tmp);
@@ -1035,17 +1037,18 @@ static int save_steps(ehv_saver *v, unsigned int budget)
 						return -1;
 				} else
 				{
-					int h = idx->file != NULL ? pf_open(idx->file, PF_READ) : -1;
-					int r = h >= 0 ? pf_read_at(h, v->i * EHV_BLOCK, v->o.data, n * EHV_BLOCK) : -1;
-
-					if (h >= 0)
-						pf_close(h);
-					if (r != 0 || put_raw(v, v->o.data, n * EHV_BLOCK) < 0)
+					if (v->src < 0 && (idx->file == NULL || (v->src = pf_open(idx->file, PF_READ)) < 0))
+						return -1;
+					if (pf_read_at(v->src, v->i * EHV_BLOCK, v->o.data, n * EHV_BLOCK) != 0 ||
+						put_raw(v, v->o.data, n * EHV_BLOCK) < 0)
 						return -1;
 				}
 				v->i += n;
 				break;
 			}
+			if (v->src >= 0)
+				pf_close(v->src);          /* before it is renamed over */
+			v->src = -1;
 			v->phase = S_HEAD;
 			break;
 		case S_HEAD:
@@ -1180,6 +1183,11 @@ int ehv_index_save_some(ehv_saver *v, unsigned int budget)
 	{
 		pf_close(v->h);
 		v->h = -1;
+	}
+	if (v->src >= 0)
+	{
+		pf_close(v->src);
+		v->src = -1;
 	}
 	return r;
 }
