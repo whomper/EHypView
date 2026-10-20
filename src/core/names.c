@@ -31,7 +31,7 @@
 #define MARK     4                    /* a block's first bytes */
 #define ROOM     (16 * REC_MAX)       /* a scan step's names, past the batch */
 #define MOVES    64                   /* sort moves a step (an ST: a few ms) */
-#define RECORDS  16                   /* names merged a step */
+#define RECORDS  8                    /* names merged a step */
 #define MERGE    16384L               /* the merge's pieces, all of them */
 
 unsigned long ehv_names_misread;
@@ -128,24 +128,6 @@ static void rec_get(const unsigned char *r, ehv_sym *s)
 static int kind_rank(unsigned char kind)
 {
 	return kind == EHV_SYM_ALIAS ? 1 : kind == EHV_SYM_LABEL ? 2 : 0;
-}
-
-/* the names' order: by name ignoring case, pages before aliases before
-   labels, earlier roots first, then by hypertext */
-static int rec_cmp(const ehv_index *idx, const unsigned char *a, const unsigned char *b)
-{
-	int c = atari_casecmp((const char *) a + 7, (const char *) b + 7);
-	unsigned long ga, gb, ra, rb;
-
-	if (c != 0)
-		return c;
-	ga = rec_guide(a);
-	gb = rec_guide(b);
-	ra = (unsigned long) kind_rank(a[3]) << 16 | idx->guides[ga].root;
-	rb = (unsigned long) kind_rank(b[3]) << 16 | idx->guides[gb].root;
-	if (ra != rb)
-		return ra < rb ? -1 : 1;
-	return ga < gb ? -1 : ga > gb;
 }
 
 /* ---------------------------------------------------------------- */
@@ -532,7 +514,62 @@ struct ehv_build {
 	unsigned long nblocks, cap_first, gen;
 	unsigned char *mem;               /* the blocks, when not to a file */
 	unsigned long nmem;
+
+	/* for comparing names quickly on a 68000: the case table, and each
+	   hypertext's root (no 32-bit multiply to reach idx->guides[g]) */
+	const unsigned char *lower;
+	unsigned short *roots;
+	unsigned long nroots;
 };
+
+/* the names' order: by name ignoring case, pages before aliases before
+   labels, earlier roots first, then by hypertext.  The name's bytes are
+   compared first and folded only where they differ: what a sort and a
+   merge do most, and an ST does slowly */
+static int rec_cmp(const ehv_build *b, const unsigned char *a, const unsigned char *c)
+{
+	const unsigned char *x = a + 7, *y = c + 7, *t = b->lower;
+	unsigned long ga, gc, ra, rc;
+
+	for (;;)
+	{
+		unsigned char p = *x++, q = *y++;
+
+		if (p != q)
+		{
+			int d = (int) t[p] - (int) t[q];
+
+			if (d != 0)
+				return d;
+		} else if (p == 0)
+			break;
+	}
+	ga = rec_guide(a);
+	gc = rec_guide(c);
+	ra = (unsigned long) kind_rank(a[3]) << 16 | b->roots[ga];
+	rc = (unsigned long) kind_rank(c[3]) << 16 | b->roots[gc];
+	if (ra != rc)
+		return ra < rc ? -1 : 1;
+	return ga < gc ? -1 : ga > gc;
+}
+
+/* the roots of the guides added so far, for rec_cmp() */
+static int roots_ready(const ehv_index *idx, ehv_build *b)
+{
+	if (b->lower == NULL)
+		b->lower = atari_lower_table();
+	if (b->nroots < idx->nguides)
+	{
+		unsigned short *p = realloc(b->roots, idx->nguides * sizeof(unsigned short));
+
+		if (p == NULL)
+			return -1;
+		b->roots = p;
+		for (; b->nroots < idx->nguides; b->nroots++)
+			p[b->nroots] = idx->guides[b->nroots].root;
+	}
+	return 0;
+}
 
 static ehv_build *build_of(ehv_index *idx)
 {
@@ -616,6 +653,7 @@ void ehv_names_build_free(ehv_index *idx)
 	free(b->runmem);
 	free(b->run);
 	free(b->map);
+	free(b->roots);
 	free(b);
 	idx->build = NULL;
 }
@@ -644,9 +682,12 @@ int ehv_index_build_busy(const ehv_index *idx)
 	return idx->build != NULL && idx->build->nrec > 0 && idx->build->alen >= idx->build->limit;
 }
 
-/* 1 once the batch is sorted (in offs), 0 when the budget ran out */
+/* 1 once the batch is sorted (in offs), 0 when the budget ran out, -1
+   out of memory */
 static int batch_sort(const ehv_index *idx, ehv_build *b, unsigned long budget)
 {
+	if (roots_ready(idx, b) < 0)
+		return -1;
 	while (b->width < b->nrec)
 	{
 		if (!b->merging)
@@ -673,7 +714,7 @@ static int batch_sort(const ehv_index *idx, ehv_build *b, unsigned long budget)
 				return 0;
 			budget--;
 			if (b->i < b->mid && (b->j >= b->hi ||
-				rec_cmp(idx, b->arena + b->offs[b->i], b->arena + b->offs[b->j]) <= 0))
+				rec_cmp(b, b->arena + b->offs[b->i], b->arena + b->offs[b->j]) <= 0))
 				b->tmp[b->k++] = b->offs[b->i++];
 			else
 				b->tmp[b->k++] = b->offs[b->j++];
@@ -797,8 +838,8 @@ static int batch_step(const ehv_index *idx, ehv_build *b, unsigned long moves)
 		return 0;
 	if (!b->sorted)
 	{
-		if (!batch_sort(idx, b, moves))
-			return 1;
+		if ((r = batch_sort(idx, b, moves)) <= 0)
+			return r < 0 ? -1 : 1;
 		b->sorted = 1;
 		return 1;
 	}
@@ -948,7 +989,7 @@ static int merge_begin(ehv_index *idx, ehv_build *b)
 	}
 	b->gen = mark_of(idx, b);
 	b->started = 1;
-	return 0;
+	return roots_ready(idx, b);
 }
 
 static int needs_more(const input *in)
@@ -1150,7 +1191,7 @@ static int merge_some(ehv_index *idx, ehv_build *b, unsigned long budget)
 		unsigned long sz;
 
 		for (i = 0; i < b->nin; i++)
-			if ((r = head_of(b, &b->in[i])) != NULL && (rb == NULL || rec_cmp(idx, r, rb) < 0))
+			if ((r = head_of(b, &b->in[i])) != NULL && (rb == NULL || rec_cmp(b, r, rb) < 0))
 			{
 				best = &b->in[i];
 				rb = r;
@@ -1223,7 +1264,9 @@ int ehv_names_finish_some(ehv_index *idx, unsigned int budget)
 		if (!b->started && b->nrec > 0 && !b->sorted)
 		{
 			/* the last batch sorted, and merged from where it is */
-			if (b->wrote > 0 || batch_sort(idx, b, MOVES))
+			if (b->wrote == 0 && (r = batch_sort(idx, b, MOVES)) < 0)
+				return -1;
+			if (b->wrote > 0 || r == 1)
 				b->sorted = 1;
 			if (b->wrote > 0 && (r = batch_step(idx, b, MOVES)) < 0)
 				return -1;

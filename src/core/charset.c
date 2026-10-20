@@ -118,6 +118,11 @@ static const unsigned char *lower_table(void)
 	return lower;
 }
 
+const unsigned char *atari_lower_table(void)
+{
+	return lower_table();
+}
+
 unsigned char atari_tolower(unsigned char c)
 {
 	return lower_table()[c];
