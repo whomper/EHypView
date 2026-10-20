@@ -18,8 +18,9 @@
  *        heap_peak, with margin bytes more (at least a tenth), in KB
  *   acc_mem_moved(kb, memkb)   1 when MEMKB= should be written: it moved
  *                              by more than an eighth, or isn't there
- *   acc_mem_full_kb()          memory ran out: twice what was taken, KB,
- *                              for MEMKB= at the next start
+ *   acc_mem_full_kb()          memory ran out: four times what was taken,
+ *                              KB, for MEMKB= at the next start (which
+ *                              then measures it down; at most half free)
  *   acc_mem_line(buf, size, next_kb)   the log's "memory: ..." line
  *
  * The share when nothing is known (the first start, or a new machine):

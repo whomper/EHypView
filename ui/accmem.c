@@ -84,7 +84,9 @@ int acc_mem_moved(long kb, long memkb)
 
 long acc_mem_full_kb(void)
 {
-	long kb = acc_heap_bytes / 1024 * 2;
+	/* four times: a short heap costs the user a failed job each start, a
+	   large one only until the next start measures it (MEMKB=) */
+	long kb = acc_heap_bytes / 1024 * 4;
 	return kb > 32000 ? 32000 : kb < 64 ? 64 : kb;
 }
 
