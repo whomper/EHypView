@@ -115,7 +115,7 @@ int main(void)
 	check(acc_mem_moved(400, 468), "468 to 400: written");
 	check(acc_mem_moved(500, 468), "more than before: written");
 	acc_heap_bytes = 256 * KB;
-	check(acc_mem_full_kb() == 512, "memory full with 256 KB: 512 KB next start");
+	check(acc_mem_full_kb() == 1024, "memory full with 256 KB: 1024 KB next start (ECal's ST, 3 x 500: 850 KB needed)");
 
 	heap_use = 52 * KB;
 	heap_peak = 95 * KB;
