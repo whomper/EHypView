@@ -68,6 +68,24 @@ void ref_close(ref_db *db);
  */
 unsigned long ref_find(const ref_db *db, const char *name, unsigned long *hits, unsigned long max);
 
+/*
+ * The same file's symbols one at a time, for a program that must answer
+ * events meanwhile (the AERA guidelines, 2.2): ref_walk_open() reads the
+ * file (one open) and checks its structure as ref_open() does (0, or
+ * REF_ERR_*); ref_walk_next() gives the symbols in the order ref_open()
+ * lists them, each a few instructions (1, 0 at the end).  The strings
+ * stay valid until ref_walk_close().
+ */
+typedef struct {
+	unsigned char *data;
+	unsigned long size, pos, end;  /* end: of the module being read, 0: none */
+	unsigned long module;
+	const char *node;
+} ref_walk;
+int ref_walk_open(ref_walk *w, const char *path);
+int ref_walk_next(ref_walk *w, ref_symbol *s);
+void ref_walk_close(ref_walk *w);
+
 /* the full file name for a module: adds ".HYP" if it has no extension;
    writes at most `size` bytes including the NUL */
 void ref_module_filename(const ref_module *m, char *buf, unsigned long size);

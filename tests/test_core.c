@@ -426,6 +426,51 @@ static void test_ref(void)
 	CHECK(ref_open(fixture("basic.hyp"), &err) == NULL && err == REF_ERR_FORMAT);
 }
 
+/* the walker gives what ref_open() lists, in its order (the scanner
+   reads a REF's symbols a few a step with it) */
+static int walk_same(const char *path)
+{
+	ref_db *db = ref_open(path, NULL);
+	ref_walk w;
+	ref_symbol sy;
+	unsigned long i = 0;
+	int same, r = ref_walk_open(&w, path);
+
+	if (db == NULL)
+	{
+		same = r != REF_OK;
+		ref_walk_close(&w);
+		return same;
+	}
+	same = r == REF_OK;
+	while (same && ref_walk_next(&w, &sy) == 1)
+	{
+		const ref_symbol *e = &db->syms[i++];
+
+		same = i <= db->nsyms && sy.kind == e->kind && strcmp(sy.name, e->name) == 0 &&
+		       sy.line == e->line && sy.module == e->module &&
+		       ((sy.node == NULL && e->node == NULL) ||
+			(sy.node != NULL && e->node != NULL && strcmp(sy.node, e->node) == 0));
+	}
+	same = same && i == db->nsyms;
+	ref_walk_close(&w);
+	ref_close(db);
+	return same;
+}
+
+static void test_ref_walk(void)
+{
+	static const char *const refs[] = { "basic.ref", "all.ref", "big.ref", "colour.ref", "images.ref",
+					    "other.ref", "many/many.ref", "basic.hyp" };
+	unsigned int i;
+	ref_walk w;
+
+	for (i = 0; i < sizeof(refs) / sizeof(refs[0]); i++)
+		CHECK(walk_same(fixture(refs[i])));
+	CHECK(ref_walk_open(&w, fixture("basic.hyp")) == REF_ERR_FORMAT && w.data == NULL);
+	CHECK(ref_walk_open(&w, fixture("no-such.ref")) == REF_ERR_OPEN);
+}
+
 static void test_inf(void)
 {
 	int err;
@@ -584,6 +629,7 @@ static void test_mutations(const char *name)
 				(void) ref_find(db, "Second", hits, 4);
 				ref_close(db);
 			}
+			CHECK(walk_same(tmp));      /* damaged: the walker as ref_open() */
 			continue;
 		}
 		doc = hyp_open(tmp, NULL);
@@ -696,6 +742,7 @@ int main(int argc, char **argv)
 	test_big();
 	test_encrypted();
 	test_ref();
+	test_ref_walk();
 	test_inf();
 	test_inf_put();
 	test_save();

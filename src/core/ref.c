@@ -188,6 +188,117 @@ void ref_close(ref_db *db)
 	free(db);
 }
 
+/* the structure as scan() checks it, without looking at the strings */
+static int check(const unsigned char *data, unsigned long size)
+{
+	unsigned long pos = 4;
+
+	while (pos + 8 <= size)
+	{
+		unsigned long len = be32(data + pos), end;
+
+		pos += 8;
+		if (len == 0)
+			break;
+		if (len > size - pos)
+			return REF_ERR_FORMAT;
+		end = pos + len;
+		while (pos + 2 <= end)
+		{
+			unsigned int elen = data[pos + 1];
+
+			if (elen < 2 || pos + elen > end)
+				return REF_ERR_FORMAT;
+			pos += elen;
+		}
+		pos = end;
+	}
+	return REF_OK;
+}
+
+int ref_walk_open(ref_walk *w, const char *path)
+{
+	memset(w, 0, sizeof(*w));
+	w->data = (unsigned char *) pf_load(path, &w->size);
+	if (w->data == NULL)
+		return REF_ERR_OPEN;
+	if (w->size < 4 || memcmp(w->data, "HREF", 4) != 0 || check(w->data, w->size) != REF_OK)
+	{
+		ref_walk_close(w);
+		return REF_ERR_FORMAT;
+	}
+	w->pos = 4;
+	return REF_OK;
+}
+
+int ref_walk_next(ref_walk *w, ref_symbol *sym)
+{
+	for (;;)
+	{
+		unsigned char kind;
+		unsigned int elen;
+		const char *str;
+
+		if (w->data == NULL)
+			return 0;
+		if (w->end == 0)
+		{
+			/* the next module */
+			unsigned long len;
+
+			if (w->pos + 8 > w->size || (len = be32(w->data + w->pos)) == 0)
+				return 0;
+			w->pos += 8;
+			w->end = w->pos + len;       /* checked by ref_walk_open() */
+			w->node = NULL;
+			continue;
+		}
+		if (w->pos + 2 > w->end)
+		{
+			w->pos = w->end;
+			w->end = 0;
+			w->module++;
+			continue;
+		}
+		kind = w->data[w->pos];
+		elen = w->data[w->pos + 1];
+		str = (const char *) w->data + w->pos + 2;
+		if (memchr(str, '\0', elen - 2) == NULL ||
+			(kind != REF_NODE && kind != REF_ALIAS && kind != REF_LABEL))
+		{
+			w->pos += elen;
+			continue;
+		}
+		if (kind == REF_NODE)
+			w->node = str;
+		sym->kind = kind;
+		sym->name = str;
+		sym->node = kind == REF_NODE ? str : w->node;
+		sym->title = NULL;
+		sym->module = w->module;
+		sym->line = 0;
+		if (kind == REF_LABEL)
+		{
+			size_t slen = strlen(str);
+
+			if (2 + slen + 1 + 2 <= elen)
+			{
+				const unsigned char *l = w->data + w->pos + 2 + slen + 1;
+
+				sym->line = (unsigned short) ((l[0] << 8) | l[1]);
+			}
+		}
+		w->pos += elen;
+		return 1;
+	}
+}
+
+void ref_walk_close(ref_walk *w)
+{
+	free(w->data);
+	memset(w, 0, sizeof(*w));
+}
+
 unsigned long ref_find(const ref_db *db, const char *name, unsigned long *hits, unsigned long max)
 {
 	unsigned long i, n = 0;
