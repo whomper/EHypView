@@ -232,7 +232,7 @@ static void report(ehv_view *v, const char *what, const ehv_target *t)
 	for (i = 0; v->idx != NULL && i < t->nsuggest && i < 3; i++)
 	{
 		const char *s = t->status == EHV_NO_FILE ? v->idx->guides[t->suggest[i]].key
-			: v->idx->syms[t->suggest[i]].name;
+			: i < t->similar.n ? t->similar.s[i].name : "";
 
 		if (strlen(sugg) + strlen(s) + 3 < sizeof(sugg))
 		{

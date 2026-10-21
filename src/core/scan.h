@@ -13,7 +13,8 @@
  *
  * One unit of work is reading one directory or indexing one file.  Files
  * that are unchanged since `previous` (same path, size, date, same .REF
- * file) are copied from it instead of being opened again.
+ * file) are taken from it instead of being opened again: their names
+ * from its blocks, when the names are sorted.
  */
 #ifndef EHV_SCAN_H
 #define EHV_SCAN_H
@@ -72,12 +73,19 @@ void ehv_scan_abort(ehv_scan *scan);
  */
 int ehv_scan_changed(const ehv_scan *scan);
 
+/* where the index built sorts its names: beside the cache file
+   (ehv_index_build_to()); call after ehv_scan_begin*() */
+int ehv_scan_build_to(ehv_scan *scan, const char *cache);
+int ehv_index_build_busy_scan(const ehv_scan *scan);   /* its names being put away */
+const char *ehv_scan_next_what(const ehv_scan *scan); /* the next step, in words (a profile) */
+
 /* the next step opens a file or reads a folder: slower than the others,
    so a program may begin a slice of its own with it */
 int ehv_scan_next_is_big(const ehv_scan *scan);
 
 /* end the scan and return its index as found, not yet sorted (for
-   ehv_index_merge_ref_some() and ehv_index_finish_some()) */
+   ehv_index_merge_ref_some() and ehv_index_finish_some(); `previous`
+   must stay until the names are sorted) */
 ehv_index *ehv_scan_take(ehv_scan *scan);
 
 /* the whole scan in one call */

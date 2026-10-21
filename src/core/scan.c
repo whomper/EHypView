@@ -115,6 +115,10 @@ struct ehv_scan {
 	/* the folder being read, ENTRIES entries per step: its names and,
 	   where the system's listing gives them, their sizes and dates */
 	int listing;
+	int listed;               /* a folder listed, being sorted, a step at a time */
+	unsigned short *ord, *otmp;   /* the sort: the names' order */
+	unsigned long width, lo, mid, hi, oi, oj, ok;
+	int omerging;
 	dir_item dir;
 	char **names, **subs;
 	pf_info *infos, *subinfo;
@@ -152,9 +156,9 @@ struct ehv_scan {
 	unsigned long nchecked;
 	int changed;              /* a guide read again, gone, moved or new */
 
-	/* the hypertext being read or copied, NAMES names per step */
+	/* the hypertext being read, NAMES names per step */
 	int part;                 /* PART_* */
-	long ng, pg;              /* its guide in idx; the one copied from prev */
+	long ng;                  /* its guide in idx */
 	unsigned long next;       /* the next name to take */
 	hyp_doc *doc;
 	ref_db *db;
@@ -165,7 +169,7 @@ struct ehv_scan {
 
 static void end_listing(ehv_scan *s);
 
-enum { PART_NONE, PART_COPY, PART_HYP, PART_REF };
+enum { PART_NONE, PART_HYP, PART_REF };
 
 static char *dupstr(const char *s)
 {
@@ -187,7 +191,7 @@ ehv_scan *ehv_scan_begin_check(const char *const *roots, unsigned int nroots, co
 {
 	ehv_scan *s = ehv_scan_begin(roots, nroots, previous);
 
-	if (s != NULL && previous != NULL && !previous->old_file)
+	if (s != NULL && previous != NULL)
 		s->checking = 1;
 	return s;
 }
@@ -285,8 +289,7 @@ static void restart(ehv_scan *s)
 	set_current(s, NULL);
 	/* room for what prev had, and a little more: growing the arrays
 	   later would copy them, thousands of names at once */
-	ehv_index_reserve(s->idx, s->prev->nguides + s->prev->nguides / 8 + 8,
-			  s->prev->nsyms + s->prev->nsyms / 8 + 64);
+	ehv_index_reserve(s->idx, s->prev->nguides + s->prev->nguides / 8 + 8);
 }
 
 /*
@@ -403,54 +406,100 @@ static void end_listing(ehv_scan *s)
 	s->cached = 0;
 	s->nnames = s->next_name = 0;
 	s->dir.path = NULL;
-	s->listing = 0;
+	s->listing = s->listed = 0;
+	free(s->ord);
+	free(s->otmp);
+	s->ord = s->otmp = NULL;
 }
 
-/* names and infos sorted together, by name */
-typedef struct {
-	char *name;
-	pf_info info;
-} named;
+#define SORT_MOVES 64          /* a listing's sort: moves a step (an ST: a few ms) */
 
-static int cmp_named(const void *a, const void *b)
+/*
+ * A folder's listing sorted by name a step at a time (a stable merge
+ * sort of the names' places; a folder of a hundred hypertexts and their
+ * REF files took 300 ms on an ST in one go), then names and infos put in
+ * that order: 1 when sorted, 0 when there is more, -1 out of memory
+ */
+static int sort_some(ehv_scan *s, unsigned long n)
 {
-	return cmp_names(&(*(const named *const *) a)->name, &(*(const named *const *) b)->name);
-}
+	unsigned long budget = SORT_MOVES;
 
-/* sorted as pointers: the C library's qsort is quick with those */
-static int sort_listing(char **names, pf_info *infos, long n)
-{
-	named *t, **p;
-	long i;
+	if (s->ord == NULL)
+	{
+		unsigned long i;
 
-	if (infos == NULL)
-	{
-		qsort(names, (size_t) n, sizeof(char *), cmp_names);
-		return 0;
+		if (n > 65535UL)
+			n = 65535UL;
+		s->ord = malloc(n * sizeof(unsigned short));
+		s->otmp = malloc(n * sizeof(unsigned short));
+		if (s->ord == NULL || s->otmp == NULL)
+			return -1;
+		for (i = 0; i < n; i++)
+			s->ord[i] = (unsigned short) i;
+		s->width = 1;
+		s->lo = 0;
+		s->omerging = 0;
 	}
-	t = malloc((size_t) n * sizeof(named));
-	p = malloc((size_t) n * sizeof(named *));
-	if (t == NULL || p == NULL)
+	while (s->width < n)
 	{
-		free(t);
-		free(p);
-		return -1;
+		if (!s->omerging)
+		{
+			if (s->lo >= n)
+			{
+				unsigned short *t = s->ord;
+
+				s->ord = s->otmp;
+				s->otmp = t;
+				s->width *= 2;
+				s->lo = 0;
+				continue;
+			}
+			s->mid = s->lo + s->width < n ? s->lo + s->width : n;
+			s->hi = s->mid + s->width < n ? s->mid + s->width : n;
+			s->oi = s->ok = s->lo;
+			s->oj = s->mid;
+			s->omerging = 1;
+		}
+		while (s->ok < s->hi)
+		{
+			if (budget-- == 0)
+				return 0;
+			if (s->oi < s->mid && (s->oj >= s->hi ||
+				cmp_names(&s->names[s->ord[s->oi]], &s->names[s->ord[s->oj]]) <= 0))
+				s->otmp[s->ok++] = s->ord[s->oi++];
+			else
+				s->otmp[s->ok++] = s->ord[s->oj++];
+		}
+		s->omerging = 0;
+		s->lo = s->hi;
 	}
-	for (i = 0; i < n; i++)
 	{
-		t[i].name = names[i];
-		t[i].info = infos[i];
-		p[i] = &t[i];
+		/* names and infos in that order */
+		char **nn = malloc(n * sizeof(char *));
+		pf_info *ni = s->infos != NULL ? malloc(n * sizeof(pf_info)) : NULL;
+		unsigned long i;
+
+		if (nn == NULL || (s->infos != NULL && ni == NULL))
+		{
+			free(nn);
+			free(ni);
+			return -1;
+		}
+		for (i = 0; i < n; i++)
+		{
+			nn[i] = s->names[s->ord[i]];
+			if (ni != NULL)
+				ni[i] = s->infos[s->ord[i]];
+		}
+		free(s->names);
+		free(s->infos);
+		s->names = nn;
+		s->infos = ni;
 	}
-	qsort(p, (size_t) n, sizeof(named *), cmp_named);
-	for (i = 0; i < n; i++)
-	{
-		names[i] = p[i]->name;
-		infos[i] = p[i]->info;
-	}
-	free(p);
-	free(t);
-	return 0;
+	free(s->ord);
+	free(s->otmp);
+	s->ord = s->otmp = NULL;
+	return 1;
 }
 
 /* keep a folder's listing for the building pass (checking: it may come) */
@@ -476,6 +525,8 @@ static void keep_listing(ehv_scan *s)
 }
 
 /* start reading a folder: its names now, its entries in the steps after */
+static int dir_ready(ehv_scan *s, long n);
+
 static int read_dir(ehv_scan *s, dir_item *d)
 {
 	long n = -1;
@@ -498,18 +549,34 @@ static int read_dir(ehv_scan *s, dir_item *d)
 		}
 	if (i == s->nseen)
 	{
+		/* listed in this step, sorted in the next (an ST takes a while
+		   for each) */
 		n = pf_list_dir_info(s->dir.path, &s->names, &s->infos);
-		if (n > 0 && sort_listing(s->names, s->infos, n) < 0)
-		{
-			free(s->infos);
-			s->infos = NULL;
-			qsort(s->names, (size_t) n, sizeof(char *), cmp_names);
-		}
-		if (n > 0 && s->checking)
+		if (n > 0)
 		{
 			s->nnames = n;
-			keep_listing(s);
+			s->listed = 1;
+			return 0;
 		}
+	}
+	return dir_ready(s, n);
+}
+
+/* the folder's listing sorted (unless the checking pass had it), and
+   kept for the building pass; then its entries are read */
+static int dir_ready(ehv_scan *s, long n)
+{
+	if (s->listed)
+	{
+		int r = sort_some(s, (unsigned long) n);
+
+		if (r < 0)
+			return -1;
+		if (r == 0)
+			return 0;                /* more of it in the next step */
+		s->listed = 0;
+		if (s->checking)
+			keep_listing(s);
 	}
 	if (n <= 0)
 	{
@@ -659,30 +726,14 @@ static int read_guide(ehv_scan *s, const file_item *f, ehv_guide *g)
 	return 0;
 }
 
-/* some more names of the hypertext being read or copied */
+/* some more names of the hypertext being read */
 static int more_names(ehv_scan *s)
 {
 	unsigned int n;
 
 	for (n = 0; n < NAMES; n++)
 	{
-		if (s->part == PART_COPY)
-		{
-			const ehv_guide *src = &s->prev->guides[s->pg];
-			const ehv_sym *sy;
-
-			if (s->next >= src->nsyms)
-			{
-				s->part = PART_NONE;
-				return 0;
-			}
-			sy = &s->prev->syms[src->first_sym + s->next++];
-			if (sy->from_ref == 2)
-				continue;               /* ALL.REF's are merged afresh */
-			if (ehv_index_add_sym(s->idx, (unsigned long) s->ng, sy->kind, sy->line, sy->name,
-					sy->node, sy->from_ref) < 0)
-				return -1;
-		} else if (s->part == PART_HYP)
+		if (s->part == PART_HYP)
 		{
 			const hyp_entry *e;
 
@@ -782,10 +833,11 @@ static int index_file(ehv_scan *s, const file_item *f, unsigned short root)
 
 			if (old->size == info.size && old->mtime == info.mtime && same_ref(old, f->ref, &rinfo))
 			{
-				/* the guide now, its names in the steps after */
+				/* the guide; its names stay in prev's blocks, merged
+				   from there when the names are sorted */
 				long ng = ehv_index_add_guide(s->idx, old);
 
-				if (ng < 0)
+				if (ng < 0 || ehv_index_take_names(s->idx, s->prev, (unsigned long) pg, (unsigned long) ng) < 0)
 					return -1;
 				if (ng != pg || old->root != root)
 					s->changed = 1;      /* in another place in the list */
@@ -793,10 +845,6 @@ static int index_file(ehv_scan *s, const file_item *f, unsigned short root)
 				s->st.reused++;
 				if (old->error != HYP_OK)
 					s->st.failed++;
-				s->ng = ng;
-				s->pg = pg;
-				s->next = 0;
-				s->part = PART_COPY;
 				return 0;
 			}
 		}
@@ -874,12 +922,25 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 {
 	while (budget-- > 0)
 	{
+		if (ehv_index_build_busy(s->idx))
+		{
+			/* the names gathered put away first (index.h) */
+			if (ehv_index_build_step(s->idx) < 0)
+				return -1;
+			continue;
+		}
 		if (s->part != PART_NONE)
 		{
 			if (more_names(s) < 0)
 				return -1;
 			if (s->part == PART_NONE)
 				s->next_file++;
+			continue;
+		}
+		if (s->listed)
+		{
+			if (dir_ready(s, s->nnames) < 0)
+				return -1;
 			continue;
 		}
 		if (s->listing)
@@ -929,8 +990,41 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 	return 0;
 }
 
+const char *ehv_scan_next_what(const ehv_scan *s)
+{
+	if (ehv_index_build_busy(s->idx))
+		return "names put away";
+	if (s->part != PART_NONE)
+		return "names of a hypertext";
+	if (s->listed)
+		return "folder's listing sorted";
+	if (s->listing)
+		return "folder's entries";
+	if (s->next_file < s->nfiles)
+		return "file";
+	if (s->ndirs > 0)
+		return "folder";
+	if (s->next_root < s->nroots)
+		return "root";
+	return "the end";
+}
+
+int ehv_index_build_busy_scan(const ehv_scan *s)
+{
+	return ehv_index_build_busy(s->idx);
+}
+
+int ehv_scan_build_to(ehv_scan *s, const char *cache)
+{
+	return ehv_index_build_to(s->idx, cache);
+}
+
 int ehv_scan_next_is_big(const ehv_scan *s)
 {
+	if (ehv_index_build_busy(s->idx))
+		return ehv_index_build_next_io(s->idx);   /* writing names to NAME.RUN */
+	if (s->listed)
+		return 0;                             /* a listing sorted */
 	if (s->part == PART_REF)
 		return s->db == NULL;                 /* reading the .REF */
 	if (s->part != PART_NONE || s->listing)
@@ -944,7 +1038,7 @@ int ehv_scan_changed(const ehv_scan *s)
 {
 	if (s->checking)
 		return 0;                    /* all checked: as before */
-	return s->changed || s->prev == NULL || s->prev->old_file || s->idx->nguides != s->prev->nguides;
+	return s->changed || s->prev == NULL || s->idx->nguides != s->prev->nguides;
 }
 
 ehv_index *ehv_scan_take(ehv_scan *s)

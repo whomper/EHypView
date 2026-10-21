@@ -128,6 +128,10 @@ mouse or the keyboard, and keeps what it found in `EHYPVIEW.IDX`. The next time 
 files are read, and when nothing changed nothing is written. There is no `ALL.REF` to keep up to date
 (yours is still read).
 
+The names of the pages stay in `EHYPVIEW.IDX`, sorted, and are read from the disk when a link or a
+search needs them: in memory EHypView keeps only the list of hypertexts, so it takes little memory
+however many there are.
+
 ## Bookmarks
 
 **Bookmarks > Add bookmark** (^D, or the toolbar's **Bookmarks**) keeps the page shown. The
@@ -250,6 +254,7 @@ it doesn't know, when it writes the file. [Settings](#settings) changes most of 
 | `LIBRARY=` | the library's layout: `outline` or `panes` |
 | `PATHS=` | more folders to look in, between `;` |
 | `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
+| `PAGEKB=` | the part of it its pages needed at the most, in KB: grows when a viewer window closes having needed more |
 | `HEAPKB=` | the same, set by you: taken instead of `MEMKB=` |
 | `FONT=`, `POINT=` | the font and its size |
 | `BOOKMARK1=` ... | the bookmarks: the hypertext, the page and the title, between `\|` |

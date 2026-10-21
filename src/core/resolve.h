@@ -50,12 +50,14 @@ typedef struct {
 	unsigned short line;      /* line to show (labels), 0 = top */
 	long guide;               /* index entry of path, or -1     */
 
-	/* EHV_FOUND by name: other places with the same name (symbols) */
+	/* EHV_FOUND by name: the other hypertexts with that name (guides) */
 	unsigned long alt[EHV_MAX_HITS];
 	unsigned int nalt;
 
-	/* not found: close matches (guides for EHV_NO_FILE, else symbols) */
+	/* not found: close matches, guides for EHV_NO_FILE (suggest), else
+	   names (similar.s) */
 	unsigned long suggest[EHV_MAX_HITS];
+	ehv_hits similar;
 	unsigned int nsuggest;
 } ehv_target;
 

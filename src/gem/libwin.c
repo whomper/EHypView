@@ -613,16 +613,27 @@ static void describe(void)
 	}
 }
 
-/* the hypertext chosen has a page called Index */
+/* the hypertext chosen has a page called Index: looked up in the
+   index file once for it, not at each redraw */
+static const ehv_guide *index_of;     /* the guide asked about, NULL: none */
+static int index_has;
+
 static int has_index(const ehv_guide *g)
 {
-	unsigned long hit, n;
+	ehv_hits hit;
 
 	/* the model's index: the program's may be a newer one already */
 	if (g == NULL || lib.idx == NULL)
 		return 0;
-	n = ehv_index_find_symbol(lib.idx, "Index", (long) (g - lib.idx->guides), &hit, 1);
-	return n > 0 && lib.idx->syms[hit].kind == EHV_SYM_NODE;
+	if (g != index_of)
+	{
+		ehv_hits_init(&hit);
+		ehv_index_find_symbol(lib.idx, "Index", (long) (g - lib.idx->guides), &hit, 1);
+		index_has = hit.n > 0 && hit.s[0].kind == EHV_SYM_NODE;
+		ehv_hits_free(&hit);
+		index_of = g;
+	}
+	return index_has;
 }
 
 static int can_open(void)
@@ -1194,6 +1205,7 @@ void libwin_index_changed(void)
 		return;
 	if (lib.idx != idx)
 	{
+		index_of = NULL;
 		lib_set_index(&lib, idx);
 		redraw_all();
 	} else

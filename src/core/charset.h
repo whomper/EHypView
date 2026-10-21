@@ -21,6 +21,8 @@ size_t atari_to_utf8(unsigned char c, char *out);
 
 /* lower-case an Atari character: ASCII and the accented capitals */
 unsigned char atari_tolower(unsigned char c);
+/* the same for every character at once: table[c] (made once) */
+const unsigned char *atari_lower_table(void);
 
 /* compare ignoring case (Atari character set), like strcmp */
 int atari_casecmp(const char *a, const char *b);

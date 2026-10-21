@@ -47,6 +47,7 @@ void ehv_target_free(ehv_target *t)
 {
 	free(t->path);
 	free(t->node);
+	ehv_hits_free(&t->similar);
 	target_init(t);
 }
 
@@ -170,10 +171,8 @@ static int locate(const ehv_context *ctx, const char *file, int anywhere, ehv_ta
 
 /* apply an index symbol: pages by their own name, aliases/labels by
    the page they belong to */
-static int use_sym(const ehv_index *idx, unsigned long i, ehv_target *t)
+static int use_sym(const ehv_sym *s, ehv_target *t)
 {
-	const ehv_sym *s = &idx->syms[i];
-
 	if (set_str(&t->node, s->node) < 0)
 		return EHV_ERR_MEMORY;
 	t->line = s->kind == EHV_SYM_LABEL ? s->line : 0;
@@ -252,10 +251,16 @@ static int find_node(const ehv_context *ctx, const char *node, ehv_target *t)
 
 	if (t->guide >= 0)
 	{
-		unsigned long hit;
+		ehv_hits hit;
 
-		if (ehv_index_find_symbol(ctx->idx, node, t->guide, &hit, 1) > 0)
-			return t->status = use_sym(ctx->idx, hit, t);
+		ehv_hits_init(&hit);
+		if (ehv_index_find_symbol(ctx->idx, node, t->guide, &hit, 1) > 0 && hit.n > 0)
+		{
+			rc = use_sym(&hit.s[0], t);
+			ehv_hits_free(&hit);
+			return t->status = rc;
+		}
+		ehv_hits_free(&hit);
 		rc = EHV_NO_NODE;
 	} else
 	{
@@ -272,7 +277,7 @@ static int find_node(const ehv_context *ctx, const char *node, ehv_target *t)
 		return t->status = EHV_FOUND;
 
 	if (t->guide >= 0)
-		t->nsuggest = (unsigned int) ehv_index_suggest(ctx->idx, node, t->guide, t->suggest, EHV_MAX_HITS);
+		t->nsuggest = (unsigned int) ehv_index_suggest(ctx->idx, node, t->guide, &t->similar, EHV_MAX_HITS);
 	return t->status = EHV_NO_NODE;
 }
 
@@ -358,8 +363,10 @@ int ehv_resolve_xref(const ehv_context *ctx, const char *xref, ehv_target *t)
 
 int ehv_resolve_name(const ehv_context *ctx, const char *name, ehv_target *t)
 {
-	unsigned long hits[EHV_MAX_HITS + 1], n, i;
+	ehv_hits hits;
+	unsigned long n, i;
 	long cur = -1;
+	int rc;
 
 	target_init(t);
 	if (name == NULL || name[0] == '\0')
@@ -380,35 +387,32 @@ int ehv_resolve_name(const ehv_context *ctx, const char *name, ehv_target *t)
 			return t->status = EHV_FOUND;
 		}
 	}
-	if (cur >= 0 && ehv_index_find_symbol(ctx->idx, name, cur, hits, 1) > 0)
+	ehv_hits_init(&hits);
+	if (cur >= 0 && ehv_index_find_symbol(ctx->idx, name, cur, &hits, 1) > 0 && hits.n > 0)
 	{
-		if (set_str(&t->path, ctx->idx->guides[cur].path) < 0)
-			return t->status = EHV_ERR_MEMORY;
+		rc = set_str(&t->path, ctx->idx->guides[cur].path) < 0 ? EHV_ERR_MEMORY : use_sym(&hits.s[0], t);
 		t->guide = cur;
-		return t->status = use_sym(ctx->idx, hits[0], t);
+		ehv_hits_free(&hits);
+		return t->status = rc;
 	}
+	ehv_hits_free(&hits);
 
 	if (ctx->idx == NULL)
 		return t->status = EHV_NOT_FOUND;
 
-	n = ehv_index_find_symbol(ctx->idx, name, -1, hits, EHV_MAX_HITS + 1);
-	if (n == 0)
+	ehv_index_find_symbol(ctx->idx, name, -1, &hits, EHV_MAX_HITS + 1);
+	if ((n = hits.n) == 0)
 	{
-		t->nsuggest = (unsigned int) ehv_index_suggest(ctx->idx, name, -1, t->suggest, EHV_MAX_HITS);
+		ehv_hits_free(&hits);
+		t->nsuggest = (unsigned int) ehv_index_suggest(ctx->idx, name, -1, &t->similar, EHV_MAX_HITS);
 		return t->status = EHV_NOT_FOUND;
 	}
-	if (n > EHV_MAX_HITS + 1)
-		n = EHV_MAX_HITS + 1;
-	{
-		const ehv_sym *s = &ctx->idx->syms[hits[0]];
-
-		if (set_str(&t->path, ctx->idx->guides[s->guide].path) < 0)
-			return t->status = EHV_ERR_MEMORY;
-		t->guide = (long) s->guide;
-	}
+	t->guide = (long) hits.s[0].guide;
+	rc = set_str(&t->path, ctx->idx->guides[hits.s[0].guide].path) < 0 ? EHV_ERR_MEMORY : use_sym(&hits.s[0], t);
 	for (i = 1; i < n; i++)
-		t->alt[t->nalt++] = hits[i];
-	return t->status = use_sym(ctx->idx, hits[0], t);
+		t->alt[t->nalt++] = hits.s[i].guide;
+	ehv_hits_free(&hits);
+	return t->status = rc;
 }
 
 /* ---------------------------------------------------------------- */

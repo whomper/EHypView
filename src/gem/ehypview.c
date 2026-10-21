@@ -28,6 +28,7 @@
 #include "charset.h"
 #include "scan.h"
 #include "libjob.h"
+#include "names.h"
 #include "resolve.h"
 #include "view.h"
 #include "bookmark.h"
@@ -120,18 +121,61 @@ static void job_wait_index(void);
 static char start_dir[160];           /* where the program started: CRASH.LOG */
 static char home_dir[160];            /* FOLDER=: EHYPVIEW.IDX and .FNT */
 static char settings_path[40];        /* X:\EHYPVIEW.INF, the boot drive's root */
-static char inf_boot[8192];            /* it, as the accessory's start read it (acc_heap) */
-static long inf_boot_len = -1;         /* -1: none, too big, or taken */
+static char *inf_boot;                 /* it, as the accessory's start read it (acc_heap) */
 static pf_info inf_boot_info;
 static void acc_mem_note(int failed);
+static void acc_mem_grow(void);
+static char memkb_grown[16], pagekb_grown[16];   /* for recent_save's write to carry */
+static const char memkb_note[] = "the memory the accessory takes at boot, in KB, as it measured it "
+	"(HEAPKB= sets it yourself)";
+static const char pagekb_note[] = "the memory the accessory's pages needed at the most, in KB, "
+	"part of MEMKB=";
 
 /*
  * Events for the emulator console (NatFeats NF_STDERR; a no-op on real
  * hardware).  tests/run_gui.py follows them to check what happened.
  */
+#ifdef STACK_PROBE
+/* a test build's stack, painted at start: how deep it has been, printed
+   with each event (make STACK_PROBE=1: tests/run_*.py collect them) */
+#define PROBE_DEPTH 46000L
+static unsigned char *probe_top;
+
+static void probe_paint(void)
+{
+	volatile unsigned char *p;
+
+	probe_top = (unsigned char *) __builtin_frame_address(0);
+	for (p = probe_top - PROBE_DEPTH; p < probe_top - 256; p++)
+		*p = 0xA5;
+}
+
+static long probe_depth(void)
+{
+	volatile unsigned char *p = probe_top - PROBE_DEPTH;
+
+	while (p < probe_top && *p == 0xA5)
+		p++;
+	return (long) (probe_top - (unsigned char *) p);
+}
+#endif
+
 void log_event(const char *what, const char *a, const char *b)
 {
 	char line[300];
+#ifdef STACK_PROBE
+	static long deepest;
+	long d = probe_top != NULL ? probe_depth() : 0;
+
+	if (d > deepest)
+	{
+		char n[48];
+
+		deepest = d;
+		snprintf(n, sizeof(n), "STACK %ld after %s\n", d, what);
+		nf_debug(n);
+	}
+#endif
 
 	snprintf(line, sizeof(line), "EHV %s %s%s%s", what, a ? a : "", b ? " " : "", b ? b : "");
 	crash_note(line + 4);             /* the last one goes in CRASH.LOG */
@@ -947,6 +991,7 @@ static void close_window(void)
 		wind_close(cur->h);
 		wind_delete(cur->h);
 		log_event("closed", "viewer", NULL);
+		acc_mem_grow();
 		recent_save();
 	}
 	cur->h = -1;
@@ -2444,18 +2489,12 @@ static void own_set(char *text)
 static void own_reload(void)
 {
 	memset(&own_info, 0, sizeof(own_info));
-	if (inf_boot_len >= 0)
+	if (inf_boot != NULL)
 	{
 		/* the accessory's copy from before its heap: the file as read */
-		char *t = malloc((size_t) inf_boot_len + 1);
-
-		if (t != NULL)
-		{
-			memcpy(t, inf_boot, (size_t) inf_boot_len + 1);
-			own_info = inf_boot_info;
-		}
-		inf_boot_len = -1;
-		own_set(t);
+		own_info = inf_boot_info;
+		own_set(inf_boot);
+		inf_boot = NULL;
 		return;
 	}
 	own_set(pf_load_info(settings_path, NULL, &own_info));
@@ -2552,6 +2591,22 @@ static int list_save(const ehv_bookmarks *list, const char *prefix, unsigned int
 		}
 		free(text);
 		text = t;
+	}
+	for (i = 0; r == 0 && list == &recent && i < 2; i++)
+	{
+		char *v = i == 0 ? pagekb_grown : memkb_grown, *t;
+
+		if (v[0] == '\0')
+			continue;
+		if ((t = inf_put(text != NULL ? text : inf_head, i == 0 ? "PAGEKB" : "MEMKB", v,
+				 i == 0 ? pagekb_note : memkb_note)) == NULL)
+			r = -1;
+		else
+		{
+			free(text);
+			text = t;
+			v[0] = '\0';
+		}
 	}
 	if (r == 0 && text != NULL)
 		r = pf_save(settings_path, text, (unsigned long) strlen(text));
@@ -2718,12 +2773,34 @@ static void job_step(void)
 		return;
 #ifdef AES_PROFILE
 	{
-		static const char *const tag[] = { "idx-load", "idx-scan", "idx-sort", "idx-save", "idx-done" };
+		/* "+": a step that opens a file or reads a folder */
+		static const char *const tag[] = { "idx-load", "idx-scan", "idx-sort", "idx-save", "idx-done",
+						   "idx-load+", "idx-scan+", "idx-sort+", "idx-save+", "idx-done+" };
 
-		aes_profile_tag(tag[ehv_libjob_phase(job)]);
+		aes_profile_tag(tag[ehv_libjob_phase(job) + (ehv_libjob_next_is_big(job) ? 5 : 0)]);
 	}
-#endif
+	{
+		/* a step of 30 ms or more, for the record */
+		int ph = ehv_libjob_phase(job), big = ehv_libjob_next_is_big(job);
+		const char *doing = ehv_libjob_doing(job);
+		unsigned long t0 = tos_ms(), took;
+
+		r = ehv_libjob_step(job);
+		if ((took = tos_ms() - t0) >= 30)
+		{
+			/* written out only then: a profile measures this build */
+			const ehv_scan_status *st = job != NULL ? ehv_libjob_scan_status(job) : NULL;
+			char a[16], b[160];
+
+			sprintf(a, "%lu ms", took);
+			snprintf(b, sizeof(b), "phase %d%s: %s %s", ph, big ? " big" : "", doing,
+				 st != NULL && st->current != NULL ? st->current : "");
+			log_event("slow-step", a, b);
+		}
+	}
+#else
 	r = ehv_libjob_step(job);
+#endif
 	if (r == EHV_JOB_INDEX)
 	{
 		char num[16];
@@ -2882,75 +2959,88 @@ static void index_pieces(void)
 
 /*
  * EHYPVIEW.INF as the accessory's start found it: read before its heap
- * is taken, without malloc (HEAPKB=, MEMKB=), and taken by own_reload()
- * then, so the file is still read once a start (guidelines 6.5)
+ * is taken, without malloc, into the stack (HEAPKB=, MEMKB=), copied to
+ * the heap then and taken by own_reload(), so the file is still read
+ * once a start (guidelines 6.5)
  */
+#define INF_BOOT_MAX 8192
 static long memkb_boot;                /* MEMKB= as the start found it */
+static long pagekb = 64;               /* PAGEKB=: what a viewer's pages need, KB */
+static long index_use;                 /* the heap in use when the index job ended */
 
-static void inf_boot_read(void)
+static long inf_boot_read(char *buf)
 {
 	int h;
-	long n;
+	long n = -1;
 
 	settings_path[0] = (char) ('A' + boot_drive());
 	strcpy(settings_path + 1, ":\\EHYPVIEW.INF");
 	if ((h = pf_open(settings_path, PF_READ)) < 0)
-		return;
-	if (pf_finfo(h, &inf_boot_info) == 0 && inf_boot_info.size < sizeof(inf_boot) &&
-	    (n = pf_read(h, inf_boot, (long) sizeof(inf_boot) - 1)) >= 0)
-	{
-		inf_boot[n] = '\0';
-		inf_boot_len = n;
-	}
+		return -1;
+	if (pf_finfo(h, &inf_boot_info) == 0 && inf_boot_info.size < INF_BOOT_MAX &&
+	    (n = pf_read(h, buf, INF_BOOT_MAX - 1)) >= 0)
+		buf[n] = '\0';
 	pf_close(h);
+	return n;
 }
 
 /* KEY= (with its '=') in that copy, as a number; 0 when it isn't there */
-static long inf_boot_number(const char *key)
+static long inf_boot_number(const char *text, const char *key)
 {
 	const char *k;
 	size_t kl = strlen(key);
 
-	for (k = inf_boot; inf_boot_len >= 0 && *k != '\0'; k++)
-		if ((k == inf_boot || k[-1] == '\n') && atari_ncasecmp(k, key, kl) == 0)
+	for (k = text; *k != '\0'; k++)
+		if ((k == text || k[-1] == '\n') && atari_ncasecmp(k, key, kl) == 0)
 			return atol(k + kl);
 	return 0;
 }
 
 /* an accessory takes its memory once, at start-up (common/ui/accmem.c,
    guidelines 2.1): HEAPKB= when the user set it, else MEMKB=, what the
-   last start measured, else 1 MB (2 MB in TT RAM) */
+   last start measured, else 160 KB (2 MB in TT RAM) */
 static void acc_heap(void)
 {
-	long st = (long) Mxalloc(-1L, 0), heapkb;
-	char a[160], b[24];
+	long tt = (long) Mxalloc(-1L, 1), pics = 0, heapkb, n;
+	char a[160], b[24], buf[INF_BOOT_MAX];
 
 	/* the About box's icon's ST RAM (st_ram() in gemui.c), now: taken
 	   later, it would belong to the program in front (guidelines 2.2) */
 	ehv_ui_st_ram(0);
 
-	/* then the pictures' ST RAM (stmem.h): a sixteenth of what is free
-	   there, 64 to 128 KB (a page's pictures; the rest is the screen's
-	   and the programs'); TOS 1.x has no Mxalloc, and only ST RAM */
-	if (st == -32)
-		st = (long) Malloc(-1L);
-	st /= 16;
-	if (st > 128L * 1024)
-		st = 128L * 1024;
-	if (st < 64L * 1024)
-		st = 64L * 1024;
-	stmem_reserve(st);
+	/* the pictures' ST RAM (stmem.h): with no TT RAM the heap is ST RAM
+	   and has them; with some, the heap goes there and the screen can't
+	   be fed from it, so a block of ST RAM for a page's pictures: a
+	   sixteenth of the ST RAM free, 64 KB to 128 KB (a page of three
+	   pictures in 16 colours needs more than 64 KB) */
+	if (tt >= 256L * 1024)
+	{
+		pics = (long) Mxalloc(-1L, 0) / 16;
+		if (pics > 128L * 1024)
+			pics = 128L * 1024;
+		if (pics < 64L * 1024)
+			pics = 64L * 1024;
+	}
+	stmem_reserve(pics);
 
-	inf_boot_read();
-	heapkb = inf_boot_number("HEAPKB=");
-	memkb_boot = inf_boot_number("MEMKB=");
+	n = inf_boot_read(buf);
+	heapkb = n >= 0 ? inf_boot_number(buf, "HEAPKB=") : 0;
+	memkb_boot = n >= 0 ? inf_boot_number(buf, "MEMKB=") : 0;
+	if (n >= 0 && inf_boot_number(buf, "PAGEKB=") > pagekb)
+		pagekb = inf_boot_number(buf, "PAGEKB=");
 	/* on a 1 MB machine: 96 KB left, so a program can start beside it
 	   (ASKHELP.PRG, asking for help, needs 86 KB) */
 	acc_heap_leave = 96L * 1024;
-	acc_heap_take(1024L * 1024, 2048L * 1024, heapkb, memkb_boot);
+	/* the first start (no MEMKB= yet): what the index and a page are
+	   measured to need, 160 KB (60 hypertexts: 107 KB at the most while
+	   the index is built), growing by MEMKB= and PAGEKB= after; in TT RAM
+	   more, where it costs the programs nothing */
+	acc_heap_take(160L * 1024, 2048L * 1024, heapkb, memkb_boot);
+	if (n >= 0 && (inf_boot = malloc((size_t) n + 1)) != NULL)
+		memcpy(inf_boot, buf, (size_t) n + 1);
 
 	/* for the tests: what it took, where, and what it left the programs */
-	sprintf(a, "pictures %ldK heap %ldK%s%s", st / 1024, acc_heap_bytes / 1024, acc_heap_tt ? " TT" : "",
+	sprintf(a, "pictures %ldK heap %ldK%s%s", pics / 1024, acc_heap_bytes / 1024, acc_heap_tt ? " TT" : "",
 		heapkb >= 64 ? " (HEAPKB=)" : memkb_boot >= 32 ? " (MEMKB=)" : "");
 	sprintf(b, "free %ldK", (long) Malloc(-1L) / 1024);
 	log_event("acc-memory", a, b);
@@ -2966,6 +3056,15 @@ static void acc_heap(void)
 /* the accessory's index job done: what it needs, measured, as MEMKB=
    for the next start (once a start, when it moved); twice what it had
    when the job ran out of it */
+/* MEMKB= to write: what it holds now (the index), what a page and its
+   pictures needed (PAGEKB=, 64 KB until a viewer measured more), and the
+   peak so far */
+static long acc_mem_need(int failed)
+{
+	return failed && heap_peak > acc_heap_bytes - acc_heap_bytes / 8 ? acc_mem_full_kb() :
+		acc_mem_kb(heap_use + pagekb * 1024, 32L * 1024);
+}
+
 static void acc_mem_note(int failed)
 {
 	static int noted;
@@ -2975,17 +3074,47 @@ static void acc_mem_note(int failed)
 	if (!is_acc || noted || acc_heap_bytes == 0)
 		return;
 	noted = 1;
-	/* what it holds now (the index), a page and its pictures being
-	   read, and the job's peak */
-	kb = failed && heap_peak > acc_heap_bytes - acc_heap_bytes / 8 ? acc_mem_full_kb() :
-		acc_mem_kb(heap_use + 192L * 1024, 64L * 1024);
+	kb = acc_mem_need(failed);
 	acc_mem_line(line, sizeof(line), kb);
 	log_event("acc-memory", line, NULL);
 	if (acc_mem_moved(kb, memkb_boot))
 	{
 		sprintf(v, "%ld", kb);
-		settings_put("MEMKB", v, "the memory the accessory takes at boot, in KB, as it measured it "
-			     "(HEAPKB= sets it yourself)");
+		settings_put("MEMKB", v, memkb_note);
+		memkb_boot = kb;
+	}
+	/* from now on the peak is the pages' (and the searches'), on top of
+	   the index */
+	index_use = heap_use;
+	heap_peak = heap_use;
+}
+
+/* a viewer window closed: what its pages and pictures (and searches)
+   needed above the index, PAGEKB=, only ever more, and MEMKB= with it;
+   written with the pages read (recent_save), not by a write of its own.
+   A heap nearly full may have been short: half as much again */
+static void acc_mem_grow(void)
+{
+	long seen, kb;
+	char a[48];
+
+	if (!is_acc || acc_heap_bytes == 0 || job != NULL || !job_over)
+		return;                        /* the index job's peak isn't a page's */
+	seen = heap_peak - index_use;
+	if (heap_peak > acc_heap_bytes - acc_heap_bytes / 8)
+		seen += seen / 2;
+	kb = (seen + 1023) / 1024 + 16;
+	sprintf(a, "page %ld KB at the most", (seen + 1023) / 1024);
+	log_event("acc-memory", a, NULL);
+	if (kb <= pagekb)
+		return;
+	pagekb = kb;
+	sprintf(pagekb_grown, "%ld", kb);
+	recent_changed = 1;
+	kb = acc_mem_need(0);
+	if (kb > memkb_boot)
+	{
+		sprintf(memkb_grown, "%ld", kb);
 		memkb_boot = kb;
 	}
 }
@@ -3057,9 +3186,14 @@ int main(void)
 	AEVENT ev;
 	const inf_file *inf;
 	int fts_busy = 0;
+	unsigned long misread = 0;
 	unsigned long t0 = tos_hz200();       /* not tos_ms(): it measures the clock first */
 
 	is_acc = _is_acc;
+#ifdef STACK_PROBE
+	if (!is_acc)                       /* the program only: the accessory hung at boot with it (not looked into) */
+		probe_paint();
+#endif
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;
@@ -3071,7 +3205,6 @@ int main(void)
 	}
 	if (is_acc)
 	{
-		acc_heap();
 		menu_id = menu_register(ap_id, "  EHypView");
 		log_event("acc", menu_id >= 0 ? "registered" : "no menu entry", NULL);
 	}
@@ -3091,6 +3224,8 @@ int main(void)
 	tall_pixels = work_out[4] >= work_out[3] * 3 / 2;	/* pixel height, width (microns) */
 	vq_extnd(vdi_h, 1, work_out);
 	planes = work_out[4];
+	if (is_acc)
+		acc_heap();                    /* nothing malloc'd before it */
 	{
 		/* for the tests (tests/run_colour.py) */
 		char size[16], depth[24];
@@ -3296,6 +3431,13 @@ int main(void)
 			do
 				fts_busy = libwin_idle();
 			while (fts_busy && bg_more());
+		}
+		if (ehv_names_misread != misread && job == NULL)
+		{
+			/* EHYPVIEW.IDX was written again (by the program, or
+			   the accessory): read again */
+			misread = ehv_names_misread;
+			job_again();
 		}
 		if (which & (MU_MESAG | MU_KEYBD | MU_BUTTON))
 			update_menu();

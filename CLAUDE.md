@@ -74,8 +74,12 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   viewer window closes and at the end, never per page.
 - Disk access (guidelines 6.5): a file is looked at once and opened once a job (`pf_load`,
   `hyp_open` take size and date from the open file; listings carry them; `pf_look` and
-  `hyp_recent` hold an event's lookups); the INF is read once a start; the index is read in
-  32 KB (68000: 16 KB) pieces and written in one go. `make acc-files-test`
+  `hyp_recent` hold an event's lookups); the INF is read once a start; the index's head
+  (the hypertexts) is read in 32 KB (68000: 16 KB) pieces and written in one go. Its names
+  stay in the file (src/core/names.c: sorted 1 KB blocks, a lookup reads one or two, a search
+  reads them all in pieces with one open), built a 32 KB batch at a time (NAME.RUN when there
+  is more than one) and merged into NAME.ID$, written 32 KB (68000: 16 KB) at a time, which
+  the head finishes and makes EHYPVIEW.IDX. `make acc-files-test`
   (tests/hatari/acc_files.py) counts each job's opens and looks and fails above its budget;
   run it when file access changes.
 - Before pushing: `make test`, `make asan`, `make m68k-test`,
@@ -101,8 +105,11 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   No file stays open from one step to the next, nor across any event call,
   and no GEMDOS memory is taken after `acc_heap()` (guidelines 2.2), which
   is common/ui/accmem.c's `acc_heap_take` (HEAPKB=, else MEMKB=, written by
-  `acc_mem_note` after the index job), with nothing malloc'd before it
-  (`heap_early`; the INF is read into a static buffer first);
+  `acc_mem_note` after the index job: the index and PAGEKB=, what a viewer's
+  pages needed, 64 KB until `acc_mem_grow` measures more when a viewer window
+  closes; PAGEKB= only grows), with nothing malloc'd before it
+  (`heap_early`; the INF is read into the stack first; with TT RAM a block
+  of ST RAM for the pictures, else they come from the heap);
   test_index.c checks the library job's steps.
 - The icon is drawn by `tools/icon/make_icon.py` (the family's SM124
   monitor); `make icons` writes src/gem/icon*.h, docs/icon*.png and

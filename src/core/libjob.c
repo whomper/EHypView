@@ -10,6 +10,7 @@
 #include <string.h>
 #include "charset.h"
 #include "libjob.h"
+#include "names.h"
 #include "plat.h"
 #include "ref.h"
 
@@ -24,7 +25,7 @@ struct ehv_libjob {
 	ehv_index *fresh;               /* built by the scan */
 	ehv_index *ready;               /* to be taken */
 	ref_db *ref;
-	unsigned long next_module;
+	ehv_refmerge refm;
 	ehv_finish *fin;
 	ehv_saver *saver;
 	int started, unchanged, rebuild, saved;
@@ -111,11 +112,21 @@ int ehv_libjob_next_is_big(const ehv_libjob *j)
 	case EHV_JOB_SCANNING:
 		return j->scan == NULL || ehv_scan_next_is_big(j->scan);
 	case EHV_JOB_SORTING:
-		return (j->have_ref && j->ref == NULL && j->fin == NULL) || (j->ref == NULL && j->fin == NULL);
+		return (j->have_ref && j->ref == NULL && j->fin == NULL) || (j->ref == NULL && j->fin == NULL) ||
+		       (j->fin != NULL && ehv_names_next_io(j->fresh));
 	case EHV_JOB_SAVING:
 		return j->saver == NULL;
 	}
 	return 0;
+}
+
+const char *ehv_libjob_doing(const ehv_libjob *j)
+{
+	if (j->phase == EHV_JOB_SORTING)
+		return j->ref != NULL ? "ALL.REF merged" : j->fin != NULL ? ehv_index_finish_doing(j->fin) : "sort begun";
+	if (j->phase == EHV_JOB_SCANNING)
+		return j->scan != NULL ? ehv_scan_next_what(j->scan) : "scan begun";
+	return "";
 }
 
 int ehv_libjob_phase(const ehv_libjob *j)
@@ -199,8 +210,9 @@ int ehv_libjob_step(ehv_libjob *j)
 			/* checking first, or building */
 			j->scan = j->rebuild ? ehv_scan_begin((const char *const *) j->roots, j->nroots, j->prev)
 				: ehv_scan_begin_check((const char *const *) j->roots, j->nroots, j->prev);
-			if (j->scan == NULL)
+			if (j->scan == NULL || ehv_scan_build_to(j->scan, j->cache) < 0)
 				return EHV_JOB_FAILED;
+			return EHV_JOB_MORE;           /* its first step in the next */
 		}
 		r = ehv_scan_step(j->scan, 1);
 		if (r < 0)
@@ -243,7 +255,7 @@ int ehv_libjob_step(ehv_libjob *j)
 		}
 		if (j->ref != NULL)
 		{
-			r = ehv_index_merge_ref_some(j->fresh, j->ref, &j->next_module, 4);
+			r = ehv_index_merge_ref_some(j->fresh, j->ref, &j->refm, 4);
 			if (r < 0)
 				return EHV_JOB_FAILED;
 			if (r == 1)

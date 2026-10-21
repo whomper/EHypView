@@ -69,7 +69,8 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
 
    EHypView looks through these folders in the background, in short steps that pause while you use
    the mouse or keyboard. Its index (`EHYPVIEW.IDX`) has the hypertexts ready without reading them
-   again: only new or changed files are read, and when nothing changed nothing is written.
+   again: only new or changed files are read, and when nothing changed nothing is written. The
+   pages' names stay in it, on the disk, and are read when a link or a search needs them.
 4. Press ^L for the library, Help for the hypertext's help page (in the library, EHypView's guide),
    ^, for the settings, and the right mouse button for a menu.
 
@@ -237,10 +238,11 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
 - **The accessory** has no menu bar: its commands are in the toolbar's ≡ menu, and **About
   EHypView...** in the right button's menu too. Its entry in
   the Desk menu (**EHypView**) opens the viewer, or the library when no page is shown. It takes its
-  memory when it loads, as every AERA accessory does (common/ui/accmem.c): the first time 1 MB
-  (2 MB in TT RAM), never more than a quarter of what is free where 2 MB or more is, else half;
-  after that what it measured it needs (`MEMKB=`), or what you set (`HEAPKB=`). And 64 to 128 KB
-  of ST RAM for the pictures.
+  memory when it loads, as every AERA accessory does (common/ui/accmem.c): the first time 160 KB
+  (2 MB in TT RAM), never more than a quarter of what is free where 1 MB or more is, else half;
+  after that what it measured it needs (`MEMKB=`), or what you set (`HEAPKB=`). Where its memory
+  is TT RAM, 64 to 128 KB of ST RAM for the pictures as well; else the pictures come from its
+  memory.
 - **A quiet start.** At boot the accessory only registers and takes its memory; it reads nothing.
   It reads its index and looks through the library the first time you open it, or a program asks it
   for a page (`START=opened` in `EHYPVIEW.INF`). `START=now` starts at boot, and a number, that many
@@ -284,8 +286,9 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
   or asked for a page; the program writes this when there is none), `now`, or seconds after boot.
 - **`PATHS=`** names more folders to look for hypertexts in, between `;`, as well as `ST-GUIDE.INF`'s.
 - **`MEMKB=`** is the memory the accessory takes at boot, in KB, as it measured it once its library
-  was read (written again when that moves by more than an eighth). **`HEAPKB=`**, when you add it,
-  is taken instead.
+  was read (written again when that moves by more than an eighth): its index, and what its pages
+  needed, **`PAGEKB=`**, 64 KB until a viewer window closes having needed more (then both grow).
+  **`HEAPKB=`**, when you add it, is taken instead.
   `ST-GUIDE.INF` itself is ST-Guide's: EHypView reads it and never writes it.
 
 **Settings** changes `START=` and `PATHS=`.
@@ -356,7 +359,7 @@ a tag `v1.1` made with `git tag -a` does the same, with the tag's message as the
 
 ```
 src/core/   the portable core, without GEM: .HYP files and LH5, pages, .REF and
-            ST-GUIDE.INF; the folder scanner and the index; links and help requests;
+            ST-GUIDE.INF; the folder scanner and the index (its names on the disk); links and help requests;
             the full-text search. Built for the Atari and for this computer
 src/view/   the viewer and the library without GEM (links, history, search, the
             font setting), tested on this computer
