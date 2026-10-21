@@ -161,7 +161,7 @@ struct ehv_scan {
 	long ng;                  /* its guide in idx */
 	unsigned long next;       /* the next name to take */
 	hyp_doc *doc;
-	ref_db *db;
+	ref_walk ref;             /* the .REF being read (ref.data: loaded) */
 	const file_item *file;
 };
 
@@ -240,7 +240,7 @@ void ehv_scan_abort(ehv_scan *s)
 	if (s == NULL)
 		return;
 	hyp_close(s->doc);
-	ref_close(s->db);
+	ref_walk_close(&s->ref);
 	end_listing(s);
 	for (i = 0; i < s->nseen; i++)
 	{
@@ -754,28 +754,28 @@ static int more_names(ehv_scan *s)
 				return -1;
 		} else if (s->part == PART_REF)
 		{
-			const ref_symbol *rs;
+			ref_symbol rs;
 
-			if (s->db == NULL)
+			if (s->ref.data == NULL)
 			{
-				s->db = ref_open(s->file->ref, NULL);    /* a step of its own */
-				if (s->db == NULL)
+				/* read and checked, a step of its own; its symbols
+				   in the steps after (an ST took 100 ms for all of
+				   them at once) */
+				if (ref_walk_open(&s->ref, s->file->ref) != REF_OK)
 					s->part = PART_NONE;
 				return 0;
 			}
-			if (s->next >= s->db->nsyms)
+			if (ref_walk_next(&s->ref, &rs) != 1)
 			{
-				ref_close(s->db);
-				s->db = NULL;
+				ref_walk_close(&s->ref);
 				s->part = PART_NONE;
 				return 0;
 			}
-			rs = &s->db->syms[s->next++];
-			if ((rs->kind != REF_ALIAS && rs->kind != REF_LABEL) || rs->node == NULL)
+			if ((rs.kind != REF_ALIAS && rs.kind != REF_LABEL) || rs.node == NULL)
 				continue;
 			if (ehv_index_add_sym(s->idx, (unsigned long) s->ng,
-					rs->kind == REF_ALIAS ? EHV_SYM_ALIAS : EHV_SYM_LABEL,
-					rs->line, rs->name, rs->node, 1) < 0)
+					rs.kind == REF_ALIAS ? EHV_SYM_ALIAS : EHV_SYM_LABEL,
+					rs.line, rs.name, rs.node, 1) < 0)
 				return -1;
 		} else
 			return 0;
@@ -1026,7 +1026,7 @@ int ehv_scan_next_is_big(const ehv_scan *s)
 	if (s->listed)
 		return 0;                             /* a listing sorted */
 	if (s->part == PART_REF)
-		return s->db == NULL;                 /* reading the .REF */
+		return s->ref.data == NULL;           /* reading the .REF */
 	if (s->part != PART_NONE || s->listing)
 		return 0;
 	if (s->next_file < s->nfiles)

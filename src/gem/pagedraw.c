@@ -147,14 +147,40 @@ static void screen_colours(void)
 
 			scr.vdi[pen] = (short) i;
 		}
+		short raw[256][3], top = 0, k;
+
 		for (i = 0; i < ncol; i++)
 		{
 			if (scr.vdi[i] < 0)
 				scr.vdi[i] = (short) i;
-			vq_color(vdi_h, scr.vdi[i], rgb);
-			scr.rgb[i].r = from1000(rgb[0]);
-			scr.rgb[i].g = from1000(rgb[1]);
-			scr.rgb[i].b = from1000(rgb[2]);
+			vq_color(vdi_h, scr.vdi[i], raw[i]);
+			for (k = 0; k < 3; k++)
+				if (raw[i][k] > top)
+					top = raw[i][k];
+		}
+		/* TOS 4.04 gives the Falcon's ST-compatible palette (4 colours,
+		   ST medium) as level * 1000 / 16, 937 at the most, where the
+		   screen shows 15 of 15: full (colour-test, falcon-4).  Such a
+		   palette is read as level * 1000 / 15 */
+		for (i = 0; i < ncol; i++)
+			for (k = 0; k < 3; k++)
+				if (top >= 900 && top < 1000)
+					raw[i][k] = (short) ((raw[i][k] * 1000L + top / 2) / top);
+		for (i = 0; i < ncol; i++)
+		{
+			scr.rgb[i].r = from1000(raw[i][0]);
+			scr.rgb[i].g = from1000(raw[i][1]);
+			scr.rgb[i].b = from1000(raw[i][2]);
+		}
+		if (ncol <= 16)
+		{
+			/* for the tests: each pen's colour, as the VDI says it is */
+			char a[16 * 7 + 1], *o = a;
+
+			for (i = 0; i < ncol; i++)
+				o += sprintf(o, "%02X%02X%02X ", scr.rgb[i].r, scr.rgb[i].g, scr.rgb[i].b);
+			o[o > a ? -1 : 0] = '\0';
+			log_event("pens", a, NULL);
 		}
 	}
 text:
