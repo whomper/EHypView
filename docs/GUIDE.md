@@ -28,8 +28,8 @@ when you press Help.
   their subfolders: `\GUIDES` and `\GEMSYS\GUIDES` on every drive, the folders in `PATHS`,
   `HYPFOLD` and `REF` from `ST-GUIDE.INF`, and the folders you add in [Settings](#settings).
 
-The program starts with the hypertext given on its command line, else `DEFHYP` (or `HYPTOP`) from
-the `ST-GUIDE.INF` in your boot drive's root, else [the library](#the-library).
+The program starts with the hypertext given on its command line, else with [the
+library](#the-library).
 
 **To update,** copy the new files over the old ones. `EHYPVIEW.INF`, with your settings and
 bookmarks, and the index stay; an index from an older EHypView that the new one can't read is made
@@ -88,7 +88,10 @@ menu and the keys still reach everything.
 
 **File > Library and search** (^L, or the toolbar's **Library**) lists every hypertext found,
 grouped by subject, with one search field at the top. It is also what you see when no page was
-asked for. It has two layouts; [Settings](#settings) chooses one.
+asked for. It opens with what was found before, kept in `EHYPVIEW.IDX`; meanwhile EHypView looks
+through the folders for new or changed hypertexts, and the list follows when it finds some. A
+subject with a part, as many hypertexts give theirs (`Documentation/Editors`), comes under its
+subject: Editors, under Documentation. It has two layouts; [Settings](#settings) chooses one.
 
 **Outline**, the first one:
 
@@ -96,14 +99,16 @@ asked for. It has two layouts; [Settings](#settings) chooses one.
   each hypertext, the newest first. A click opens it.
 - **Groups.** Bookmarks, then one group for each subject. Each heading has the subject's colour and
   the number of hypertexts in it. A click on the heading, or Return, folds the group and opens it
-  again; Left folds the group of the row chosen, Right opens it.
+  again; Left folds the group of the row chosen, Right opens it. The parts of a subject have
+  headings of their own in its group.
 - **Hypertexts** take two lines: the title, and under it the author and version (or the folder it
   is in). The file name is on the right.
 
 **Two panes**:
 
 - **Subjects** on the left: Bookmarks, Recently read, All hypertexts, then each subject with its
-  colour and the number of hypertexts in it. The rows of the one chosen are on the right.
+  colour and the number of hypertexts in it, its parts under it. The rows of the one chosen are on
+  the right: a subject's own, then each part's.
 - **What you chose** is shown under the rows: the title, the author and version, the file and its
   `.REF`. **Open** opens it; **Index** opens its index page, when it has one.
 - **Keys:** Left or Tab goes to the subjects, where Up and Down choose one; Right, Tab or Return
@@ -260,8 +265,8 @@ it doesn't know, when it writes the file. [Settings](#settings) changes most of 
 | `BOOKMARK1=` ... | the bookmarks: the hypertext, the page and the title, between `\|` |
 | `RECENT1=` ... | the pages read last, the newest first, the same way |
 
-`ST-GUIDE.INF`, ST-Guide's settings, is read and never written: its `PATHS`, `HYPFOLD`, `REF`,
-`DEFHYP` and `HYPTOP` are used as ST-Guide uses them.
+`ST-GUIDE.INF`, ST-Guide's settings, is read and never written: its `PATHS`, `HYPFOLD` and `REF`
+are used as ST-Guide uses them. Its `DEFHYP` and `HYPTOP` aren't: EHypView starts in its library.
 
 ## When something goes wrong
 

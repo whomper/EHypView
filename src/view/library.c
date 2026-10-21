@@ -163,6 +163,65 @@ static int build_recent(ehv_library *lib)
 /* ---------------------------------------------------------------- */
 /* the full list                                                     */
 
+/* a subject's own part: up to its first "/" ("Documentation" of
+   "Documentation/Editors"); the whole of one that starts with "/" */
+static size_t subj_top(const char *s)
+{
+	const char *slash = strchr(s, '/');
+
+	return slash != NULL && slash > s && slash[1] != '\0' ? (size_t) (slash - s) : strlen(s);
+}
+
+/* the part after it ("Editors"), or NULL */
+static const char *subj_part(const char *s)
+{
+	size_t n = subj_top(s);
+
+	return s[n] == '/' ? s + n + 1 : NULL;
+}
+
+/* the same subject, in any case: the whole, or only the own part */
+static int same_top(const char *a, const char *b)
+{
+	size_t n = subj_top(a);
+
+	return n == subj_top(b) && atari_ncasecmp(a, b, n) == 0;
+}
+
+/* the subjects' order: by their own part, then the one without a part
+   first, then by the part; in any case */
+static int subj_cmp(const char *a, const char *b)
+{
+	size_t na = subj_top(a), nb = subj_top(b), i;
+	const char *pa, *pb;
+
+	for (i = 0; i < na && i < nb; i++)
+		if (atari_tolower((unsigned char) a[i]) != atari_tolower((unsigned char) b[i]))
+			return atari_tolower((unsigned char) a[i]) - atari_tolower((unsigned char) b[i]);
+	if (na != nb)
+		return na < nb ? -1 : 1;
+	pa = subj_part(a);
+	pb = subj_part(b);
+	if ((pa == NULL) != (pb == NULL))
+		return pa == NULL ? -1 : 1;
+	return pa == NULL ? 0 : atari_casecmp(pa, pb);
+}
+
+static int same_subject(const char *a, const char *b)
+{
+	return subj_cmp(a, b) == 0;
+}
+
+void lib_subject_text(const char *subj, char *buf, unsigned long size)
+{
+	const char *part = subj_part(subj);
+
+	if (part != NULL)
+		snprintf(buf, size, "%.*s \xfa %s", (int) subj_top(subj), subj, part);
+	else
+		snprintf(buf, size, "%s", subj);
+}
+
 static const ehv_index *cmp_idx;
 
 static int cmp_guides(const void *x, const void *y)
@@ -174,7 +233,7 @@ static int cmp_guides(const void *x, const void *y)
 	/* hypertexts without a subject come last */
 	if ((g->subject == NULL) != (h->subject == NULL))
 		return g->subject == NULL ? 1 : -1;
-	if (g->subject != NULL && (c = atari_casecmp(g->subject, h->subject)) != 0)
+	if (g->subject != NULL && (c = subj_cmp(g->subject, h->subject)) != 0)
 		return c;
 	if ((c = atari_casecmp(guide_title(g), guide_title(h))) != 0)
 		return c;
@@ -218,7 +277,7 @@ static int make_order(ehv_library *lib)
 
 		if (subj == NULL)
 			continue;
-		if (group == NULL || atari_casecmp(subj, group) != 0)
+		if (group == NULL || !same_top(subj, group))      /* a part: its subject's tint */
 		{
 			t = t < 255 ? t + 1 : 1;
 			group = subj;
@@ -232,34 +291,57 @@ static int make_order(ehv_library *lib)
 
 static int same_group(const char *a, const char *b)
 {
-	return (a == NULL) == (b == NULL) && (a == NULL || atari_casecmp(a, b) == 0);
+	return (a == NULL) == (b == NULL) && (a == NULL || same_top(a, b));
+}
+
+/* a hypertext with this subject is in the pane */
+static int in_pane(const lib_pane *p, const char *subj)
+{
+	if (p->kind == PANE_OTHER)
+		return subj == NULL;
+	return subj != NULL && (p->level ? same_subject(subj, p->subj) : same_top(subj, p->subj));
+}
+
+/* the next line of the Subjects pane at this level, after `k` (the
+   panes and the groups come in the same order) */
+static long next_pane(const ehv_library *lib, long k, unsigned char level)
+{
+	while (++k < (long) lib->npanes)
+		if (lib->panes[k].kind == PANE_SUBJECT && lib->panes[k].level == level)
+			return k;
+	return -1;
 }
 
 /*
  * The hypertexts, from the order: all under their headings (which fold
  * when `folds`), or, for a pane of one subject, only its own and no
- * heading.
+ * heading.  The parts of a subject have headings of their own under
+ * its heading (or in its pane), which don't fold.
  */
 static int build_groups(ehv_library *lib, int folds, const lib_pane *only)
 {
 	const ehv_index *idx = lib->idx;
 	unsigned long i, n = 0;
-	long heading = -1;
-	const char *group = NULL;
+	long heading = -1, sub = -1, k = -1;
+	const char *group = NULL, *part_of = NULL;
 
 	for (i = 0; i < lib->norder; i++)
 	{
 		unsigned long g = lib->order[i];
 		const char *subj = idx->guides[g].subject;
+		long under;
 
 		if (only != NULL)
 		{
-			if (only->kind == PANE_OTHER ? subj != NULL :
-			    subj == NULL || atari_casecmp(subj, only->text) != 0)
+			if (!in_pane(only, subj))
 				continue;
 		} else if (heading < 0 || !same_group(subj, group))
 		{
-			if (add_row(lib, LIB_GROUP, 0, subj != NULL ? subj : "Other hypertexts") < 0)
+			const char *text = "Other hypertexts";
+
+			if (subj != NULL && (k = next_pane(lib, k, 0)) >= 0)
+				text = lib->panes[k].text;
+			if (add_row(lib, LIB_GROUP, 0, text) < 0)
 				return -1;
 			heading = (long) lib->nrows - 1;
 			lib->rows[heading].tint = lib->tint[g];
@@ -270,6 +352,8 @@ static int build_groups(ehv_library *lib, int folds, const lib_pane *only)
 					lib->rows[heading].flags |= LIB_FOLDED;
 			}
 			group = subj;
+			sub = -1;
+			part_of = NULL;
 		}
 		n++;
 		if (heading >= 0)
@@ -278,6 +362,23 @@ static int build_groups(ehv_library *lib, int folds, const lib_pane *only)
 			if (lib->rows[heading].flags & LIB_FOLDED)
 				continue;
 		}
+		/* a part of the subject: under a heading of its own */
+		under = -1;
+		if (subj != NULL && subj_part(subj) != NULL && (only == NULL || only->level == 0))
+		{
+			if (sub < 0 || part_of == NULL || !same_subject(subj, part_of))
+			{
+				if (add_row(lib, LIB_GROUP, 0, subj_part(subj)) < 0)
+					return -1;
+				sub = (long) lib->nrows - 1;
+				lib->rows[sub].flags = LIB_SUB;
+				lib->rows[sub].tint = lib->tint[g];
+				part_of = subj;
+			}
+			under = sub;
+		}
+		if (under >= 0)
+			lib->rows[under].ref++;
 		if (add_row(lib, LIB_GUIDE, g, NULL) < 0)
 			return -1;
 		lib->rows[lib->nrows - 1].tint = lib->tint[g];
@@ -295,7 +396,7 @@ static int build_groups(ehv_library *lib, int folds, const lib_pane *only)
 /* the Subjects pane                                                 */
 
 static int add_pane(ehv_library *lib, unsigned char kind, unsigned char tint, unsigned long count,
-		    const char *text)
+		    const char *text, int len)
 {
 	lib_pane *p;
 
@@ -312,9 +413,23 @@ static int add_pane(ehv_library *lib, unsigned char kind, unsigned char tint, un
 	p = &lib->panes[lib->npanes++];
 	p->kind = kind;
 	p->tint = tint;
+	p->level = 0;
 	p->count = count;
-	p->text = text;
+	p->subj = NULL;
+	snprintf(p->text, sizeof(p->text), "%.*s", len, text);
 	return 0;
+}
+
+/* the name a pane is found again by, over a new index: the subject, or
+   the subject and its part */
+static void pane_key(const lib_pane *p, char *buf, size_t size)
+{
+	if (p->kind != PANE_SUBJECT)
+		snprintf(buf, size, "%s", p->text);
+	else if (p->level)
+		snprintf(buf, size, "%.*s/%s", (int) subj_top(p->subj), p->subj, subj_part(p->subj));
+	else
+		snprintf(buf, size, "%.*s", (int) subj_top(p->subj), p->subj);
 }
 
 /* Bookmarks, Recently read, All hypertexts, each subject, the ones with
@@ -325,34 +440,64 @@ static int build_panes(ehv_library *lib)
 	unsigned long i, other = 0;
 	long k;
 
+	long top = -1;
+	char key[sizeof(lib->pane_name)];
+
 	lib->npanes = 0;
-	if (lib->bm != NULL && lib->bm->n > 0 && add_pane(lib, PANE_BOOKMARKS, 0, lib->bm->n, "Bookmarks") < 0)
+	if (lib->bm != NULL && lib->bm->n > 0 && add_pane(lib, PANE_BOOKMARKS, 0, lib->bm->n, "Bookmarks", LIB_PANE_TEXT) < 0)
 		return -1;
 	if (lib->recent != NULL && lib->recent->n > 0 &&
-	    add_pane(lib, PANE_RECENT, 0, lib->recent->n, "Recently read") < 0)
+	    add_pane(lib, PANE_RECENT, 0, lib->recent->n, "Recently read", LIB_PANE_TEXT) < 0)
 		return -1;
-	if (idx != NULL && add_pane(lib, PANE_ALL, 0, lib->norder, "All hypertexts") < 0)
+	if (idx != NULL && add_pane(lib, PANE_ALL, 0, lib->norder, "All hypertexts", LIB_PANE_TEXT) < 0)
 		return -1;
 	for (i = 0; i < lib->norder; i++)
 	{
 		const ehv_guide *g = &idx->guides[lib->order[i]];
+		const char *part;
+		lib_pane *last;
 
 		if (g->subject == NULL)
+		{
 			other++;
-		else if (lib->panes[lib->npanes - 1].kind == PANE_SUBJECT &&
-			 atari_casecmp(lib->panes[lib->npanes - 1].text, g->subject) == 0)
-			lib->panes[lib->npanes - 1].count++;
-		else if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, g->subject) < 0)
-			return -1;
+			continue;
+		}
+		/* the subject, then its part, if any */
+		if (top >= 0 && same_top(lib->panes[top].subj, g->subject))
+			lib->panes[top].count++;
+		else
+		{
+			if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, g->subject,
+				     (int) subj_top(g->subject)) < 0)
+				return -1;
+			top = (long) lib->npanes - 1;
+			lib->panes[top].subj = g->subject;
+		}
+		if ((part = subj_part(g->subject)) == NULL)
+			continue;
+		last = &lib->panes[lib->npanes - 1];
+		if (last->level == 1 && same_subject(last->subj, g->subject))
+			last->count++;
+		else
+		{
+			if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, part, LIB_PANE_TEXT) < 0)
+				return -1;
+			last = &lib->panes[lib->npanes - 1];
+			last->level = 1;
+			last->subj = g->subject;
+		}
 	}
-	if (other > 0 && add_pane(lib, PANE_OTHER, 0, other, "Other hypertexts") < 0)
+	if (other > 0 && add_pane(lib, PANE_OTHER, 0, other, "Other hypertexts", LIB_PANE_TEXT) < 0)
 		return -1;
 
 	lib->pane = -1;
 	for (k = 0; k < (long) lib->npanes && lib->pane < 0; k++)
+	{
+		pane_key(&lib->panes[k], key, sizeof(key));
 		if (lib->panes[k].kind == lib->pane_kind &&
-		    (lib->pane_kind != PANE_SUBJECT || atari_casecmp(lib->panes[k].text, lib->pane_name) == 0))
+		    (lib->pane_kind != PANE_SUBJECT || atari_casecmp(key, lib->pane_name) == 0))
 			lib->pane = k;
+	}
 	for (k = 0; k < (long) lib->npanes && lib->pane < 0; k++)
 		if (lib->panes[k].kind == PANE_ALL)
 			lib->pane = k;
@@ -677,8 +822,8 @@ int lib_fold(ehv_library *lib, int how)
 	{
 		if (how != 0)
 			return 0;
-		while (h >= 0 && lib->rows[h].kind != LIB_GROUP)
-			h--;
+		while (h >= 0 && (lib->rows[h].kind != LIB_GROUP || (lib->rows[h].flags & LIB_SUB)))
+			h--;                       /* past a part's heading, to its subject's */
 		if (h < 0)
 			return 0;
 	}
@@ -710,7 +855,7 @@ long lib_pane_select(ehv_library *lib, long i)
 		return i;
 	lib->pane = i;
 	lib->pane_kind = lib->panes[i].kind;
-	snprintf(lib->pane_name, sizeof(lib->pane_name), "%s", lib->panes[i].text);
+	pane_key(&lib->panes[i], lib->pane_name, sizeof(lib->pane_name));
 	lib->top = 0;
 	rebuild(lib, 0, 0);
 	return lib->pane;

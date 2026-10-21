@@ -193,9 +193,12 @@ def make_drive(d, how, hyp):
     name = os.path.basename(hyp).upper()
     shutil.copy(hyp, os.path.join(d, name))
     if how == "prg":
+        # started on it by LAUNCH.PRG (tests/launch.c): with nothing, it
+        # opens its library
         shutil.copy(os.path.join(HDIR, "EHYPVIEW.PRG"), d)
-        with open(os.path.join(d, "ST-GUIDE.INF"), "w") as f:
-            f.write("DEFHYP=C:\\%s\r\n" % name)
+        shutil.copy(os.path.join(HDIR, "LAUNCH.PRG"), d)
+        with open(os.path.join(d, "LAUNCH.TXT"), "w") as f:
+            f.write("C:\\EHYPVIEW.PRG\r\nC:\\%s\r\n" % name)
     else:
         shutil.copy(os.path.join(HDIR, "EHYPVIEW.ACC"), d)
         shutil.copy(os.path.join(HDIR, "ASKHELP.PRG"), d)
@@ -241,7 +244,7 @@ def boot(name, spec, opts, vmode, how, hyp=FIXTURE, npics=2):
     args = ["hatari"] + margs + [
         "--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal", "--borders", "no",
         "--cmd-fifo", fifo, "--fast-forward", "yes",
-        "--auto", r"C:\EHYPVIEW.PRG" if how == "prg" else r"C:\ASKHELP.PRG"]
+        "--auto", r"C:\LAUNCH.PRG" if how == "prg" else r"C:\ASKHELP.PRG"]
     h = subprocess.Popen(args, env=m.env(), stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
 
     def lines():

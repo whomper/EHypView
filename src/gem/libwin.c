@@ -49,6 +49,7 @@ static ehv_library lib;
 static int lib_ready;
 static char lib_name[] = " Hypertexts ";
 static char lib_info[120];
+static char info_shown[120];           /* the info line the window has */
 static int want_layout = LIB_OUTLINE;  /* LIBRARY= */
 static int focus_left;                 /* Two panes: the Subjects have the keys */
 static long pane_top;                  /* the first line of the Subjects shown */
@@ -291,12 +292,19 @@ static void clamp(void)
 		lib.top = first;
 }
 
+static short slider_shown[2] = { -1, -1 };   /* the window's: set again only when they change */
+
 static void set_slider(void)
 {
 	long first = first_row(), rows = visible_rows(), n = (long) lib.nrows - first, max = max_top() - first;
+	short size = (short) (n > rows ? rows * 1000L / n : 1000), at = (short) (max > 0 ? (lib.top - first) * 1000L / max : 0);
 
-	wind_set(lib_h, WF_VSLSIZE, (short) (n > rows ? rows * 1000L / n : 1000), 0, 0, 0);
-	wind_set(lib_h, WF_VSLIDE, (short) (max > 0 ? (lib.top - first) * 1000L / max : 0), 0, 0, 0);
+	if (size != slider_shown[0])
+		wind_set(lib_h, WF_VSLSIZE, size, 0, 0, 0);
+	if (at != slider_shown[1])
+		wind_set(lib_h, WF_VSLIDE, at, 0, 0, 0);
+	slider_shown[0] = size;
+	slider_shown[1] = at;
 }
 
 /* the subjects (not Bookmarks, Recently read, All, Other) */
@@ -331,7 +339,11 @@ static void update_info(void)
 		snprintf(lib_info, sizeof(lib_info), " %lu hypertexts in %lu subjects", lib.norder, subjects());
 	else
 		snprintf(lib_info, sizeof(lib_info), " %lu hypertexts", lib.norder);
-	wind_set_str(lib_h, WF_INFO, lib_info);
+	if (strcmp(lib_info, info_shown) != 0)     /* the AES redraws it: only when it changed */
+	{
+		strcpy(info_shown, lib_info);
+		wind_set_str(lib_h, WF_INFO, lib_info);
+	}
 }
 
 /* ---------------------------------------------------------------- */
@@ -597,7 +609,7 @@ static void describe(void)
 		else if (r->kind == LIB_GUIDE && ver[0] != '\0')
 			snprintf(about2, sizeof(about2), "Version %s", ver);
 		else if (r->kind == LIB_GUIDE && g->subject != NULL)
-			snprintf(about2, sizeof(about2), "%s", g->subject);
+			lib_subject_text(g->subject, about2, sizeof(about2));
 		else if (r->kind != LIB_GUIDE)
 			snprintf(about2, sizeof(about2), "In %s", g->database != NULL ? g->database : g->key);
 		if (g->ref_path != NULL)
@@ -669,9 +681,11 @@ static void button(short x, short y, short w, short h, const char *label, int bo
 
 static void draw_detail(short wx, short ww, short y)
 {
-	short bx, oy, iy, bw, bh, x = (short) (wx + pane_w() + 4 + MARGIN), tx;
+	short bx, oy, iy, bw, bh, x = (short) (wx + pane_w() + 4 + MARGIN), tx, wy, wh;
 	long room;
 
+	work_area(&wx, &wy, &ww, &wh);
+	fill(0, (short) (wx + pane_w() + 4), y, (short) (wx + ww - 1), (short) (wy + wh - 1));
 	line_((short) (wx + pane_w() + 4), y, (short) (wx + ww - 1), y, 1);
 	line_((short) (wx + pane_w() + 4), (short) (y + 3), (short) (wx + ww - 1), (short) (y + 3), 1);
 	describe();
@@ -704,6 +718,7 @@ static void draw_panes(short wx, short wy, short wh)
 	unsigned long i;
 
 	fill(pane_ground(), wx, y, (short) (wx + pw - 1), (short) (wy + wh - 1));
+	fill(0, (short) (wx + pw + 1), y, (short) (wx + pw + 2), (short) (wy + wh - 1));
 	/* a double line beside it */
 	line_((short) (wx + pw), y, (short) (wx + pw), (short) (wy + wh - 1), 1);
 	line_((short) (wx + pw + 3), y, (short) (wx + pw + 3), (short) (wy + wh - 1), 1);
@@ -717,7 +732,7 @@ static void draw_panes(short wx, short wy, short wh)
 	for (i = (unsigned long) pane_top; (long) i <= pane_last(); i++)
 	{
 		const lib_pane *p = &lib.panes[i];
-		short color = 1, gx = (short) (wx + MARGIN + cw / 2);
+		short color = 1, gx = (short) (wx + MARGIN + cw / 2 + (p->level ? 2 * cw : 0));    /* a part: under its subject */
 		char n[12];
 		long room;
 
@@ -748,7 +763,7 @@ static void draw_panes(short wx, short wy, short wh)
 			fill_tint(p->tint, gx, (short) (y + 4), (short) (gx + cw - 2), (short) (y + lh - 5), color);
 		}
 		sprintf(n, "%lu", p->count);
-		room = PANE_COLS - 3 - (long) strlen(n) - 1;
+		room = PANE_COLS - 3 - (long) strlen(n) - 1 - (p->level ? 2 : 0);
 		put((short) (gx + 2 * cw), (short) (y + 3), p->text, room, color, 0);
 		put_right((short) (wx + pw - MARGIN - cw / 2), (short) (y + 3), n, 8, color);
 	}
@@ -820,13 +835,35 @@ static void draw_row(long r, short lx, short lw, short y)
 	lib_row_text(&lib, (unsigned long) r, text, sizeof(text));
 	lib_row_detail(&lib, (unsigned long) r, detail, sizeof(detail));
 	if (sel && panes() && focus_left && ncolors < 16)
+	{
+		fill(0, lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
 		frame_(lx, y, (short) (lx + lw - 1), (short) (y + rh - 1), 1);     /* the keys are elsewhere */
-	else if (sel)
+	} else if (sel)
 	{
 		fill(panes() && focus_left ? grey() : link_color(), lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
 		color = dcolor = acolor = 0;
-	}
+	} else
+		fill(0, lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
 	sel = sel && !(panes() && focus_left && ncolors < 16);
+	if (row->kind == LIB_GROUP && (row->flags & LIB_SUB))
+	{
+		/* a part of a subject: under its heading's text, plain */
+		short x = (short) (lx + MARGIN + cw / 2 + (panes() ? 0 : 4 * cw)), ty = (short) (y + 3);
+		char n[12];
+
+		room = (right - x) / cw;
+		tl = put(x, ty, text, room, 1, 0);
+		x = (short) (x + (tl + 1) * cw);
+		sprintf(n, "%lu", row->ref);
+		if (x + (long) strlen(n) * cw < right)
+		{
+			put(x, ty, n, 8, acolor, 0);
+			x = (short) (x + ((long) strlen(n) + 1) * cw);
+		}
+		if (x < right)
+			line_(x, (short) (y + rh / 2), right, (short) (y + rh / 2), grey());
+		return;
+	}
 	if (row->kind == LIB_GROUP)
 	{
 		short x = (short) (lx + MARGIN + cw / 2), ty = (short) (y + 3);
@@ -898,21 +935,13 @@ static void draw_row(long r, short lx, short lw, short y)
 	}
 }
 
-static void draw_rect(short cx, short cy, short cw_, short ch_)
+/* the search line */
+static void draw_search(short wx, short wy, short ww)
 {
-	short wx, wy, ww, wh, lx, ly, lw, lh;
-	short clip[4], fx0, fx1;
 	char text[160];
-	long r;
-	short y;
+	short fx0, fx1;
 
-	work_area(&wx, &wy, &ww, &wh);
-	clip[0] = cx;
-	clip[1] = cy;
-	clip[2] = (short) (cx + cw_ - 1);
-	clip[3] = (short) (cy + ch_ - 1);
-	vs_clip(vdi_h, 1, clip);
-	fill(0, clip[0], clip[1], clip[2], clip[3]);
+	fill(0, wx, wy, (short) (wx + ww - 1), (short) (wy + header_h() - 1));
 
 	/* the search field: a label, then a framed line to type in */
 	vswr_mode(vdi_h, MD_TRANS);
@@ -947,30 +976,65 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 		}
 	}
 	line_(wx, (short) (wy + header_h() - 2), (short) (wx + ww - 1), (short) (wy + header_h() - 2), 1);
+}
+
+static void draw_rect(short cx, short cy, short cw_, short ch_)
+{
+	short wx, wy, ww, wh, lx, ly, lw, lh;
+	short clip[4];
+	long r;
+	short y;
+
+	work_area(&wx, &wy, &ww, &wh);
+	clip[0] = cx;
+	clip[1] = cy;
+	clip[2] = (short) (cx + cw_ - 1);
+	clip[3] = (short) (cy + ch_ - 1);
+	vs_clip(vdi_h, 1, clip);
+	/* each part on its own ground, filled just before it is drawn (no
+	   white over the whole window first: it flickered, slowly drawn),
+	   and only the parts in the rectangle */
+	if (cy < wy + header_h())
+		draw_search(wx, wy, ww);
 
 	if (strip_h() > 0)
+	{
+		fill(0, wx, (short) (wy + header_h()), (short) (wx + ww - 1), (short) (wy + header_h() + strip_h() - 1));
 		draw_chips(wx, ww, (short) (wy + header_h()));
+	}
 	list_area(&lx, &ly, &lw, &lh);
 	if (panes())
 	{
 		const lib_pane *p = lib.pane >= 0 ? &lib.panes[lib.pane] : NULL;
 		short hx = (short) (lx + MARGIN + cw / 2), hy = (short) (wy + header_h() + 4);
 
-		draw_panes(wx, wy, wh);
-		/* the heading over the rows */
-		if (lib.query[0] != '\0')
-			put(hx, hy, "Found", 8, 1, 1);
-		else if (p != NULL)
+		if (cx < wx + pane_w() + 4)
+			draw_panes(wx, wy, wh);
+		if (cy < ly)
 		{
-			if (p->kind == PANE_SUBJECT || p->kind == PANE_OTHER)
+			char head[96];
+
+			fill(0, lx, (short) (wy + header_h()), (short) (lx + lw - 1), (short) (ly - 1));
+			/* the heading over the rows (a part: with its subject) */
+			if (lib.query[0] != '\0')
+				put(hx, hy, "Found", 8, 1, 1);
+			else if (p != NULL)
 			{
-				fill_tint(p->tint, hx, (short) (hy + 2), (short) (hx + cw - 2), (short) (hy + ch - 3), 1);
-				hx = (short) (hx + 2 * cw);
+				if (p->kind == PANE_SUBJECT || p->kind == PANE_OTHER)
+				{
+					fill_tint(p->tint, hx, (short) (hy + 2), (short) (hx + cw - 2), (short) (hy + ch - 3), 1);
+					hx = (short) (hx + 2 * cw);
+				}
+				if (p->kind == PANE_SUBJECT && p->level)
+					lib_subject_text(p->subj, head, sizeof(head));
+				else
+					snprintf(head, sizeof(head), "%s", p->text);
+				put(hx, hy, head, (lx + lw - MARGIN - hx) / cw, 1, 1 | 8);     /* bold, underlined */
 			}
-			put(hx, hy, p->text, (lx + lw - MARGIN - hx) / cw, 1, 1 | 8);     /* bold, underlined */
+			line_(lx, (short) (ly - 3), (short) (lx + lw - 1), (short) (ly - 3), 1);
 		}
-		line_(lx, (short) (ly - 3), (short) (lx + lw - 1), (short) (ly - 3), 1);
-		draw_detail(wx, ww, (short) (wy + wh - detail_h()));
+		if (cy + ch_ > wy + wh - detail_h())
+			draw_detail(wx, ww, (short) (wy + wh - detail_h()));
 	}
 
 	/* the rows, clipped to their area */
@@ -993,6 +1057,8 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 					draw_row(r, lx, lw, y);
 				y = (short) (y + rh);
 			}
+			if (y < ly + lh)               /* under the last row */
+				fill(0, lx, y, (short) (lx + lw - 1), (short) (ly + lh - 1));
 		}
 	}
 	vst_effects(vdi_h, 0);
@@ -1059,6 +1125,104 @@ static void redraw_all(void)
 	redraw(x, y, w, h);
 }
 
+/*
+ * A part of the window drawn again, not the whole: what changed (a slow
+ * machine draws the window in a visible while).  R_ALL is redraw_all().
+ */
+#define R_HEAD   1                     /* the search line */
+#define R_PANE   2                     /* the Subjects pane */
+#define R_LIST   4                     /* Continue, the heading and the rows */
+#define R_DETAIL 8                     /* what the row chosen is */
+
+static void refresh(int what)
+{
+	short wx, wy, ww, wh, lx, ly, lw, lh, top;
+
+	if (lib_h <= 0 || lib_icon)
+	{
+		redraw_all();
+		return;
+	}
+	clamp();
+	set_slider();
+	update_info();
+	work_area(&wx, &wy, &ww, &wh);
+	list_area(&lx, &ly, &lw, &lh);
+	top = (short) (wy + header_h());
+	if (what & R_HEAD)
+		redraw(wx, wy, ww, header_h());
+	if ((what & R_PANE) && panes())
+		redraw(wx, top, (short) (pane_w() + 4), (short) (wh - header_h()));
+	if (what & R_LIST)
+		redraw(lx, top, lw, (short) (ly + lh - top));
+	if ((what & R_DETAIL) && panes())
+		redraw(lx, (short) (ly + lh), lw, (short) (wy + wh - ly - lh));
+}
+
+/* the rows' part only, as it is (scrolled: the selection not followed) */
+static void redraw_list(void)
+{
+	short wx, wy, ww, wh, lx, ly, lw, lh;
+
+	work_area(&wx, &wy, &ww, &wh);
+	list_area(&lx, &ly, &lw, &lh);
+	redraw(lx, (short) (wy + header_h()), lw, (short) (ly + lh - wy - header_h()));
+}
+
+/* one row (a Continue button: the strip) */
+static void refresh_row(long r)
+{
+	short wx, wy, ww, wh, lx, ly, lw, lh, y;
+	long k;
+
+	if (lib_h <= 0 || lib_icon || r < 0 || (unsigned long) r >= lib.nrows)
+		return;
+	work_area(&wx, &wy, &ww, &wh);
+	if (r < first_row())
+	{
+		redraw(wx, (short) (wy + header_h()), ww, strip_h());
+		return;
+	}
+	if (r < lib.top)
+		return;
+	list_area(&lx, &ly, &lw, &lh);
+	for (y = ly, k = lib.top; k < r && y < ly + lh; k++)
+		y = (short) (y + row_h(k));
+	if (y < ly + lh)
+		redraw(lx, y, lw, (short) (y + row_h(r) > ly + lh ? ly + lh - y : row_h(r)));
+}
+
+/* one line of the Subjects pane */
+static void refresh_pane_line(long i)
+{
+	short wx, wy, ww, wh;
+
+	if (lib_h <= 0 || lib_icon || !panes() || i < pane_top || i > pane_last())
+		return;
+	work_area(&wx, &wy, &ww, &wh);
+	redraw(wx, pane_y(i), pane_w(), pane_line_h());
+}
+
+/* the selection moved: the two rows, unless the list scrolled */
+static void sel_moved(long old_sel, long old_top)
+{
+	clamp();
+	if (lib.top != old_top)
+	{
+		refresh(R_LIST | R_DETAIL);
+		return;
+	}
+	set_slider();
+	update_info();
+	if (old_sel != lib.sel)
+	{
+		refresh_row(old_sel);
+		refresh_row(lib.sel);
+	}
+	if (panes())
+		refresh(R_DETAIL);
+}
+
 /* ---------------------------------------------------------------- */
 
 static void log_search(void)
@@ -1099,6 +1263,8 @@ void libwin_open(void)
 		x = (short) (desk_x + desk_w - w - 8 * cw > desk_x ? desk_x + desk_w - w - 8 * cw : desk_x);
 		y = (short) (desk_y + ch);
 		wind_set_str(lib_h, WF_NAME, lib_name);
+		info_shown[0] = '\x01';            /* a new window: none yet */
+		slider_shown[0] = slider_shown[1] = -1;
 		update_info();
 		wind_open(lib_h, x, y, w, h);
 		if (is_acc)                    /* the desktop drops files on it */
@@ -1163,7 +1329,7 @@ void libwin_recent(const ehv_bookmarks *recent)
 	if (!lib_ready)
 		return;
 	lib_set_recent(&lib, recent);
-	redraw_all();
+	refresh(R_PANE | R_LIST | R_DETAIL);
 }
 
 void libwin_layout(int layout)
@@ -1196,7 +1362,7 @@ void libwin_bookmarks(const ehv_bookmarks *bm)
 	if (!lib_ready)
 		return;
 	lib_set_bookmarks(&lib, bm);
-	redraw_all();
+	refresh(R_PANE | R_LIST | R_DETAIL);
 }
 
 void libwin_index_changed(void)
@@ -1207,7 +1373,7 @@ void libwin_index_changed(void)
 	{
 		index_of = NULL;
 		lib_set_index(&lib, idx);
-		redraw_all();
+		refresh(R_PANE | R_LIST | R_DETAIL);
 	} else
 	{
 		update_info();
@@ -1223,7 +1389,7 @@ static void fold(int how)
 		return;
 	if (lib.sel >= 0 && lib.rows[lib.sel].kind == LIB_GROUP)
 		log_event("fold", lib.rows[lib.sel].text, (lib.rows[lib.sel].flags & LIB_FOLDED) ? "folded" : "open");
-	redraw_all();
+	refresh(R_LIST);
 }
 
 /* the Index page of the hypertext chosen (Two panes) */
@@ -1262,7 +1428,7 @@ static void activate(void)
 
 			snprintf(q, sizeof(q), "\"%s\"", lib.query);
 			log_event("fulltext-start", q, NULL);
-			redraw_all();
+			refresh(R_LIST | R_DETAIL);
 		}
 		break;
 	}
@@ -1270,11 +1436,14 @@ static void activate(void)
 
 static void set_query(const char *q)
 {
+	int had = lib.query[0] != '\0';
+
 	lib_set_query(&lib, q);
 	if (q[0] != '\0')
 		focus_left = 0;                /* the rows found have the keys */
 	log_search();
-	redraw_all();
+	/* the pane's line chosen is shown otherwise while searching */
+	refresh(R_HEAD | R_LIST | R_DETAIL | (had != (q[0] != '\0') ? R_PANE : 0));
 }
 
 /* Two panes: the Subjects pane takes the keys, or gives them back */
@@ -1284,20 +1453,35 @@ static void focus(int left)
 		return;
 	focus_left = left;
 	log_event("library-focus", left ? "subjects" : "rows", NULL);
-	redraw_all();
+	refresh_pane_line(lib.pane);
+	refresh_row(lib.sel);
 }
 
-static void pane_moved(long before)
+static void pane_log(long before)
+{
+	char n[16];
+
+	if (lib.pane == before || lib.pane < 0)
+		return;
+	sprintf(n, "%lu", lib.panes[lib.pane].count);
+	log_event("pane", lib.panes[lib.pane].text, n);
+}
+
+/* another line of the Subjects chosen: its two lines (all of them when
+   the pane scrolled, or top_before is -1), and the rows */
+static void pane_moved(long before, long top_before)
 {
 	if (lib.pane == before)
 		return;
+	pane_log(before);
+	pane_clamp();
+	if (pane_top == top_before)
 	{
-		char n[16];
-
-		sprintf(n, "%lu", lib.panes[lib.pane].count);
-		log_event("pane", lib.panes[lib.pane].text, n);
-	}
-	redraw_all();
+		refresh_pane_line(before);
+		refresh_pane_line(lib.pane);
+	} else
+		refresh(R_PANE);
+	refresh(R_LIST | R_DETAIL);
 }
 
 /* ^C ^X ^V: the search line (^C: the hypertext chosen, else the search) */
@@ -1338,7 +1522,7 @@ void libwin_key(short kstate, short kreturn)
 {
 	short scan = KEY_SCAN(kreturn), ascii = KEY_ASCII(kreturn);
 	int shift = (kstate & K_SHIFT) != 0, ctrl = key_ctrl(kstate, kreturn);
-	long rows = visible_rows();
+	long rows = visible_rows(), old_sel = lib.sel, old_top = lib.top;
 	char q[LIB_QUERY_MAX];
 	size_t n = strlen(lib.query);
 
@@ -1354,21 +1538,21 @@ void libwin_key(short kstate, short kreturn)
 	}
 	if (panes() && focus_left)
 	{
-		long before = lib.pane;
+		long before = lib.pane, top_before = pane_top;
 
 		switch (scan)
 		{
 		case 0x48:                         /* Up, Down: the Subjects */
 			lib_pane_move(&lib, -1);
-			pane_moved(before);
+			pane_moved(before, top_before);
 			return;
 		case 0x50:
 			lib_pane_move(&lib, 1);
-			pane_moved(before);
+			pane_moved(before, top_before);
 			return;
 		case 0x47:                         /* Clr/Home */
 			lib_pane_select(&lib, shift ? (long) lib.npanes : 0);
-			pane_moved(before);
+			pane_moved(before, top_before);
 			return;
 		case 0x1c:                         /* Return, Right, Tab: to the rows */
 		case 0x72:
@@ -1382,15 +1566,15 @@ void libwin_key(short kstate, short kreturn)
 	{
 	case 0x48:                             /* Up */
 		lib_move(&lib, shift ? -rows : -1);
-		redraw_all();
+		sel_moved(old_sel, old_top);
 		return;
 	case 0x50:                             /* Down */
 		lib_move(&lib, shift ? rows : 1);
-		redraw_all();
+		sel_moved(old_sel, old_top);
 		return;
 	case 0x47:                             /* Clr/Home */
 		lib_move(&lib, shift ? (long) lib.nrows : -(long) lib.nrows);
-		redraw_all();
+		sel_moved(old_sel, old_top);
 		return;
 	case 0x4b:                             /* Left: the Subjects; in the Outline, fold */
 		if (panes())
@@ -1456,8 +1640,10 @@ void libwin_click(short mx, short my)
 		for (i = 0; i < nchips_shown; i++)
 			if (mx >= chip_x[i] && mx < chip_x[i] + chip_w[i])
 			{
+				long os = lib.sel, ot = lib.top;
+
 				lib_select(&lib, i);
-				redraw_all();
+				sel_moved(os, ot);
 				activate();
 			}
 		return;
@@ -1465,7 +1651,7 @@ void libwin_click(short mx, short my)
 	if (panes() && mx < x + pane_w() + 4)
 	{
 		/* a line of the Subjects pane, or its arrows */
-		long i, before = lib.pane;
+		long i, before = lib.pane, top_before = pane_top;
 
 		if (mx >= x + pane_w())
 			return;
@@ -1478,8 +1664,8 @@ void libwin_click(short mx, short my)
 				pane_top = pane_top > page ? pane_top - page : 0;
 				lib_pane_select(&lib, pane_last());
 				if (lib.pane == before)
-					redraw_all();
-				pane_moved(before);
+					refresh(R_PANE);
+				pane_moved(before, -1);
 				return;
 			}
 			if (pane_last() < (long) lib.npanes - 1 && my >= y + h - ch - 4)
@@ -1489,8 +1675,8 @@ void libwin_click(short mx, short my)
 					pane_top = (long) lib.npanes - 1;
 				lib_pane_select(&lib, pane_top);
 				if (lib.pane == before)
-					redraw_all();
-				pane_moved(before);
+					refresh(R_PANE);
+				pane_moved(before, -1);
 				return;
 			}
 		}
@@ -1500,11 +1686,27 @@ void libwin_click(short mx, short my)
 		if (i > pane_last())
 			return;
 		if (lib.query[0] != '\0')
-			set_query("");                 /* the pane's own rows again */
+		{
+			/* the pane's own rows again: the window drawn once */
+			lib_set_query(&lib, "");
+			log_search();
+			lib_pane_select(&lib, i);
+			focus_left = 1;
+			log_event("library-focus", "subjects", NULL);
+			pane_log(before);
+			redraw_all();
+			return;
+		}
 		lib_pane_select(&lib, i);
-		focus_left = 0;
-		focus(1);
-		pane_moved(before);
+		focus_left = 1;                    /* the Subjects take the keys */
+		log_event("library-focus", "subjects", NULL);
+		if (lib.pane != before)
+			pane_moved(before, top_before);
+		else
+		{
+			refresh_pane_line(lib.pane);
+			refresh_row(lib.sel);
+		}
 		return;
 	}
 	if (panes() && my >= y + h - detail_h())
@@ -1530,11 +1732,20 @@ void libwin_click(short mx, short my)
 			break;
 		h = (short) (h + row_h(row));
 	}
-	if (lib_select(&lib, row) != row)
-		return;
-	if (panes())
-		focus_left = 0;
-	redraw_all();
+	{
+		long os = lib.sel, ot = lib.top;
+
+		if (lib_select(&lib, row) != row)
+			return;
+		if (panes() && focus_left)
+		{
+			focus_left = 0;            /* the rows take the keys */
+			refresh_pane_line(lib.pane);
+		}
+		sel_moved(os, ot);
+		if (os == lib.sel)
+			refresh_row(lib.sel);
+	}
 	activate();
 }
 
@@ -1628,26 +1839,19 @@ int libwin_message(short *msg)
 				lib.sel = sel;
 			}
 			set_slider();
-			{
-				short x, y;
-
-				work_area(&x, &y, &w, &h);
-				redraw(x, y, w, h);
-			}
+			redraw_list();
 		}
 		break;
 	case WM_VSLID:
 		{
 			long first = first_row(), max = max_top() - first, sel = lib.sel;
-			short x, y;
 
 			lib.top = first + max * msg[4] / 1000;
 			lib.sel = -1;
 			clamp();
 			lib.sel = sel;
 			set_slider();
-			work_area(&x, &y, &w, &h);
-			redraw(x, y, w, h);
+			redraw_list();
 		}
 		break;
 	default:
@@ -1668,7 +1872,7 @@ int libwin_idle(void)
 	ehv_fts_hits(lib.fts, &after);
 	if (r != 0 || after != before)
 	{
-		redraw_all();
+		refresh(R_LIST | R_DETAIL);
 		if (r != 0)
 		{
 			char q[LIB_QUERY_MAX + 2], num[16];

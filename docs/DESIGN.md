@@ -288,8 +288,10 @@ Rules for `src/core`:
   windows (the program, with its menu bar, stays) and reopening the
   library; font sizes with the keyboard and choosing one in the font
   selector, which must end up in `EHYPVIEW.INF` (and a run started with
-  that file must come up in that font). Another run
-  starts without `DEFHYP` and must open the library. The viewer reports
+  that file must come up in that font). The first run starts the program
+  on a hypertext through `LAUNCH.PRG` (tests/launch.c; Hatari's `--auto`
+  gives no command line), as the colour test does; another run starts it
+  with nothing, `DEFHYP` in `ST-GUIDE.INF`, and must open the library. The viewer reports
   its page changes, searches and selections through NatFeats, and each
   step waits for the expected event. A second run boots with
   `EHYPVIEW.ACC` and checks that the accessory registers and indexes.

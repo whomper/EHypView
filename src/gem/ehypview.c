@@ -118,6 +118,7 @@ static char cache_path[200];
 static void wake(void);
 static int needs_index(const char *args);
 static void job_wait_index(void);
+static void job_load_index(void);
 static char start_dir[160];           /* where the program started: CRASH.LOG */
 static char home_dir[160];            /* FOLDER=: EHYPVIEW.IDX and .FNT */
 static char settings_path[40];        /* X:\EHYPVIEW.INF, the boot drive's root */
@@ -2344,9 +2345,12 @@ static void viewer_message(short *msg)
 			bookmarks_load();
 			pick_current();
 			if (cur->view.page != NULL)
-			open_window();
+				open_window();
 			else
+			{
+				job_load_index();
 				libwin_open();
+			}
 		}
 		break;
 	case AC_CLOSE:
@@ -2855,6 +2859,23 @@ static void job_wait_index(void)
 	graf_mouse(ARROW, NULL);
 }
 
+/* the library opens: EHYPVIEW.IDX read first, so that it shows what was
+   found before (the folders are looked through afterwards, in the
+   background); nothing to wait for without one */
+static void job_load_index(void)
+{
+	if (idx != NULL)
+		return;
+	job_begin();
+	if (job == NULL || ehv_libjob_phase(job) != EHV_JOB_LOADING)
+		return;
+	graf_mouse(BUSYBEE, NULL);
+	while (job != NULL && idx == NULL && ehv_libjob_phase(job) == EHV_JOB_LOADING)
+		job_step();
+	aes_profile_tag("asked");          /* not background work: the user waits */
+	graf_mouse(ARROW, NULL);
+}
+
 /* whether a request needs the index: not when it names a file that is
    there (as the AERA programs' Help keys do) */
 static int needs_index(const char *args)
@@ -2891,9 +2912,11 @@ static void wake(void)
 	log_font();
 }
 
+/* looking for hypertexts with none known yet: the library known (from
+   EHYPVIEW.IDX) is shown as it is while the folders are looked through */
 int scanning(void)
 {
-	return job != NULL && (idx == NULL || ehv_libjob_phase(job) == EHV_JOB_SCANNING);
+	return job != NULL && idx == NULL;
 }
 
 unsigned long scan_found(void)
@@ -3184,7 +3207,6 @@ int main(void)
 {
 	short work_out[57], msg[8], d, screen_w, screen_h;
 	AEVENT ev;
-	const inf_file *inf;
 	int fts_busy = 0;
 	unsigned long misread = 0;
 	unsigned long t0 = tos_hz200();       /* not tos_ms(): it measures the clock first */
@@ -3276,12 +3298,10 @@ int main(void)
 	viewers[0].used = 1;
 	view_init(&cur->view, NULL);
 	bg_init(is_acc ? start_when : BG_NOW);
-	inf = NULL;
 	if (!is_acc)
 	{
 		woken = 1;                     /* the user started it */
 		bg_opened();
-		inf = read_inf();
 		bookmarks_load();
 	}
 
@@ -3296,18 +3316,15 @@ int main(void)
 	}
 	if (!is_acc)
 	{
+		/* the hypertext on the command line, else the library (not
+		   ST-GUIDE.INF's DEFHYP: EHypView starts in its library) */
 		const char *args = command_line();
-		const char *def = inf ? inf_get(inf, "DEFHYP") : NULL;
 
-		if (def == NULL && inf != NULL)
-			def = inf_get(inf, "HYPTOP");
-		if (needs_index(args[0] != '\0' ? args : def))
+		if (needs_index(args))
 			job_wait_index();
 		graf_mouse(BUSYBEE, NULL);
 		if (args[0] != '\0')
 			view_request(&cur->view, args);
-		else if (def != NULL)
-			view_open(&cur->view, def, NULL, 0);
 		graf_mouse(ARROW, NULL);
 		if (cur->view.page != NULL || cur->view.status[0] != '\0')
 		{
@@ -3319,6 +3336,7 @@ int main(void)
 				log_event("status", cur->view.status, NULL);
 		} else
 		{
+			job_load_index();
 			libwin_open();
 		}
 		app_window_closed();
