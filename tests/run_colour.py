@@ -209,6 +209,12 @@ def start(spec, drive, opts, vmode):
     than its own when vmode is given (in the NVRAM and, for a real TOS 4,
     in NEWDESK.INF)"""
     m = machines.Machine(spec, drive)
+    if m.real and spec.startswith("Falcon"):
+        # C: as the boot drive, as an ST's BOOTC.PRG (machines.py) makes
+        # it: Hatari boots a real TOS 4.04 from A: on a Falcon of 1 MB and
+        # no TT RAM, where a Falcon's hard disk driver makes it C:, and
+        # EHYPVIEW.INF is looked for there (drive A: not responding)
+        machines.write_prg(os.path.join(drive, "AUTO", "BOOTC.PRG"), machines.BOOTC)
     if vmode is not None and m.real:
         with open(os.path.join(drive, "NEWDESK.INF"), "w", newline="") as f:
             f.write(machines.NEWDESK % (vmode >> 8, vmode & 255))
