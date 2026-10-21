@@ -237,6 +237,14 @@ $(HATARI_DIR)/ASKHELP.PRG: $(ATARI)/askhelp.elf common/tools/elf2tos.py
 	mkdir -p $(HATARI_DIR)
 	python3 common/tools/elf2tos.py $< $@
 
+$(ATARI)/launch.o: tests/launch.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -c -o $@ $<
+$(ATARI)/launch.elf: $(RT_OBJ) $(ATARI)/launch.o common/atari/link.ld
+	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(ATARI)/launch.o -lgcc
+$(HATARI_DIR)/LAUNCH.PRG: $(ATARI)/launch.elf common/tools/elf2tos.py
+	mkdir -p $(HATARI_DIR)
+	python3 common/tools/elf2tos.py $< $@
+
 $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
@@ -331,7 +339,7 @@ HYPCHECK = grep -q "EHYPVIEW.HYP $$(cat VERSION)" binary/EHYPVIEW.HYP || \
 	  { echo "binary/EHYPVIEW.HYP isn't version $$(cat VERSION): make help"; exit 1; }
 
 # drive EHYPVIEW.PRG in Hatari with the keyboard (screenshots in build/gui)
-gui-test: atari $(HATARI_DIR)/ASKHELP.PRG
+gui-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG
 	python3 tests/run_gui.py $(HATARI_DIR) build/gui
 
 # the accessory with a GDOS font under Erez's NVDI, alone (AERA_WITH_NVDI=1;
@@ -352,7 +360,7 @@ quiet-test: atari
 # pictures and text in colour in every screen mode: Falcon 4, 16, 256 and
 # true colour, ST medium, TT medium, low and high, checked pixel by pixel
 # (screenshots in build/colour)
-colour-test: atari $(HATARI_DIR)/ASKHELP.PRG
+colour-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG
 	python3 tests/run_colour.py $(HATARI_DIR) build/colour
 
 # the accessory's disk use, job by job, against its budget (the AERA

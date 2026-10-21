@@ -48,6 +48,8 @@
 /* a heading's flags */
 #define LIB_FOLDS   1     /* can be folded (Outline, no search) */
 #define LIB_FOLDED  2     /* folded: its rows left out          */
+#define LIB_SUB     4     /* a part of a subject ("Documentation/Editors":
+                             Editors, under Documentation)      */
 
 #define LIB_QUERY_MAX 48
 
@@ -67,10 +69,20 @@ typedef struct {
 #define PANE_SUBJECT   3
 #define PANE_OTHER     4  /* hypertexts without a subject */
 
+/*
+ * A subject with a "/" ("Documentation/Editors", as ST-Guide's
+ * hypertexts give them) is a part of the one before it: the pane lists
+ * Documentation, with each part under it (level 1), and the Outline
+ * the same, a heading for each part.  A subject is matched in any case.
+ */
+#define LIB_PANE_TEXT 40
+
 typedef struct {
 	unsigned char kind, tint;
+	unsigned char level;  /* SUBJECT: 1, a part of the subject before */
 	unsigned long count;
-	const char *text;     /* the subject (an index string), or a name */
+	const char *subj;     /* SUBJECT: one of its hypertexts' @subject */
+	char text[LIB_PANE_TEXT];        /* what it is called */
 } lib_pane;
 
 #define LIB_FOLD_MAX 32
@@ -172,5 +184,9 @@ void lib_row_about(const ehv_library *lib, unsigned long row, char *buf, unsigne
 
 /* a version as shown: "$VER:" and the file name left out */
 const char *lib_version(const char *v);
+
+/* a subject as shown: "Documentation \xfa Editors" for
+   "Documentation/Editors" */
+void lib_subject_text(const char *subj, char *buf, unsigned long size);
 
 #endif

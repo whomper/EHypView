@@ -95,30 +95,34 @@ static void test_all(const ehv_index *idx)
 	CHECK(lib_activate(&lib, &path, &node, &line) == LIB_NOTHING);
 	CHECK(lib_set_index(&lib, idx) == 0);
 
-	/* grouped by subject, titles sorted, no subject last */
-	CHECK(lib.nrows == 6 && lib.nguides == 4);
-	if (lib.nrows == 6)
+	/* grouped by subject, titles sorted, no subject last; "Test/EHypView":
+	   EHypView under Test */
+	CHECK(lib.nrows == 7 && lib.nguides == 4);
+	if (lib.nrows == 7)
 	{
-		CHECK(lib.rows[0].kind == LIB_GROUP && strcmp(lib.rows[0].text, "Test/EHypView") == 0);
-		row(&lib, 1, t);
-		CHECK(strcmp(t, "  EHypView basic test") == 0);
+		CHECK(lib.rows[0].kind == LIB_GROUP && strcmp(lib.rows[0].text, "Test") == 0);
+		CHECK(lib.rows[1].kind == LIB_GROUP && strcmp(lib.rows[1].text, "EHypView") == 0);
+		CHECK(lib.rows[1].flags == LIB_SUB && lib.rows[1].ref == 3);
 		row(&lib, 2, t);
-		CHECK(strcmp(t, "  EHypView image test") == 0);
+		CHECK(strcmp(t, "  EHypView basic test") == 0);
 		row(&lib, 3, t);
+		CHECK(strcmp(t, "  EHypView image test") == 0);
+		row(&lib, 4, t);
 		CHECK(strcmp(t, "  EHypView other test") == 0);
-		CHECK(lib.rows[4].kind == LIB_GROUP && strcmp(lib.rows[4].text, "Other hypertexts") == 0);
-		row(&lib, 5, t);
+		CHECK(lib.rows[5].kind == LIB_GROUP && strcmp(lib.rows[5].text, "Other hypertexts") == 0);
+		row(&lib, 6, t);
 		CHECK(strcmp(t, "  EHypView big test") == 0);
-		lib_row_detail(&lib, 5, t, sizeof(t));
+		lib_row_detail(&lib, 6, t, sizeof(t));
 		CHECK(strcmp(t, "big") == 0);
 	}
-	CHECK(lib.sel == 1);
-	CHECK(lib_move(&lib, 1) == 2);
-	CHECK(lib_move(&lib, 10) == 5);           /* over the heading, stops at the end */
-	CHECK(lib_move(&lib, -1) == 4);           /* the heading: it folds */
-	CHECK(lib_move(&lib, -10) == 0);
-	CHECK(lib_select(&lib, 4) == 4);
+	CHECK(lib.sel == 2);
+	CHECK(lib_move(&lib, 1) == 3);
+	CHECK(lib_move(&lib, 10) == 6);           /* over the heading, stops at the end */
+	CHECK(lib_move(&lib, -1) == 5);           /* the heading: it folds */
+	CHECK(lib_move(&lib, -10) == 0);          /* not the part's heading */
+	CHECK(lib_select(&lib, 1) == 0);
 	CHECK(lib_select(&lib, 5) == 5);
+	CHECK(lib_select(&lib, 6) == 6);
 	CHECK(lib_activate(&lib, &path, &node, &line) == LIB_OPEN);
 	CHECK(ends_with(path, "big.hyp") && node == NULL && line == 0);
 	lib_free(&lib);
@@ -147,15 +151,15 @@ static void test_bookmarks(const ehv_index *idx)
 
 	/* first in the full list, the hypertexts after them */
 	CHECK(lib_set_index(&lib, idx) == 0);
-	CHECK(lib.nrows == 3 + 6 && lib.nguides == 4);
+	CHECK(lib.nrows == 3 + 7 && lib.nguides == 4);
 	row(&lib, 1, t);
 	CHECK(strcmp(t, "  Basic test - Second page") == 0);
 	lib_row_detail(&lib, 2, t, sizeof(t));
 	CHECK(strcmp(t, "OTHER.HYP") == 0);
-	CHECK(lib.rows[3].kind == LIB_GROUP && strcmp(lib.rows[3].text, "Test/EHypView") == 0);
+	CHECK(lib.rows[3].kind == LIB_GROUP && strcmp(lib.rows[3].text, "Test") == 0);
 	CHECK(lib_move(&lib, 1) == 2 && lib_selected_bookmark(&lib) == 1);
 	CHECK(lib_move(&lib, 1) == 3 && lib_selected_bookmark(&lib) == -1);   /* the heading */
-	CHECK(lib_move(&lib, 1) == 4);
+	CHECK(lib_move(&lib, 1) == 5);
 
 	/* typing: the ones whose title or page has the text, in any case */
 	CHECK(lib_set_query(&lib, "detail") == 0);
@@ -170,14 +174,14 @@ static void test_bookmarks(const ehv_index *idx)
 	/* one removed: the list follows */
 	CHECK(lib_set_query(&lib, "") == 0);
 	bm_remove(&bm, 0);
-	CHECK(lib_set_bookmarks(&lib, &bm) == 0 && lib.nrows == 2 + 6);
+	CHECK(lib_set_bookmarks(&lib, &bm) == 0 && lib.nrows == 2 + 7);
 	row(&lib, 1, t);
 	CHECK(strcmp(t, "  Other test - Details") == 0);
 	/* and all of them: no heading left */
 	bm_remove(&bm, 0);
-	CHECK(lib_set_bookmarks(&lib, &bm) == 0 && lib.nrows == 6);
+	CHECK(lib_set_bookmarks(&lib, &bm) == 0 && lib.nrows == 7);
 	CHECK(lib_selected_bookmark(&lib) == -1);
-	CHECK(lib_set_bookmarks(&lib, NULL) == 0 && lib.nrows == 6);
+	CHECK(lib_set_bookmarks(&lib, NULL) == 0 && lib.nrows == 7);
 	lib_free(&lib);
 	bm_free(&bm);
 }
@@ -203,9 +207,10 @@ static void test_layouts(const ehv_index *idx)
 
 	/* the Outline: headings fold, with their counts and tints */
 	lib_init(&lib, idx);
-	CHECK(lib.layout == LIB_OUTLINE && lib.nrows == 6 && lib.sel == 1);
+	CHECK(lib.layout == LIB_OUTLINE && lib.nrows == 7 && lib.sel == 2);
 	CHECK(lib.rows[0].flags == LIB_FOLDS && lib.rows[0].ref == 3 && lib.rows[0].tint == 1);
-	CHECK(lib.rows[1].tint == 1 && lib.rows[4].ref == 1 && lib.rows[4].tint == 0 && lib.rows[5].tint == 0);
+	CHECK(lib.rows[1].flags == LIB_SUB && lib.rows[1].tint == 1);
+	CHECK(lib.rows[2].tint == 1 && lib.rows[5].ref == 1 && lib.rows[5].tint == 0 && lib.rows[6].tint == 0);
 	CHECK(lib_fold(&lib, 1) == 0);            /* a hypertext: nothing to unfold */
 	CHECK(lib_fold(&lib, 0) == 1);            /* its group */
 	CHECK(lib.nrows == 3 && lib.sel == 0 && lib.rows[0].flags == (LIB_FOLDS | LIB_FOLDED));
@@ -215,29 +220,29 @@ static void test_layouts(const ehv_index *idx)
 	CHECK(lib.rows[1].kind == LIB_GUIDE && lib.rows[1].tint == 1);
 	CHECK(lib_set_query(&lib, "") == 0 && lib.nrows == 3);                /* still folded */
 	lib_select(&lib, 0);
-	CHECK(lib_fold(&lib, -1) == 1 && lib.nrows == 6 && lib.sel == 0);
+	CHECK(lib_fold(&lib, -1) == 1 && lib.nrows == 7 && lib.sel == 0);
 	CHECK(lib_fold(&lib, 1) == 0);
 
 	/* its second line */
-	lib_row_about(&lib, 1, t, sizeof(t));
+	lib_row_about(&lib, 2, t, sizeof(t));
 	CHECK(strcmp(t, "EHypView project \xfa 1.0 (13.10.2026)") == 0);
-	lib_row_about(&lib, 5, t, sizeof(t));
+	lib_row_about(&lib, 6, t, sizeof(t));
 	CHECK(ends_with(t, TREE "/"));            /* no author nor version: its folder */
 	CHECK(strcmp(lib_version("$VER: basic.hyp 1.0 (13.10.2026)"), "1.0 (13.10.2026)") == 0);
 	CHECK(strcmp(lib_version("2.16"), "2.16") == 0 && strcmp(lib_version(NULL), "") == 0);
-	CHECK(lib_row_guide(&lib, 1) == &idx->guides[lib.rows[1].ref] && lib_row_guide(&lib, 0) == NULL);
+	CHECK(lib_row_guide(&lib, 2) == &idx->guides[lib.rows[2].ref] && lib_row_guide(&lib, 0) == NULL);
 
 	/* the pages read last, first; the first hypertext chosen */
 	bm_init(&recent);
 	bm_add(&recent, "C:\\GUIDES\\BASIC.HYP", "Second", "Basic test - Second page");
 	bm_add(&recent, "C:\\GUIDES\\OTHER.HYP", "Main", "Other test - Main");
 	CHECK(lib_set_recent(&lib, &recent) == 0);
-	CHECK(lib.nrows == 8 && lib.rows[0].kind == LIB_RECENT && lib.rows[1].kind == LIB_RECENT);
+	CHECK(lib.nrows == 9 && lib.rows[0].kind == LIB_RECENT && lib.rows[1].kind == LIB_RECENT);
 	CHECK(lib.sel == 2);                      /* the heading it was on */
 	lib_free(&lib);
 	lib_init(&lib, idx);
 	lib_set_recent(&lib, &recent);
-	CHECK(lib.sel == 3);
+	CHECK(lib.sel == 4);
 	lib_row_detail(&lib, 1, t, sizeof(t));
 	CHECK(strcmp(t, "OTHER.HYP") == 0);
 	CHECK(lib_select(&lib, 0) == 0 && lib_activate(&lib, &path, &node, &line) == LIB_OPEN);
@@ -247,25 +252,30 @@ static void test_layouts(const ehv_index *idx)
 
 	/* two panes: the subjects, All chosen at first */
 	CHECK(lib_set_layout(&lib, LIB_PANES) == 0);
-	CHECK(lib.npanes == 4 && lib.panes[0].kind == PANE_RECENT && lib.panes[0].count == 2);
+	CHECK(lib.npanes == 5 && lib.panes[0].kind == PANE_RECENT && lib.panes[0].count == 2);
 	CHECK(lib.panes[1].kind == PANE_ALL && lib.panes[1].count == 4 && lib.pane == 1);
 	CHECK(lib.panes[2].kind == PANE_SUBJECT && lib.panes[2].count == 3 && lib.panes[2].tint == 1);
-	CHECK(lib.panes[3].kind == PANE_OTHER && lib.panes[3].count == 1);
-	CHECK(lib.nrows == 6 && lib.rows[0].kind == LIB_GROUP && lib.rows[0].flags == 0);
-	p = pane_of(&lib, "Test/EHypView");
-	CHECK(lib_pane_select(&lib, p) == p && lib.nrows == 3 && lib.rows[0].kind == LIB_GUIDE && lib.sel == 0);
+	CHECK(lib.panes[2].level == 0 && strcmp(lib.panes[2].text, "Test") == 0);
+	CHECK(lib.panes[3].kind == PANE_SUBJECT && lib.panes[3].level == 1 && lib.panes[3].count == 3);
+	CHECK(lib.panes[3].tint == 1 && strcmp(lib.panes[3].text, "EHypView") == 0);
+	CHECK(lib.panes[4].kind == PANE_OTHER && lib.panes[4].count == 1);
+	CHECK(lib.nrows == 7 && lib.rows[0].kind == LIB_GROUP && lib.rows[0].flags == 0);
+	p = pane_of(&lib, "Test");
+	CHECK(lib_pane_select(&lib, p) == p && lib.nrows == 4 && lib.rows[0].flags == LIB_SUB && lib.sel == 1);
 	CHECK(lib.nguides == 3);
-	CHECK(lib_pane_move(&lib, 1) == p + 1 && lib.nrows == 1);
+	CHECK(lib_pane_move(&lib, 1) == p + 1 && lib.nrows == 3 && lib.rows[0].kind == LIB_GUIDE);
+	CHECK(lib.nguides == 3);
+	CHECK(lib_pane_move(&lib, 1) == p + 2 && lib.nrows == 1);
 	lib_row_detail(&lib, 0, t, sizeof(t));
 	CHECK(strcmp(t, "big") == 0);
-	CHECK(lib_pane_move(&lib, 5) == 3 && lib_pane_move(&lib, -10) == 0);
+	CHECK(lib_pane_move(&lib, 5) == 4 && lib_pane_move(&lib, -10) == 0);
 	CHECK(lib.nrows == 2 && lib.rows[0].kind == LIB_RECENT);
-	lib_pane_select(&lib, p);
-	CHECK(lib_set_index(&lib, idx) == 0 && lib.pane == p && lib.nrows == 3);   /* kept */
+	lib_pane_select(&lib, p + 1);
+	CHECK(lib_set_index(&lib, idx) == 0 && lib.pane == p + 1 && lib.nrows == 3);   /* kept */
 	CHECK(lib_set_query(&lib, "second") == 0 && lib.rows[0].kind == LIB_GROUP && lib.npages == 2);
 	CHECK(lib_set_query(&lib, "") == 0 && lib.nrows == 3);
-	CHECK(lib_set_recent(&lib, NULL) == 0 && lib.npanes == 3 && lib.pane == p - 1);
-	CHECK(lib_set_layout(&lib, LIB_OUTLINE) == 0 && lib.nrows == 6);
+	CHECK(lib_set_recent(&lib, NULL) == 0 && lib.npanes == 4 && lib.pane == p);
+	CHECK(lib_set_layout(&lib, LIB_OUTLINE) == 0 && lib.nrows == 7);
 	lib_free(&lib);
 	bm_free(&recent);
 }
@@ -321,7 +331,81 @@ static void test_names(const ehv_index *idx)
 	CHECK(lib_activate(&lib, &path, &node, &line) == LIB_FULLTEXT);
 
 	lib_set_query(&lib, "");
-	CHECK(lib.nrows == 6);
+	CHECK(lib.nrows == 7);
+	lib_free(&lib);
+}
+
+/*
+ * Subjects with parts, as ST-Guide's hypertexts give them: one subject
+ * with its parts under it, in any case; a "/" at the start or the end
+ * is no part.
+ */
+static void test_subjects(void)
+{
+	static const char *subj[] = { "Documentation/Utilities", "Documentation", "documentation/shells",
+				      "Documentation/Editors", "Documentation/Utilities", "COPS", "/odd", "Odd/",
+				      NULL };
+	static const char *title[] = { "u1", "doc", "sh", "ed", "u2", "cops", "slash", "end", "none" };
+	ehv_guide g[9];
+	ehv_index idx;
+	ehv_library lib;
+	char t[120];
+	unsigned int i;
+	long p;
+
+	memset(&idx, 0, sizeof(idx));
+	memset(g, 0, sizeof(g));
+	for (i = 0; i < 9; i++)
+	{
+		g[i].path = title[i];
+		g[i].key = title[i];
+		g[i].database = title[i];
+		g[i].subject = subj[i];
+	}
+	idx.guides = g;
+	idx.nguides = 9;
+	lib_init(&lib, &idx);
+	lib_set_layout(&lib, LIB_PANES);
+	/* All, /odd, COPS, Documentation (Editors, shells, Utilities), Odd/, Other */
+	CHECK(lib.npanes == 9);
+	if (lib.npanes == 9)
+	{
+		CHECK(strcmp(lib.panes[1].text, "/odd") == 0 && lib.panes[1].level == 0);
+		CHECK(strcmp(lib.panes[2].text, "COPS") == 0 && lib.panes[2].count == 1);
+		CHECK(strcmp(lib.panes[3].text, "Documentation") == 0 && lib.panes[3].count == 5);
+		CHECK(lib.panes[3].level == 0 && lib.panes[3].tint == 3);
+		CHECK(strcmp(lib.panes[4].text, "Editors") == 0 && lib.panes[4].level == 1 && lib.panes[4].tint == 3);
+		CHECK(strcmp(lib.panes[5].text, "shells") == 0 && lib.panes[5].count == 1);
+		CHECK(strcmp(lib.panes[6].text, "Utilities") == 0 && lib.panes[6].count == 2);
+		CHECK(strcmp(lib.panes[7].text, "Odd/") == 0 && lib.panes[7].level == 0);
+		CHECK(lib.panes[8].kind == PANE_OTHER && lib.panes[8].count == 1);
+	}
+	/* Documentation: its own first, then each part under a heading */
+	p = pane_of(&lib, "Documentation");
+	CHECK(lib_pane_select(&lib, p) == p && lib.nrows == 8 && lib.nguides == 5);
+	if (lib.nrows == 8)
+	{
+		row(&lib, 0, t);
+		CHECK(lib.rows[0].kind == LIB_GUIDE && strcmp(t, "  doc") == 0);
+		CHECK(lib.rows[1].flags == LIB_SUB && strcmp(lib.rows[1].text, "Editors") == 0 && lib.rows[1].ref == 1);
+		CHECK(lib.rows[3].flags == LIB_SUB && strcmp(lib.rows[3].text, "shells") == 0);
+		CHECK(lib.rows[5].flags == LIB_SUB && strcmp(lib.rows[5].text, "Utilities") == 0 && lib.rows[5].ref == 2);
+		row(&lib, 7, t);
+		CHECK(strcmp(t, "  u2") == 0);
+	}
+	/* a part: only its own; kept by its name over a new index */
+	CHECK(lib_pane_select(&lib, p + 3) == p + 3 && lib.nrows == 2 && lib.rows[0].kind == LIB_GUIDE);
+	CHECK(lib_set_index(&lib, &idx) == 0 && lib.pane == p + 3 && lib.nrows == 2);
+	/* the Outline: a heading that folds, each part's under it */
+	lib_set_layout(&lib, LIB_OUTLINE);
+	CHECK(lib.rows[4].kind == LIB_GROUP && strcmp(lib.rows[4].text, "Documentation") == 0);
+	CHECK(lib.rows[4].flags == LIB_FOLDS && lib.rows[4].ref == 5 && lib.rows[6].flags == LIB_SUB);
+	lib_select(&lib, 4);
+	CHECK(lib_fold(&lib, 0) == 1 && lib.rows[5].kind == LIB_GROUP && strcmp(lib.rows[5].text, "Odd/") == 0);
+	lib_subject_text("Documentation/Editors", t, sizeof(t));
+	CHECK(strcmp(t, "Documentation \xfa Editors") == 0);
+	lib_subject_text("COPS", t, sizeof(t));
+	CHECK(strcmp(t, "COPS") == 0);
 	lib_free(&lib);
 }
 
@@ -423,6 +507,7 @@ int main(int argc, char **argv)
 		test_bookmarks(idx);
 		test_layouts(idx);
 		test_names(idx);
+		test_subjects();
 		test_fulltext(idx);
 	}
 	ehv_index_free(idx);

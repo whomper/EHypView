@@ -58,7 +58,7 @@ def typed(text):
 
 # (keys to send, events expected afterwards, in order)
 STEPS = [
-    ([], ["font System font 16", "menu shown", "page %s Main" % BASIC]),  # DEFHYP
+    ([], ["font System font 16", "menu shown", "page %s Main" % BASIC]),  # on its command line
     ([], ["index 5 guides"]),                          # background scan done
     # the font: sizes with Control+- and Control+=, then the selector
     ([("ctrl", MINUS)], ["font System font 8"]),
@@ -131,7 +131,8 @@ STEPS = [
     ([("ctrl", Q)], ["quit"]),
 ]
 
-# started without DEFHYP: the library opens, fills when the index is done
+# started with nothing (DEFHYP in ST-GUIDE.INF isn't EHypView's): the
+# library opens, fills when the index is done
 # (and with the 8 x 8 font kept in EHYPVIEW.INF)
 # (and with the 8 x 8 font and a bookmark kept in EHYPVIEW.INF)
 LIBRARY_START = [
@@ -487,8 +488,13 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
     return ok
 
 
-def copy_dir(name, inf, settings=None):
-    """A drive C: with the program (not the accessory), FIXT and an INF."""
+LAUNCH = r"C:\LAUNCH.PRG"
+
+
+def copy_dir(name, inf, settings=None, start=None):
+    """A drive C: with the program (not the accessory), FIXT and an INF;
+    with `start`, LAUNCH.PRG (tests/launch.c) to start the program with
+    that command line (run_scenario's auto=LAUNCH)"""
     import shutil
     d = os.path.join(OUT, name)
     if os.path.exists(d):
@@ -497,6 +503,10 @@ def copy_dir(name, inf, settings=None):
     shutil.copy(os.path.join(HDIR, "EHYPVIEW.PRG"), d)
     with open(os.path.join(d, "ST-GUIDE.INF"), "w") as f:
         f.write(inf.replace("\n", "\r\n"))
+    if start is not None:
+        shutil.copy(os.path.join(HDIR, "LAUNCH.PRG"), d)
+        with open(os.path.join(d, "LAUNCH.TXT"), "w") as f:
+            f.write("C:\\EHYPVIEW.PRG\r\n%s\r\n" % start)
     if settings is not None:
         with open(os.path.join(d, "EHYPVIEW.INF"), "w") as f:
             f.write(settings.replace("\n", "\r\n"))
@@ -886,13 +896,14 @@ def main():
         print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "accnvdi")).describe())
         return 0 if acc_nvdi() else 1
     print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "viewer")).describe())
-    d = copy_dir("viewer", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
-    ok = run_scenario("viewer", d, STEPS)
+    d = copy_dir("viewer", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
+    ok = run_scenario("viewer", d, STEPS, auto=LAUNCH)
     if ok:
         ok = check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FONT=System font", "POINT=8", "FOLDER=C:\\",
                                                           "BOOKMARK1="])   # added, then removed
     if ok:
-        d = copy_dir("libstart", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n",
+        # DEFHYP is ST-Guide's: EHypView starts in its library all the same
+        d = copy_dir("libstart", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n",
                      "FONT=System font\nPOINT=8\n"
                      "BOOKMARK1=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail\n")
         ok = run_scenario("libstart", d, LIBRARY_START)
@@ -911,10 +922,10 @@ def main():
                                "RECENT2=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail"])
     if ok:
         if have_display():
-            d = copy_dir("mouse", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=C:\\FIXT\\BASIC.HYP\n")
+            d = copy_dir("mouse", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
             xvfb = start_xvfb()
             try:
-                ok = run_scenario("mouse", d, MOUSE_STEPS, windowed=True)
+                ok = run_scenario("mouse", d, MOUSE_STEPS, auto=LAUNCH, windowed=True)
             finally:
                 xvfb.terminate()
             ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
@@ -949,8 +960,8 @@ def main():
         else:
             print("skip  twin: needs Xvfb and xdotool")
     if ok:
-        d = copy_dir("fastram", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\nDEFHYP=%s\n" % IMAGES)
-        ok = run_scenario("fastram", d, FASTRAM_STEPS, extra=FASTRAM)
+        d = copy_dir("fastram", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=IMAGES)
+        ok = run_scenario("fastram", d, FASTRAM_STEPS, auto=LAUNCH, extra=FASTRAM)
     if ok:
         if have_display():
             d = acc_fastram_dir()

@@ -52,9 +52,8 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
 1. Copy `EHYPVIEW.PRG` into any folder and start it. It keeps its index (`EHYPVIEW.IDX`), its list
    of fonts (`EHYPVIEW.FNT`) and any `CRASH.LOG` next to itself, so a folder of its own (such as
    `C:\EHYPVIEW\`) keeps them together; its settings, `EHYPVIEW.INF`, go in the root of the boot
-   drive. It opens the hypertext given on its command line, else `DEFHYP` (or `HYPTOP`) from the `ST-GUIDE.INF` in your
-   boot drive's root, else the library. To open a `.HYP` with a double-click, install `EHYPVIEW.PRG`
-   in your desktop as the application for `HYP` files.
+   drive. It opens the hypertext given on its command line, else the library. To open a `.HYP`
+   with a double-click, install `EHYPVIEW.PRG` in your desktop as the application for `HYP` files.
 2. To have EHypView inside every program, copy `EHYPVIEW.ACC` to the root of your boot drive and
    restart. **To be the help viewer for every program**, copy it there as `ST-GUIDE.ACC` instead (in
    place of any accessory with that name): that is the name programs look for when you press Help.
@@ -167,7 +166,9 @@ Tabs are still to come: [docs/DESIGN.md](docs/DESIGN.md) has the goals and the
 by subject, with one search field at the top. Each subject has its colour; each row has a small
 picture of what it is (a book for a hypertext, its spine in the subject's colour, a ribbon for a
 bookmark, a page for a page, a magnifier for the full-text search). It is also what you see when no
-page was asked for. Settings chooses one of two layouts (`LIBRARY=`):
+page was asked for, and it opens with what was found before (`EHYPVIEW.IDX`) while EHypView looks
+for new hypertexts. A subject with a part (`Documentation/Editors`) comes under its subject: Editors,
+under Documentation. Settings chooses one of two layouts (`LIBRARY=`):
 
 - **Outline**, the first one. Under the search field, **Continue**: a button for each page you read
   last (one for each hypertext, the newest first). Then Bookmarks and one group for each subject,
