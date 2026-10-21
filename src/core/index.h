@@ -279,6 +279,7 @@ int ehv_index_add_sym(ehv_index *idx, unsigned long guide, unsigned char kind,
    Adding names regardless does all of it at once */
 int ehv_index_build_busy(const ehv_index *idx);
 int ehv_index_build_step(ehv_index *idx);
+int ehv_index_build_next_io(const ehv_index *idx);  /* that step writes NAME.RUN */
 
 /* room for this many guides, so that adding them copies nothing (-1:
    out of memory; the index is as it was) */

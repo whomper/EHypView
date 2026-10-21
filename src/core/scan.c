@@ -115,6 +115,7 @@ struct ehv_scan {
 	/* the folder being read, ENTRIES entries per step: its names and,
 	   where the system's listing gives them, their sizes and dates */
 	int listing;
+	int listed;               /* a folder listed, to be sorted in the next step */
 	dir_item dir;
 	char **names, **subs;
 	pf_info *infos, *subinfo;
@@ -402,7 +403,7 @@ static void end_listing(ehv_scan *s)
 	s->cached = 0;
 	s->nnames = s->next_name = 0;
 	s->dir.path = NULL;
-	s->listing = 0;
+	s->listing = s->listed = 0;
 }
 
 /* names and infos sorted together, by name */
@@ -475,6 +476,8 @@ static void keep_listing(ehv_scan *s)
 }
 
 /* start reading a folder: its names now, its entries in the steps after */
+static int dir_ready(ehv_scan *s, long n);
+
 static int read_dir(ehv_scan *s, dir_item *d)
 {
 	long n = -1;
@@ -497,18 +500,34 @@ static int read_dir(ehv_scan *s, dir_item *d)
 		}
 	if (i == s->nseen)
 	{
+		/* listed in this step, sorted in the next (an ST takes a while
+		   for each) */
 		n = pf_list_dir_info(s->dir.path, &s->names, &s->infos);
-		if (n > 0 && sort_listing(s->names, s->infos, n) < 0)
+		if (n > 0)
+		{
+			s->nnames = n;
+			s->listed = 1;
+			return 0;
+		}
+	}
+	return dir_ready(s, n);
+}
+
+/* the folder's listing sorted (unless the checking pass had it), and
+   kept for the building pass; then its entries are read */
+static int dir_ready(ehv_scan *s, long n)
+{
+	if (s->listed)
+	{
+		s->listed = 0;
+		if (sort_listing(s->names, s->infos, n) < 0)
 		{
 			free(s->infos);
 			s->infos = NULL;
 			qsort(s->names, (size_t) n, sizeof(char *), cmp_names);
 		}
-		if (n > 0 && s->checking)
-		{
-			s->nnames = n;
+		if (s->checking)
 			keep_listing(s);
-		}
 	}
 	if (n <= 0)
 	{
@@ -869,6 +888,12 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 				s->next_file++;
 			continue;
 		}
+		if (s->listed)
+		{
+			if (dir_ready(s, s->nnames) < 0)
+				return -1;
+			continue;
+		}
 		if (s->listing)
 		{
 			if (read_entries(s) < 0)
@@ -946,7 +971,9 @@ int ehv_scan_build_to(ehv_scan *s, const char *cache)
 int ehv_scan_next_is_big(const ehv_scan *s)
 {
 	if (ehv_index_build_busy(s->idx))
-		return 1;                             /* writing names to NAME.RUN */
+		return ehv_index_build_next_io(s->idx);   /* writing names to NAME.RUN */
+	if (s->listed)
+		return 0;                             /* a listing sorted */
 	if (s->part == PART_REF)
 		return s->db == NULL;                 /* reading the .REF */
 	if (s->part != PART_NONE || s->listing)

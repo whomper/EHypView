@@ -690,6 +690,11 @@ int ehv_index_build_busy(const ehv_index *idx)
 	return idx->build != NULL && idx->build->nrec > 0 && idx->build->alen >= idx->build->limit;
 }
 
+int ehv_index_build_next_io(const ehv_index *idx)
+{
+	return ehv_index_build_busy(idx) && idx->build->sorted;    /* written next */
+}
+
 /* 1 once the batch is sorted (in offs), 0 when the budget ran out, -1
    out of memory */
 static int batch_sort(const ehv_index *idx, ehv_build *b, unsigned long budget)
