@@ -550,15 +550,16 @@ def tb(button, kind="click"):
 # kept (RECENTn) at the end
 OUTLINE_STEPS = [
     ([], ["library 0", "library-layout outline", "index 5 guides"]),
-    ([LEFT], ["fold Test/EHypView folded"]),           # the group of the hypertext chosen
-    ([RIGHT], ["fold Test/EHypView open"]),
+    ([LEFT], ["fold Test folded"]),                    # the group of the hypertext chosen
+    ([RIGHT], ["fold Test open"]),                     # ("Test/EHypView": EHypView under Test)
     ([UP, RETURN], ["page %s Detail" % OTHER]),        # above the heading: Continue
     ([("ctrl", Q)], ["quit"]),
 ]
 PANES_STEPS = [
     ([], ["library 0", "library-layout panes", "index 5 guides"]),
     ([LEFT], ["library-focus subjects"]),
-    ([DOWN], ["pane Test/EHypView *"]),
+    ([DOWN], ["pane Test 3"]),
+    ([DOWN], ["pane EHypView 3"]),                     # "Test/EHypView": a part, under Test
     ([RETURN], ["library-focus rows"]),
     ([RETURN], ["page %s Main" % BASIC]),             # its first hypertext
     ([("ctrl", L)], ["library *"]),
