@@ -179,8 +179,10 @@ holds, on two pages. OK keeps the changes, Cancel (or Esc, or Undo) forgets them
   EHypView's folder: where the library's index (`EHYPVIEW.IDX`) and the fonts measured
   (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` was started from.
 - **Library:** its layout, **Outline** or **Two panes** (see [the library](#the-library)); up to
-  three more folders to look for hypertexts in, each with its subfolders. A folder that isn't
-  there is asked about: **Keep** it (a drive you put in later), or **Change** it. OK with new
+  three more folders to look for hypertexts in, each with its subfolders. A folder's field holds
+  a path of up to 128 characters, more than it shows: it scrolls as you type, the cursor keys
+  move in it (with Shift, to its start or end), and ^C ^X ^V copy, cut and paste the whole
+  path. A folder that isn't there is asked about: **Keep** it (a drive you put in later), or **Change** it. OK with new
   folders looks through the library again.
 
 The font is chosen with **View > Font...**, and bookmarks from the Bookmarks menu.

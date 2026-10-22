@@ -29,11 +29,13 @@
 #include "plat.h"
 #include "bgwork.h"
 #include "charset.h"
+#include "field.h"
 
 #define DMAX 32
 #define TMAX 8
 #define NPATH 3                    /* folder fields on the Library page */
-#define PLEN 40                    /* characters a folder field holds */
+#define PLEN 40                    /* characters a folder field shows */
+#define PCAP 128                   /* and holds (5.4): a GEMDOS path */
 
 #define W 57                       /* the dialog, in characters */
 #define H 18
@@ -90,9 +92,11 @@ static TEDINFO *d_ted(char *text, const char *tmpl, const char *valid, short col
 	return t;
 }
 
-/* a folder field in a thin frame */
+/* a folder field in a thin frame, holding more than it shows (field.c) */
 static char tmpl[PLEN + 1], valid[PLEN + 1];
-static char paths[NPATH][PLEN + 1];
+static char paths[NPATH][PCAP + 1];
+static LFIELD path_field[NPATH];
+static short o_path[NPATH];
 
 static short d_field(short x, short y, char *buf)
 {
@@ -246,7 +250,7 @@ static void build(const char *folder)
 	((TEDINFO *) tree[o_layout].ob_spec)->te_thickness = -1;
 	d_text(SX, (short) (6 | (gap << 8)), "Also look for hypertexts in (PATHS=):");
 	for (k = 0; k < NPATH; k++)
-		d_field(SX, (short) ((7 + k) | ((gap + 2 + k * (sys_ch / 4 + 2)) << 8)), paths[k]);
+		o_path[k] = d_field(SX, (short) ((7 + k) | ((gap + 2 + k * (sys_ch / 4 + 2)) << 8)), paths[k]);
 	d_text(SX, (short) (11 | (gap << 8)), "Each with its subfolders, as well as");
 	d_text(SX, (short) (12 | (gap << 8)), "PATHS, HYPFOLD and REF in ST-GUIDE.INF,");
 	d_text(SX, (short) (13 | (gap << 8)), "and \\GUIDES and \\GEMSYS\\GUIDES on every");
@@ -260,6 +264,8 @@ static void build(const char *folder)
 	tree[nobj - 1].ob_flags |= LASTOB;
 	for (i = 0; i < nobj; i++)
 		rsrc_obfix(tree, i);
+	for (k = 0; k < NPATH; k++)
+		lf_init(&path_field[k], tree, o_path[k], paths[k], PCAP, 0);
 	show_page(1, 0);
 }
 
@@ -348,14 +354,19 @@ static int paths_check(void)
 	for (k = 0; k < NPATH; k++)
 	{
 		pf_info st;
-		char *p = paths[k];
+		char *p = paths[k], shown[52];
 
 		while (*p == ' ')
 			p++;
 		if (*p == '\0' || (pf_stat(p, &st) == 0 && st.is_dir))
 			continue;
 		log_event("alert", "no-folder", p);
-		if (alert(1, "[2][%s isn't a folder on this Atari.|Look there anyway?][ Keep |Change]", p) != 1)
+		/* a long one by its end: the alert has five lines of 30 */
+		if (strlen(p) < sizeof(shown))
+			strcpy(shown, p);
+		else
+			sprintf(shown, "...%s", p + strlen(p) - (sizeof(shown) - 4));
+		if (alert(1, "[2][%s isn't a folder on this Atari.|Look there anyway?][ Keep |Change]", shown) != 1)
 		{
 			log_event("alert-closed", "no-folder", "change");
 			show_page(2, 1);
@@ -369,7 +380,7 @@ static int paths_check(void)
 int settings_dialog(const char *inf_path, const char *folder)
 {
 	inf_file *inf = inf_load(inf_path, NULL);
-	char was[NPATH * (PLEN + 1)], now[NPATH * (PLEN + 1)];
+	char was[NPATH * (PCAP + 1)], now[NPATH * (PCAP + 1)];
 	short x, y, w, h, r, k;
 	int changed = 0;
 
@@ -436,6 +447,7 @@ int settings_dialog(const char *inf_path, const char *folder)
 		break;
 	}
 	form_dial(FMD_FINISH, x, y, w, h);
+	lf_forget(tree);
 	wind_update(2);                    /* END_MCTRL */
 	wind_update(END_UPDATE);
 	tree[r].ob_state &= (unsigned short) ~SELECTED;

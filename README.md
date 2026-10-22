@@ -227,7 +227,8 @@ on two pages, as EMail's and ECal's Settings do. OK keeps the changes; Cancel, E
 - **General:** when the accessory looks through the library (`START=`): when first opened, at start,
   after a minute or after 5 minutes; and EHypView's folder (`FOLDER=`), where the index is kept.
 - **Library:** its layout, Outline or Two panes (`LIBRARY=`); up to three more folders to look for
-  hypertexts in, with their subfolders (`PATHS=`). A folder that isn't there is asked about: **Keep**
+  hypertexts in, with their subfolders (`PATHS=`). Each field holds a path of up to 128 characters,
+  more than it shows (guidelines 5.4, `common/ui/field.c`). A folder that isn't there is asked about: **Keep**
   it (a drive put in later) or **Change** it. OK with new folders looks through the library again.
 
 The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in the Bookmarks menu.
