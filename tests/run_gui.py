@@ -924,9 +924,9 @@ def in_settings(*keys):
 # Shift+Left and Delete take the first letter, typed again; Shift+ClrHome
 # goes to the end, where a letter typed and taken out leaves it as it was
 ST_FIELD_STEPS = [
-    ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
-    ([("ctrl", COMMA)], ["dialog settings *"]),
-    (in_settings(("click",) + SET_LIBRARY), []),
+    ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides", "index saved"]),
+    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
+    (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
     (in_settings(*([("click",) + SET_FIELD] + typed("X" + LONG[:-3]) +
                    [("field", None, CLRHOME), ("field", None, DELETE), ("field", SHIFT, RIGHT)] +
                    typed(LONG[-3:]) + [("field", SHIFT, LEFT), ("field", None, DELETE)] + typed(LONG[0]) +
@@ -937,8 +937,21 @@ ST_FIELD_STEPS = [
 ]
 
 
+def st_field():
+    d = copy_dir("stfield", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
+    print("      stfield on %s" % machines.Machine("ST:mono", d).describe())
+    xvfb = start_xvfb()
+    try:
+        ok = run_scenario("stfield", d, ST_FIELD_STEPS, auto=LAUNCH, windowed=True, machine="ST:mono")
+    finally:
+        xvfb.terminate()
+    return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["PATHS=" + LONG])
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    if sys.argv[3:] == ["stfield"]:                 # the ST's long field alone
+        return 0 if st_field() else 1
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
         print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "accnvdi")).describe())
         return 0 if acc_nvdi() else 1
@@ -977,16 +990,7 @@ def main():
                 xvfb.terminate()
             ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
                                   ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG, "LIBRARY=panes"])
-            if ok:
-                d = copy_dir("stfield", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
-                print("      stfield on %s" % machines.Machine("ST:mono", d).describe())
-                xvfb = start_xvfb()
-                try:
-                    ok = run_scenario("stfield", d, ST_FIELD_STEPS, auto=LAUNCH, windowed=True,
-                                      machine="ST:mono")
-                finally:
-                    xvfb.terminate()
-                ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["PATHS=" + LONG])
+            ok = ok and st_field()
         else:
             print("skip  mouse: needs Xvfb and xdotool")
     if ok:
