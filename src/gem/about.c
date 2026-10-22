@@ -16,6 +16,7 @@
 #include "iconify.h"
 #include "icon.h"
 #include "icon16.h"
+#include "icon256.h"
 #include "version.h"
 
 static void status_line(char *buf, size_t size)
@@ -42,7 +43,8 @@ void about_box(void)
 {
 	static char status[100];
 	ABOUT a = { "EHypView", app_version, "Hypertexts for the Atari ST, TT and Falcon",
-		    { status, NULL, NULL }, { 0, 0, 0 }, icon_bits, icon16_px, icon16_rgb };
+		    { status, NULL, NULL }, { 0, 0, 0 }, icon_bits, icon16_px, icon16_rgb,
+		    icon256_px, icon256_rgb };
 
 	status_line(status, sizeof(status));
 	log_event("dialog", "about", app_version);
