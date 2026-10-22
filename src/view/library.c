@@ -163,8 +163,30 @@ static int build_recent(ehv_library *lib)
 /* ---------------------------------------------------------------- */
 /* the full list                                                     */
 
-/* a subject's own part: up to its first "/" ("Documentation" of
-   "Documentation/Editors"); the whole of one that starts with "/" */
+/* the subject a hypertext is filed under: "Documentation/Editors" and
+   "Dokumentation/Editoren" under their part, as Editors, since
+   Documentation alone says nothing of what a hypertext is about (Erez,
+   22 Oct 2026); "Documentation" without a part stays as it is */
+const char *lib_subject(const char *s)
+{
+	static const char *const skip[] = { "Documentation/", "Dokumentation/" };
+	unsigned int k;
+
+	for (k = 0; s != NULL && k < sizeof(skip) / sizeof(skip[0]); k++)
+	{
+		size_t n = strlen(skip[k]);
+
+		if (atari_ncasecmp(s, skip[k], n) == 0 && s[n] != '\0' && s[n] != '/')
+		{
+			s += n;
+			k = (unsigned int) -1;     /* "Documentation/Dokumentation/..." too */
+		}
+	}
+	return s;
+}
+
+/* a subject's own part: up to its first "/" ("Personal" of
+   "Personal/Calendar"); the whole of one that starts with "/" */
 static size_t subj_top(const char *s)
 {
 	const char *slash = strchr(s, '/');
@@ -228,12 +250,13 @@ static int cmp_guides(const void *x, const void *y)
 {
 	const ehv_guide *g = &cmp_idx->guides[*(const unsigned long *) x];
 	const ehv_guide *h = &cmp_idx->guides[*(const unsigned long *) y];
+	const char *a = lib_subject(g->subject), *b = lib_subject(h->subject);
 	int c;
 
 	/* hypertexts without a subject come last */
-	if ((g->subject == NULL) != (h->subject == NULL))
-		return g->subject == NULL ? 1 : -1;
-	if (g->subject != NULL && (c = subj_cmp(g->subject, h->subject)) != 0)
+	if ((a == NULL) != (b == NULL))
+		return a == NULL ? 1 : -1;
+	if (a != NULL && (c = subj_cmp(a, b)) != 0)
 		return c;
 	if ((c = atari_casecmp(guide_title(g), guide_title(h))) != 0)
 		return c;
@@ -273,7 +296,7 @@ static int make_order(ehv_library *lib)
 	qsort(lib->order, n, sizeof(unsigned long), cmp_guides);
 	for (i = 0; i < n; i++)
 	{
-		const char *subj = idx->guides[lib->order[i]].subject;
+		const char *subj = lib_subject(idx->guides[lib->order[i]].subject);
 
 		if (subj == NULL)
 			continue;
@@ -328,7 +351,7 @@ static int build_groups(ehv_library *lib, int folds, const lib_pane *only)
 	for (i = 0; i < lib->norder; i++)
 	{
 		unsigned long g = lib->order[i];
-		const char *subj = idx->guides[g].subject;
+		const char *subj = lib_subject(idx->guides[g].subject);
 		long under;
 
 		if (only != NULL)
@@ -453,30 +476,30 @@ static int build_panes(ehv_library *lib)
 		return -1;
 	for (i = 0; i < lib->norder; i++)
 	{
-		const ehv_guide *g = &idx->guides[lib->order[i]];
+		const char *subj = lib_subject(idx->guides[lib->order[i]].subject);
 		const char *part;
 		lib_pane *last;
 
-		if (g->subject == NULL)
+		if (subj == NULL)
 		{
 			other++;
 			continue;
 		}
 		/* the subject, then its part, if any */
-		if (top >= 0 && same_top(lib->panes[top].subj, g->subject))
+		if (top >= 0 && same_top(lib->panes[top].subj, subj))
 			lib->panes[top].count++;
 		else
 		{
-			if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, g->subject,
-				     (int) subj_top(g->subject)) < 0)
+			if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, subj,
+				     (int) subj_top(subj)) < 0)
 				return -1;
 			top = (long) lib->npanes - 1;
-			lib->panes[top].subj = g->subject;
+			lib->panes[top].subj = subj;
 		}
-		if ((part = subj_part(g->subject)) == NULL)
+		if ((part = subj_part(subj)) == NULL)
 			continue;
 		last = &lib->panes[lib->npanes - 1];
-		if (last->level == 1 && same_subject(last->subj, g->subject))
+		if (last->level == 1 && same_subject(last->subj, subj))
 			last->count++;
 		else
 		{
@@ -484,7 +507,7 @@ static int build_panes(ehv_library *lib)
 				return -1;
 			last = &lib->panes[lib->npanes - 1];
 			last->level = 1;
-			last->subj = g->subject;
+			last->subj = subj;
 		}
 	}
 	if (other > 0 && add_pane(lib, PANE_OTHER, 0, other, "Other hypertexts", LIB_PANE_TEXT) < 0)

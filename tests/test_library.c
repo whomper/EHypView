@@ -342,8 +342,8 @@ static void test_names(const ehv_index *idx)
  */
 static void test_subjects(void)
 {
-	static const char *subj[] = { "Documentation/Utilities", "Documentation", "documentation/shells",
-				      "Documentation/Editors", "Documentation/Utilities", "COPS", "/odd", "Odd/",
+	static const char *subj[] = { "Develop/Utilities", "Develop", "develop/shells",
+				      "Develop/Editors", "Develop/Utilities", "COPS", "/odd", "Odd/",
 				      NULL };
 	static const char *title[] = { "u1", "doc", "sh", "ed", "u2", "cops", "slash", "end", "none" };
 	ehv_guide g[9];
@@ -366,13 +366,13 @@ static void test_subjects(void)
 	idx.nguides = 9;
 	lib_init(&lib, &idx);
 	lib_set_layout(&lib, LIB_PANES);
-	/* All, /odd, COPS, Documentation (Editors, shells, Utilities), Odd/, Other */
+	/* All, /odd, COPS, Develop (Editors, shells, Utilities), Odd/, Other */
 	CHECK(lib.npanes == 9);
 	if (lib.npanes == 9)
 	{
 		CHECK(strcmp(lib.panes[1].text, "/odd") == 0 && lib.panes[1].level == 0);
 		CHECK(strcmp(lib.panes[2].text, "COPS") == 0 && lib.panes[2].count == 1);
-		CHECK(strcmp(lib.panes[3].text, "Documentation") == 0 && lib.panes[3].count == 5);
+		CHECK(strcmp(lib.panes[3].text, "Develop") == 0 && lib.panes[3].count == 5);
 		CHECK(lib.panes[3].level == 0 && lib.panes[3].tint == 3);
 		CHECK(strcmp(lib.panes[4].text, "Editors") == 0 && lib.panes[4].level == 1 && lib.panes[4].tint == 3);
 		CHECK(strcmp(lib.panes[5].text, "shells") == 0 && lib.panes[5].count == 1);
@@ -380,8 +380,8 @@ static void test_subjects(void)
 		CHECK(strcmp(lib.panes[7].text, "Odd/") == 0 && lib.panes[7].level == 0);
 		CHECK(lib.panes[8].kind == PANE_OTHER && lib.panes[8].count == 1);
 	}
-	/* Documentation: its own first, then each part under a heading */
-	p = pane_of(&lib, "Documentation");
+	/* Develop: its own first, then each part under a heading */
+	p = pane_of(&lib, "Develop");
 	CHECK(lib_pane_select(&lib, p) == p && lib.nrows == 8 && lib.nguides == 5);
 	if (lib.nrows == 8)
 	{
@@ -398,14 +398,65 @@ static void test_subjects(void)
 	CHECK(lib_set_index(&lib, &idx) == 0 && lib.pane == p + 3 && lib.nrows == 2);
 	/* the Outline: a heading that folds, each part's under it */
 	lib_set_layout(&lib, LIB_OUTLINE);
-	CHECK(lib.rows[4].kind == LIB_GROUP && strcmp(lib.rows[4].text, "Documentation") == 0);
+	CHECK(lib.rows[4].kind == LIB_GROUP && strcmp(lib.rows[4].text, "Develop") == 0);
 	CHECK(lib.rows[4].flags == LIB_FOLDS && lib.rows[4].ref == 5 && lib.rows[6].flags == LIB_SUB);
 	lib_select(&lib, 4);
 	CHECK(lib_fold(&lib, 0) == 1 && lib.rows[5].kind == LIB_GROUP && strcmp(lib.rows[5].text, "Odd/") == 0);
-	lib_subject_text("Documentation/Editors", t, sizeof(t));
-	CHECK(strcmp(t, "Documentation \xfa Editors") == 0);
+	lib_subject_text("Develop/Editors", t, sizeof(t));
+	CHECK(strcmp(t, "Develop \xfa Editors") == 0);
 	lib_subject_text("COPS", t, sizeof(t));
 	CHECK(strcmp(t, "COPS") == 0);
+	lib_free(&lib);
+}
+
+/*
+ * "Documentation/Editors" and "Dokumentation/Editoren" are filed under
+ * their part (Erez, 22 Oct 2026): no Documentation subject over them.
+ */
+static void test_documentation(void)
+{
+	static const char *subj[] = { "Documentation/Editors", "dokumentation/Editoren", "Editors",
+				      "Documentation", "DOCUMENTATION/Editors/Vim" };
+	ehv_guide g[5];
+	ehv_index idx;
+	ehv_library lib;
+	unsigned int i;
+
+	CHECK(strcmp(lib_subject("Documentation/Editors"), "Editors") == 0);
+	CHECK(strcmp(lib_subject("Dokumentation/Editoren"), "Editoren") == 0);
+	CHECK(strcmp(lib_subject("Documentation/Dokumentation/Shells"), "Shells") == 0);
+	CHECK(strcmp(lib_subject("Documentation"), "Documentation") == 0);
+	CHECK(strcmp(lib_subject("Documentation/"), "Documentation/") == 0);
+	CHECK(strcmp(lib_subject("Docs/Editors"), "Docs/Editors") == 0);
+	CHECK(lib_subject(NULL) == NULL);
+
+	memset(&idx, 0, sizeof(idx));
+	memset(g, 0, sizeof(g));
+	for (i = 0; i < 5; i++)
+	{
+		g[i].path = subj[i];
+		g[i].key = subj[i];
+		g[i].database = subj[i];
+		g[i].subject = subj[i];
+	}
+	idx.guides = g;
+	idx.nguides = 5;
+	lib_init(&lib, &idx);
+	lib_set_layout(&lib, LIB_PANES);
+	/* All, Documentation (the one without a part), Editoren, Editors (Vim) */
+	CHECK(lib.npanes == 5);
+	if (lib.npanes == 5)
+	{
+		CHECK(strcmp(lib.panes[1].text, "Documentation") == 0 && lib.panes[1].count == 1);
+		CHECK(strcmp(lib.panes[2].text, "Editoren") == 0 && lib.panes[2].count == 1);
+		CHECK(strcmp(lib.panes[3].text, "Editors") == 0 && lib.panes[3].count == 3 && lib.panes[3].level == 0);
+		CHECK(strcmp(lib.panes[4].text, "Vim") == 0 && lib.panes[4].level == 1);
+	}
+	lib_set_layout(&lib, LIB_OUTLINE);
+	for (i = 0; i < lib.nrows; i++)
+		if (lib.rows[i].kind == LIB_GROUP)
+			CHECK(strcmp(lib.rows[i].text, "Editors") == 0 || strcmp(lib.rows[i].text, "Editoren") == 0 ||
+			      strcmp(lib.rows[i].text, "Documentation") == 0 || strcmp(lib.rows[i].text, "Vim") == 0);
 	lib_free(&lib);
 }
 
@@ -508,6 +559,7 @@ int main(int argc, char **argv)
 		test_layouts(idx);
 		test_names(idx);
 		test_subjects();
+	test_documentation();
 		test_fulltext(idx);
 	}
 	ehv_index_free(idx);

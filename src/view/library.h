@@ -48,8 +48,8 @@
 /* a heading's flags */
 #define LIB_FOLDS   1     /* can be folded (Outline, no search) */
 #define LIB_FOLDED  2     /* folded: its rows left out          */
-#define LIB_SUB     4     /* a part of a subject ("Documentation/Editors":
-                             Editors, under Documentation)      */
+#define LIB_SUB     4     /* a part of a subject ("Personal/Calendar":
+                             Calendar, under Personal)          */
 
 #define LIB_QUERY_MAX 48
 
@@ -70,10 +70,12 @@ typedef struct {
 #define PANE_OTHER     4  /* hypertexts without a subject */
 
 /*
- * A subject with a "/" ("Documentation/Editors", as ST-Guide's
- * hypertexts give them) is a part of the one before it: the pane lists
- * Documentation, with each part under it (level 1), and the Outline
- * the same, a heading for each part.  A subject is matched in any case.
+ * A subject with a "/" ("Personal/Calendar", as ST-Guide's hypertexts
+ * give them) is a part of the one before it: the pane lists Personal,
+ * with each part under it (level 1), and the Outline the same, a heading
+ * for each part.  A subject is matched in any case.  "Documentation/"
+ * and "Dokumentation/" are left out first (lib_subject): "Documentation/
+ * Editors" is Editors.
  */
 #define LIB_PANE_TEXT 40
 
@@ -185,8 +187,10 @@ void lib_row_about(const ehv_library *lib, unsigned long row, char *buf, unsigne
 /* a version as shown: "$VER:" and the file name left out */
 const char *lib_version(const char *v);
 
-/* a subject as shown: "Documentation \xfa Editors" for
-   "Documentation/Editors" */
+/* a subject as shown: "Personal \xfa Calendar" for "Personal/Calendar" */
 void lib_subject_text(const char *subj, char *buf, unsigned long size);
+/* the subject a hypertext is filed under: past "Documentation/" or
+   "Dokumentation/" when a part follows; NULL for none */
+const char *lib_subject(const char *subj);
 
 #endif

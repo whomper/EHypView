@@ -608,8 +608,8 @@ static void describe(void)
 			snprintf(about2, sizeof(about2), "By %s%s%s", g->author, ver[0] ? " \xfa version " : "", ver);
 		else if (r->kind == LIB_GUIDE && ver[0] != '\0')
 			snprintf(about2, sizeof(about2), "Version %s", ver);
-		else if (r->kind == LIB_GUIDE && g->subject != NULL)
-			lib_subject_text(g->subject, about2, sizeof(about2));
+		else if (r->kind == LIB_GUIDE && lib_subject(g->subject) != NULL)
+			lib_subject_text(lib_subject(g->subject), about2, sizeof(about2));
 		else if (r->kind != LIB_GUIDE)
 			snprintf(about2, sizeof(about2), "In %s", g->database != NULL ? g->database : g->key);
 		if (g->ref_path != NULL)
