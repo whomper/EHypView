@@ -169,8 +169,10 @@ by subject, with one search field at the top. Each subject has its colour; each 
 picture of what it is (a book for a hypertext, its spine in the subject's colour, a ribbon for a
 bookmark, a page for a page, a magnifier for the full-text search). It is also what you see when no
 page was asked for, and it opens with what was found before (`EHYPVIEW.IDX`) while EHypView looks
-for new hypertexts. A subject with a part (`Documentation/Editors`) comes under its subject: Editors,
-under Documentation. Settings chooses one of two layouts (`LIBRARY=`):
+for new hypertexts. A subject with a part (`Personal/Calendar`) comes under its subject: Calendar,
+under Personal. `Documentation/` or `Dokumentation/` in front is left out, as it says nothing of
+what a hypertext is about: `Documentation/Editors` is Editors. Settings chooses one of two layouts
+(`LIBRARY=`):
 
 - **Outline**, the first one. Under the search field, **Continue**: a button for each page you read
   last (one for each hypertext, the newest first). Then Bookmarks and one group for each subject,

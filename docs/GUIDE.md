@@ -90,8 +90,10 @@ menu and the keys still reach everything.
 grouped by subject, with one search field at the top. It is also what you see when no page was
 asked for. It opens with what was found before, kept in `EHYPVIEW.IDX`; meanwhile EHypView looks
 through the folders for new or changed hypertexts, and the list follows when it finds some. A
-subject with a part, as many hypertexts give theirs (`Documentation/Editors`), comes under its
-subject: Editors, under Documentation. It has two layouts; [Settings](#settings) chooses one.
+subject with a part, as many hypertexts give theirs (`Personal/Calendar`), comes under its subject:
+Calendar, under Personal. `Documentation/` or `Dokumentation/` in front is left out, as it says
+nothing of what a hypertext is about: `Documentation/Editors` is Editors. It has two layouts;
+[Settings](#settings) chooses one.
 
 **Outline**, the first one:
 
