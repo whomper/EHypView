@@ -199,8 +199,10 @@ The font is chosen with **View > Font...**, and bookmarks from the Bookmarks men
   in short steps between events, never holding the machine for long, and waits while you use the
   mouse or keyboard. A help request naming a file, as the AERA programs' Help keys do, is answered at
   once.
-- **Memory.** The accessory takes its memory when it loads: a third of the largest free block (a
-  quarter when there is no TT RAM), at most 2 MB, and 64 to 128 KB of ST RAM for the pictures.
+- **Memory.** The accessory takes its memory when it loads, as every AERA accessory does: the
+  first time 160 KB (2 MB in TT RAM), never more than a quarter of what is free where 1 MB or more
+  is, else half; after that what it measured it needs (`MEMKB=`), or what you set (`HEAPKB=`).
+  Where its memory is TT RAM, it takes 64 to 128 KB of ST RAM for the pictures as well.
 - **With both installed,** they never work at once. While `EHYPVIEW.PRG` runs, **EHypView** in the
   Desk menu brings the program's window to the front, and a font chosen in the program is the
   accessory's too the next time it opens. Under MagiC or MiNT, where the accessory runs beside
@@ -251,8 +253,8 @@ Most menu items have a key, shown beside them in the menu.
 ## EHYPVIEW.INF
 
 The settings are in `EHYPVIEW.INF` in the root of the boot drive, where the accessory always finds
-them. It is plain text with a note above each setting, and EHypView keeps the notes, and anything
-it doesn't know, when it writes the file. [Settings](#settings) changes most of it.
+them. It is plain text: each setting has a note above it and an empty line after it, and EHypView
+keeps the notes, and anything it doesn't know, when it writes the file. [Settings](#settings) changes most of it.
 
 | Setting | What it is |
 |---|---|
@@ -281,9 +283,10 @@ are used as ST-Guide uses them. Its `DEFHYP` and `HYPTOP` aren't: EHypView start
 - **Help in another program does nothing.** The accessory must be loaded (in the root of the boot
   drive) or, under MagiC or MiNT, the program running. Programs that look for ST-Guide find EHypView
   when the accessory is called `ST-GUIDE.ACC`.
-- **If the program crashes** (what would be 2 to 8 bombs), it says so, writes what happened to
-  `CRASH.LOG` next to `EHYPVIEW.PRG` and quits, leaving the Atari running. The next time it starts it
-  offers to show the report.
+- **If the program crashes** (what would be 2 to 8 bombs, or 11 for an FPU instruction on an Atari
+  without one), it says so, writes what happened to `CRASH.LOG` next to `EHYPVIEW.PRG` and quits,
+  leaving the Atari running. When TOS shows the bombs instead, and they went off in EHypView, the next
+  start finds TOS's record of them, adds it to `CRASH.LOG` and offers to show it.
 - **In ST low** (320 pixels wide) EHypView says the screen is too narrow: use ST medium or more. The
   accessory still shows the pages other programs ask for there.
 - **"The system has no window left for EHypView."** GEM has only a few windows to share between
