@@ -157,11 +157,11 @@ DISPLAY = ":99"
 BOOT_WAIT = (120 if MACHINE.startswith("Falcon-4") else 90) if os.environ.get("AERA_WITH_NVDI") else 90
 
 
-def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=()):
+def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=(), machine=None):
     for name in (fifo, os.path.join(hdir, "EHYPVIEW.IDX")):
         if os.path.exists(name):
             os.remove(name)
-    m = machines.Machine(MACHINE, hdir)
+    m = machines.Machine(machine or MACHINE, hdir)
     args = ["hatari"] + m.args() + ["--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
                                     "--cmd-fifo", fifo] + list(extra)
     env = m.env()
@@ -295,10 +295,10 @@ def matches(ev, expected):
     return ev == expected
 
 
-def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, extra=()):
+def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, extra=(), machine=None):
     fifo = os.path.join(OUT, name + ".fifo")
     log_path = os.path.join(OUT, name + ".log")
-    hatari = start_hatari(hdir, auto, fifo, log_path, windowed, extra)
+    hatari = start_hatari(hdir, auto, fifo, log_path, windowed, extra, machine)
     mouse = Mouse() if windowed else None
     for _ in range(100):
         if os.path.exists(fifo):
@@ -528,6 +528,7 @@ OPTIONS, HELPMENU = (444, 9), (504, 9)
 # choice, the first folder field
 SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 187), (320, 203), (300, 236), (300, 237)
 SET_LAYOUT, SET_LAYOUT_PANES = (340, 181), (330, 214)
+SET_ORIGIN = (89, 102)          # where the dialog is on 640 x 480, which SET_* are measured on
 
 
 def item(title, n):
@@ -902,6 +903,40 @@ def check_exists(path, what):
     return ok
 
 
+def in_settings(*keys):
+    """a step of keys in the Settings dialog, where it is on this screen
+    ("dialog settings X Y"): a ("click", x, y) measured on 640 x 480 is
+    moved with it (an ST's 640 x 400 has it higher)"""
+    def step(rig):
+        at = [ev.split()[2:4] for ev in rig.events() if ev.startswith("dialog settings ")]
+        if not at:
+            return False
+        dx, dy = int(at[-1][0]) - SET_ORIGIN[0], int(at[-1][1]) - SET_ORIGIN[1]
+        for k in keys:
+            rig.press(("click", k[1] + dx, k[2] + dy) if k[0] == "click" else k)
+        return True
+    return step
+
+
+# the long field on an ST, TOS 1.04 in mono (guidelines 5.4): its AES can
+# give Shift+Left, Shift+Right and Shift+ClrHome with kstate 0 (EFTP found
+# it), so each is checked by what it does to the text: from the end,
+# Shift+Left and Delete take the first letter, typed again; Shift+ClrHome
+# goes to the end, where a letter typed and taken out leaves it as it was
+ST_FIELD_STEPS = [
+    ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
+    ([("ctrl", COMMA)], ["dialog settings *"]),
+    (in_settings(("click",) + SET_LIBRARY), []),
+    (in_settings(*([("click",) + SET_FIELD] + typed("X" + LONG[:-3]) +
+                   [("field", None, CLRHOME), ("field", None, DELETE), ("field", SHIFT, RIGHT)] +
+                   typed(LONG[-3:]) + [("field", SHIFT, LEFT), ("field", None, DELETE)] + typed(LONG[0]) +
+                   [("field", SHIFT, CLRHOME)] + typed("Q") + [("field", None, BACKSPACE)])), []),
+    ([RETURN], ["alert no-folder " + LONG]),
+    ([RETURN], ["alert-closed no-folder keep", "dialog-closed settings ok", "settings PATHS " + LONG]),
+    ([("ctrl", Q)], ["quit"]),
+]
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
@@ -942,6 +977,16 @@ def main():
                 xvfb.terminate()
             ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
                                   ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG, "LIBRARY=panes"])
+            if ok:
+                d = copy_dir("stfield", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
+                print("      stfield on %s" % machines.Machine("ST:mono", d).describe())
+                xvfb = start_xvfb()
+                try:
+                    ok = run_scenario("stfield", d, ST_FIELD_STEPS, auto=LAUNCH, windowed=True,
+                                      machine="ST:mono")
+                finally:
+                    xvfb.terminate()
+                ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["PATHS=" + LONG])
         else:
             print("skip  mouse: needs Xvfb and xdotool")
     if ok:
