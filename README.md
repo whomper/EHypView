@@ -80,7 +80,9 @@ and the index stay; an index from an older EHypView that the new one can't read 
 own ColdFire build is still to come, see the [roadmap](docs/DESIGN.md#roadmap)); TOS, EmuTOS, MagiC,
 or MiNT (MultiTOS, XaAES, N.AES); a screen 640 pixels wide or more (in ST low and other screens 320
 pixels wide, the accessory still shows the pages other programs ask for, but doesn't open from the
-Desk menu). NVDI, SpeedoGDOS or another GDOS is optional, for more fonts.
+Desk menu). NVDI, SpeedoGDOS or another GDOS is optional, for more fonts. On a 1 MB ST the accessory
+also loads beside ECal's or EContact's (the ST editions), with less memory of its own (64 to 105 KB
+instead of 160 KB). Of those two, only one fits on a 1 MB ST.
 
 **Under TOS, put Atari's `FOLDR100.PRG` first in `AUTO`**, renamed for more room (`FOLDR400.PRG`).
 TOS keeps an entry in a small internal pool for every folder a program or accessory has looked
@@ -222,7 +224,7 @@ accessory from the next boot, and its Font dialog lists the ones it knows "from 
 **Options > Settings...** (^,; in the accessory, the toolbar's ≡ menu) shows what `EHYPVIEW.INF` holds,
 on two pages, as EMail's and ECal's Settings do. OK keeps the changes; Cancel, Esc and Undo forget them.
 
-![The Settings dialog over the viewer: the Library page, with the library's layout and the folders to look in as well](docs/settings.png)
+![The Settings dialog over the library: the Library page, with the library's layout and the folders to look in as well, the first one longer than its field shows](docs/settings.png)
 
 - **General:** when the accessory looks through the library (`START=`): when first opened, at start,
   after a minute or after 5 minutes; and EHypView's folder (`FOLDER=`), where the index is kept.
@@ -255,9 +257,11 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
   Desk menu brings the program's window to the front, and a font chosen in the program is the
   accessory's too the next time it opens. Under MagiC or MiNT, where the accessory runs beside the
   programs, starting `EHYPVIEW.PRG` opens the accessory instead.
-- **If the program crashes** (what would be 2 to 8 bombs), it says so, writes what happened to
-  `CRASH.LOG` next to `EHYPVIEW.PRG` and quits, leaving the Atari running. Under MiNT or MagiC, and in
-  the accessory, there is no `CRASH.LOG`.
+- **If the program crashes** (what would be 2 to 8 bombs, or 11 for an FPU instruction on an Atari
+  without one), it says so, writes what happened to `CRASH.LOG` next to `EHYPVIEW.PRG` and quits,
+  leaving the Atari running. When TOS shows the bombs instead, and they went off in EHypView, the next
+  start finds TOS's record of them, adds it to `CRASH.LOG` and offers to show it.
+  Under MiNT or MagiC, and in the accessory, there is no `CRASH.LOG`.
 
 ### With other programs
 
@@ -278,8 +282,8 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
 ### Where its files are
 
 - **`EHYPVIEW.INF`**, the settings, is in the root of the boot drive, where the accessory always finds
-  it. It has a note above each setting, and EHypView keeps the notes, and anything it doesn't know,
-  when it writes the file. An `EHYPVIEW.INF` next to the program, from an older EHypView, is copied to
+  it. Each setting has a note above it and an empty line after it, and EHypView keeps the notes, and
+  anything it doesn't know, when it writes the file. An `EHYPVIEW.INF` next to the program, from an older EHypView, is copied to
   the root the first time.
 - **`FOLDER=`** in it names EHypView's folder, which holds the index of the hypertexts
   (`EHYPVIEW.IDX`) and `EHYPVIEW.FNT`. `EHYPVIEW.PRG` uses the folder it was started from and writes
@@ -313,6 +317,7 @@ make atari     # build/hatari/: EHYPVIEW.PRG, EHYPVIEW.ACC, EHVCHECK.PRG;
 make help HCP=/path/to/hcp   # binary/EHYPVIEW.HYP and .REF from docs/GUIDE.md
 make dist      # dist/: a release's files, each on its own and in EHYPVIEW-x.y.zip
 make icons     # draw the icon again (tools/icon/; python3-pil for the PNGs)
+make shots HCP=/path/to/hcp   # the README's pictures in docs/ and the guide's WINDOW.IMG, in Hatari
 ```
 
 The Atari programs are built the same way as ECal: with Ubuntu's stock m68k compiler, for the 68000
@@ -326,9 +331,9 @@ the AERA programs' shared code, a copy of [AERA-Atari](https://github.com/whompe
 **The guide.** `docs/GUIDE.md` is the source of `EHYPVIEW.HYP`: `tools/mkhelp.py` (EContact's and
 EMail's) makes ST-Guide's source from it, `common/tools/helpfront.py` gives it the AERA programs' front
 page from `docs/front.json`, and `hcp` compiles it; `common/tools/build-hcp.sh DIR` builds `hcp`. The
-front page's window picture, `docs/help/WINDOW.IMG`, is committed: when the viewer changes, take a
-Hatari screenshot of it and make the picture again with `common/tools/helpfront.py thumb` (the line is
-in CLAUDE.md). EHypView's own reader checks every page of the result (`hypdump check`).
+front page's window picture, `docs/help/WINDOW.IMG`, is committed: when the viewer changes, `make shots`
+takes it again in Hatari (`common/tools/helpfront.py thumb`), with the README's pictures: the Falcon
+with the AERA programs' guides from their latest releases (`tests/run_gui.py`, `SHOT_STEPS`). EHypView's own reader checks every page of the result (`hypdump check`).
 
 `build/host/hypdump` inspects any hypertext:
 
@@ -399,7 +404,8 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
 ```
 
 - **`make test`** runs the unit tests (`tests/test_*.c`: the core, the scanner and index on a real
-  folder tree, the viewer, the library, the menu tree, fonts) and the golden tests
+  folder tree, the viewer, the library, the menu tree, fonts; and common/tests/dialog's, the dialog
+  loop and its fields that hold more than they show) and the golden tests
   (`tests/run_golden.sh`): the text of the test hypertexts must match `hcp`'s own rendering, an
   independent implementation, and their links, index and header the reviewed files in
   `tests/expected/`.
@@ -414,8 +420,10 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   hypertext three folders down), back, help, the library and both searches, fonts and the font
   selector, Settings (Esc and Undo cancel it), the accessory, and the program and accessory side by
   side. The mouse run (Xvfb and xdotool; skipped without them) clicks links, the right button, the
-  menus, the About box and Settings: its START= popup, its Library page's folders, the alert for one
-  that isn't there, and the library looked through again; `EHYPVIEW.INF` must then hold them. The
+  menus, the About box and Settings: its START= popup, its Library page's folders (one longer than
+  its field shows, edited at its start and end), the alert for one that isn't there, and the library
+  looked through again; `EHYPVIEW.INF` must then hold them. The long folder is typed again on the
+  4 MB ST in mono with TOS 1.04 (`ST:mono`), with ⇧Left, ⇧Right and ⇧Clr/Home. The
   viewer reports what it does through NatFeats, and each step waits for it. `make accnvdi-test`, with Erez's NVDI
   (`AERA_WITH_NVDI=1`, `common/tools/machines.py`; skipped without it): the accessory picks a GDOS font in
   its own selector, by keyboard, is closed and opened again, and draws a page another program asked for
@@ -463,4 +471,4 @@ included in EHypView.
 
 ---
 
-Part of **AERA** for Atari: [ECal](https://github.com/whomper/ECal) · [EContact](https://github.com/whomper/EContact) · [EMail](https://github.com/whomper/EMail) · [EFTP](https://github.com/whomper/EFTP) · [EHypView](https://github.com/whomper/EHypView) · [ClaudeST](https://github.com/whomper/ClaudeST) · 8-bit: [EDOS](https://github.com/whomper/EDOS) · [EFTP_XL](https://github.com/whomper/EFTP_XL)
+Part of **AERA** for Atari: [ECal](https://github.com/whomper/ECal) · [EContact](https://github.com/whomper/EContact) · [EMail](https://github.com/whomper/EMail) · [EFTP](https://github.com/whomper/EFTP) · [EHypView](https://github.com/whomper/EHypView) · [ClaudeST](https://github.com/whomper/ClaudeST) · [EWeb](https://github.com/whomper/EWeb) · [EUpdate](https://github.com/whomper/EUpdate) · 8-bit: [EDOS](https://github.com/whomper/EDOS) · [EFTP_XL](https://github.com/whomper/EFTP_XL) · Pi: [AERA-Gateway](https://github.com/whomper/AERA-Gateway)

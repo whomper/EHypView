@@ -62,9 +62,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `binary/`; the icons are committed in `icons/`). The first release was 1.0.
 - The guide is `docs/GUIDE.md` (tools/mkhelp.py, EContact's) with the family's front page
   (guidelines 4.3, `docs/front.json`, `common/tools/helpfront.py`). Its window picture
-  `docs/help/WINDOW.IMG` is committed: when the viewer changes, take a Hatari screenshot of a page
-  of the guide in the program (640 x 480) and make it again with
-  `python3 common/tools/helpfront.py thumb SHOT.PNG docs/help/WINDOW.IMG 4,36,632,410 32,90 210,68 330,206 412,90 596,90`.
+  `docs/help/WINDOW.IMG` is committed: when the viewer changes, `make shots HCP=...` takes it again
+  (a Hatari screenshot of a page of the guide, 640 x 480, made into it with
+  `python3 common/tools/helpfront.py thumb SHOT.PNG docs/help/WINDOW.IMG 4,36,632,410 32,90 210,68 330,206 412,90 596,90`),
+  with the README's pictures in docs/ (tests/run_gui.py's SHOT_STEPS).
 - Settings (src/gem/settings.c, ^,) is EMail's layout: pages on the left, run by the shared
   `dlg_do`. It edits `START=`, `LIBRARY=` and `PATHS=`; the font stays in View > Font... as in ECal
   and EMail.

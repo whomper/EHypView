@@ -366,6 +366,12 @@ quiet-test: atari
 # pictures and text in colour in every screen mode: Falcon 4, 16, 256 and
 # true colour, ST medium, TT medium, low and high, checked pixel by pixel
 # (screenshots in build/colour)
+# the README's pictures, taken in Hatari on the Falcon with the family's
+# guides from their releases: docs/screenshot.png and the others
+# (tests/run_gui.py's SHOT_STEPS; needs hatari, Xvfb, xdotool, network)
+shots: atari help $(HATARI_DIR)/LAUNCH.PRG
+	python3 tests/run_gui.py $(HATARI_DIR) build/shots shots
+
 colour-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG
 	python3 tests/run_colour.py $(HATARI_DIR) build/colour
 

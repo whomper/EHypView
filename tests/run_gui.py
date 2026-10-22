@@ -948,8 +948,100 @@ def st_field():
     return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["PATHS=" + LONG])
 
 
+# the README's pictures (make shots): the family's guides from their latest
+# releases and EHypView's own in C:\\GUIDES, on the Falcon; each step's
+# screenshot named in SHOT_FILES goes to docs/
+GUIDE = r"C:\GUIDES\EHYPVIEW.HYP"
+FAMILY = [("ECal", "ECAL"), ("EContact", "ECONTACT"), ("EMail", "EMAIL"), ("EFTP", "EFTP"),
+          ("ClaudeST", "CLAUDEST")]
+LONGDIR = r"C:\HYPTEXT\PROGRAMS\DEVELOP\GEMLIB\MANUALS\ENGLISH"
+
+
+def to_pane(subject):
+    """Down through the subjects till this one is chosen"""
+    def step(rig):
+        for _ in range(8):
+            rig.press(DOWN)
+            if rig.wait_for("pane %s *" % subject, 3):
+                return True
+        return False
+    return step
+
+
+SHOT_STEPS = [
+    ([], ["menu shown", "page %s Main" % GUIDE, "index 6 guides"]),
+    ([("ctrl", L)], ["library 6"]),
+    ([("type", "viewer")], ['search "viewer" *']),
+    ([RETURN], ["page %s The viewer" % GUIDE]),
+    ([("hover", 620, 470), ("still", 10)], []),                       # the help's WINDOW.IMG
+    ([("hover", 20, 90), ("still", 10)], []),                         # toolbar.png: Back's tip
+    ([("ctrl", L)], ["library 6"]),
+    ([BACKSPACE] * 6, ['search "" 6']),
+    ([DOWN] * 3 + [("hover", 330, 250), ("still", 10)], []),          # screenshot.png: EMail
+    ([("type", "remind")], ['search "remind" *']),
+    ([("hover", 330, 250), ("still", 10)], []),                       # library.png
+    ([BACKSPACE] * 6, ['search "" 6']),
+    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
+    (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
+    (in_settings(*([("click",) + SET_FIELD] + typed(LONGDIR))), []),
+    ([("hover", 620, 470), ("still", 10)], []),                       # settings.png
+    (in_settings(("click",) + SET_LAYOUT), ["menu settings-layout"]),
+    (in_settings(("click",) + SET_LAYOUT_PANES), ["settings-layout panes"]),
+    ([RETURN], ["dialog-closed settings ok", "settings PATHS " + LONGDIR, "library-layout panes",
+                "index 6 guides"]),
+    ([LEFT], ["library-focus subjects"]),
+    (to_pane("Communication"), []),
+    ([RETURN, DOWN, ("hover", 330, 250), ("still", 10)], []),         # library-panes.png
+    ([("ctrl", Q)], ["quit"]),
+]
+SHOT_FILES = {5: "toolbar.png", 8: "screenshot.png", 10: "library.png", 15: "settings.png",
+              21: "library-panes.png"}
+WINDOW_SHOT = 4                 # made into docs/help/WINDOW.IMG (helpfront.py thumb, as CLAUDE.md says)
+
+
+def shots():
+    import shutil
+    d = copy_dir("shots", "", "BOOKMARK1=C:\\GUIDES\\ECONTACT.HYP|Groups|EContact - Groups\n"
+                 "RECENT1=%s|Main|EHypView - hypertexts for the Atari\n"
+                 "RECENT2=C:\\GUIDES\\ECAL.HYP|Reminders|ECal - Reminders\n" % GUIDE, start=GUIDE)
+    shutil.rmtree(os.path.join(d, "FIXT"))
+    g = os.path.join(d, "GUIDES")
+    os.makedirs(g)
+    os.makedirs(os.path.join(d, *LONGDIR[3:].split("\\")))
+    tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common", "tools", "getrelease.py")
+    for app, base in FAMILY:
+        for f in (base + ".HYP", base + ".REF"):          # EFTP's release has no .REF
+            subprocess.run([sys.executable, tool, app, g, f], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+    for f in ("EHYPVIEW.HYP", "EHYPVIEW.REF"):
+        shutil.copy(os.path.join("binary", f), g)
+    for f in os.listdir(g):
+        if f.endswith(".VERSION"):
+            os.remove(os.path.join(g, f))
+    xvfb = start_xvfb()
+    try:
+        ok = run_scenario("shots", d, SHOT_STEPS, auto=LAUNCH, windowed=True)
+    finally:
+        xvfb.terminate()
+    if ok:
+        for n, name in SHOT_FILES.items():
+            shutil.copy(os.path.join(OUT, "shots-%02d.png" % n), os.path.join("docs", name))
+            print("      docs/%s: shots-%02d.png" % (name, n))
+        helpfront = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common", "tools",
+                                 "helpfront.py")
+        ok = subprocess.run([sys.executable, helpfront, "thumb", os.path.join(OUT, "shots-%02d.png" % WINDOW_SHOT),
+                             "docs/help/WINDOW.IMG", "4,36,632,410", "32,90", "210,68", "330,206", "412,90",
+                             "596,90"]).returncode == 0
+        print("      docs/help/WINDOW.IMG: shots-%02d.png" % WINDOW_SHOT)
+        if os.path.exists("docs/help/WINDOW.png"):           # thumb's preview, not committed
+            os.remove("docs/help/WINDOW.png")
+    return ok
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    if sys.argv[3:] == ["shots"]:                   # make shots: the README's pictures
+        return 0 if shots() else 1
     if sys.argv[3:] == ["stfield"]:                 # the ST's long field alone
         return 0 if st_field() else 1
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
