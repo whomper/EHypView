@@ -139,8 +139,8 @@ src/gem/       the GEM program
   fontsel.c    the text font: selector dialog (from ECal), sizes, font protocol
   about.c      the About box (as EMail's, ECal's and EContact's), icon*.h
 tools/hypdump  host command-line inspector, used by the tests
-tools/icon     the icon (make_icon.py) and the desktop icon RSC (make_rsc.py)
-tools/bump.py  counts VERSION up on every build
+icons/         the desktop icon (RSC, ICN), made by common/tools/appicon.py (make icons)
+tools/bump.py  VERSION to the next release, in a release commit
 tests/         unit tests, golden tests, fixture generators
 ```
 

@@ -318,6 +318,12 @@ static unsigned long subjects(void)
 	return n;
 }
 
+/* "s" after a count of other than one ("1 page", "2 pages") */
+static const char *plural(unsigned long n)
+{
+	return n == 1 ? "" : "s";
+}
+
 static void update_info(void)
 {
 	if (lib_h <= 0)
@@ -327,18 +333,21 @@ static void update_info(void)
 	else if (lib.fts != NULL)
 		snprintf(lib_info, sizeof(lib_info), " %s", lib.note);
 	else if (lib.query[0] != '\0')
-		snprintf(lib_info, sizeof(lib_info), " %lu pages, %lu hypertexts", lib.npages, lib.nguides);
+		snprintf(lib_info, sizeof(lib_info), " %lu page%s, %lu hypertext%s", lib.npages, plural(lib.npages),
+			 lib.nguides, plural(lib.nguides));
 	else if (panes() && lib.pane >= 0 && lib.panes[lib.pane].kind == PANE_BOOKMARKS)
-		snprintf(lib_info, sizeof(lib_info), " %lu bookmarks", lib.panes[lib.pane].count);
+		snprintf(lib_info, sizeof(lib_info), " %lu bookmark%s", lib.panes[lib.pane].count,
+			 plural(lib.panes[lib.pane].count));
 	else if (panes() && lib.pane >= 0 && lib.panes[lib.pane].kind == PANE_RECENT)
-		snprintf(lib_info, sizeof(lib_info), " %lu pages read lately", lib.panes[lib.pane].count);
+		snprintf(lib_info, sizeof(lib_info), " %lu page%s read lately", lib.panes[lib.pane].count,
+			 plural(lib.panes[lib.pane].count));
 	else if (panes() && lib.pane >= 0 && lib.panes[lib.pane].kind != PANE_ALL)
-		snprintf(lib_info, sizeof(lib_info), " %s: %lu of %lu hypertexts", lib.panes[lib.pane].text,
-			 lib.nguides, lib.norder);
+		snprintf(lib_info, sizeof(lib_info), " %s: %lu of %lu hypertext%s", lib.panes[lib.pane].text,
+			 lib.nguides, lib.norder, plural(lib.norder));
 	else if (subjects() > 1)
 		snprintf(lib_info, sizeof(lib_info), " %lu hypertexts in %lu subjects", lib.norder, subjects());
 	else
-		snprintf(lib_info, sizeof(lib_info), " %lu hypertexts", lib.norder);
+		snprintf(lib_info, sizeof(lib_info), " %lu hypertext%s", lib.norder, plural(lib.norder));
 	if (strcmp(lib_info, info_shown) != 0)     /* the AES redraws it: only when it changed */
 	{
 		strcpy(info_shown, lib_info);

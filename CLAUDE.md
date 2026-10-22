@@ -112,9 +112,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   (`heap_early`; the INF is read into the stack first; with TT RAM a block
   of ST RAM for the pictures, else they come from the heap);
   test_index.c checks the library job's steps.
-- The icon is drawn by `tools/icon/make_icon.py` (the family's SM124
-  monitor); `make icons` writes src/gem/icon*.h, docs/icon*.png and
-  icons/EHYPVIEW.RSC (committed). The About box (src/gem/about.c) follows
+- The icon is the family's lifebuoy (guidelines 5.5), drawn in AERA-Atari's
+  common/icons/EHYPVIEW.txt (a pixel is changed there, not here); `make icons`
+  (common/tools/appicon.py) writes src/gem/icon*.h, docs/icon*.png and
+  icons/ (committed). The About box (src/gem/about.c) follows
   EMail's, ECal's and EContact's.
 - The Font dialog is the family's, common/ui/fontsel.c (guidelines 5.3);
   src/gem/font.c keeps EHypView's part (FONT= by name, ^+ ^-, the font

@@ -1,6 +1,6 @@
 # EHypView
 
-<img src="docs/icon16.png" width="96" align="right" alt="EHypView icon: an Atari SM124-style monitor showing a page whose link points to another page">
+<img src="docs/icon.png" width="96" align="right" alt="EHypView icon: a red and white lifebuoy, for help">
 
 A hypertext viewer for the Atari ST, STE, TT and Falcon: EHypView reads and searches `.HYP` hypertexts,
 the help that Atari programs come with. It runs as a program or as a desk accessory, finds every
@@ -303,11 +303,12 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
 
 ### The desktop icon
 
-`EHYPVIEW.RSC` is a resource with the icon in monochrome (G_ICON) and 16 colours (G_CICON), each with
-its mask: copy them into `DESKICON.RSC` / `DESKCICN.RSC` with a resource editor (Interface, ORCS,
-RSM...). `EHYPVIEW.ICN` and `EHYPVWMK.ICN` are the image and its mask in ICN text format. The icon is
-the same SM124-style monitor as EMail's, ECal's and EContact's, here showing a hypertext: a page whose
-link points to another page.
+The icon is a lifebuoy, for help, drawn like the other AERA programs' icons (the AERA guidelines,
+5.5). `EHYPVIEW.RSC` is a resource with it in monochrome (G_ICON, for TOS 1 and 2) and as a colour
+icon (G_CICON) in black and white, 16 and 256 colours, each with its mask and its selected image:
+copy them into `DESKICON.RSC` / `DESKCICN.RSC` with a resource editor (Interface, ORCS, RSM...), or
+use it as it is in Thing or Teradesk. `EHYPVIEW.ICN` and `EHYPVWMK.ICN` are the image and its mask in
+ICN text format.
 
 ## Building
 
@@ -318,7 +319,7 @@ make atari     # build/hatari/: EHYPVIEW.PRG, EHYPVIEW.ACC, EHVCHECK.PRG;
                # binary/: EHYPVIEW.PRG, EHYPVIEW.ACC
 make help HCP=/path/to/hcp   # binary/EHYPVIEW.HYP and .REF from docs/GUIDE.md
 make dist      # dist/: a release's files, each on its own and in EHYPVIEW-x.y.zip
-make icons     # draw the icon again (tools/icon/; python3-pil for the PNGs)
+make icons     # the icon again from common/icons/EHYPVIEW.txt (common/tools/appicon.py; python3-pil)
 make shots HCP=/path/to/hcp   # the README's pictures in docs/ and the guide's WINDOW.IMG, in Hatari
 ```
 
@@ -378,10 +379,10 @@ atari/      plat_tos.c: the core's file access on GEMDOS, EHypView's own
 common/     the AERA programs' shared code (from AERA-Atari): the TOS runtime,
             AES/VDI, menu bar, About box, alerts, AV protocol, drag and drop,
             iconify, elf2tos.py
-icons/      the desktop icon (RSC and ICN files), from tools/icon
+icons/      the desktop icon (RSC and ICN files), made by make icons
 tests/      unit and golden tests, fixtures and their generators, EHVCHECK,
             the Hatari rigs
-tools/      hypdump, the icon generator, mkhelp.py (the guide), bump.py, sync-common.sh
+tools/      hypdump, mkhelp.py (the guide), bump.py, sync-common.sh
 docs/       GUIDE.md (the source of EHYPVIEW.HYP), front.json and help/ (its front
             page), DESIGN.md, FORMAT.md, the icon pictures, the screenshots
 ```
