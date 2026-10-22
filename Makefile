@@ -43,7 +43,7 @@ CORE_OBJ = $(patsubst src/core/%.c,$(HOST)/%.o,$(CORE_SRC)) $(HOST)/view.o $(HOS
 
 all: $(HOST)/hypdump $(HOST)/test_core $(HOST)/test_index $(HOST)/test_view $(HOST)/test_library \
      $(HOST)/test_menu $(HOST)/test_toolbar $(HOST)/test_colour $(HOST)/test_stmem $(HOST)/test_stmem_acc $(HOST)/test_fonts $(HOST)/test_bookmark \
-     $(HOST)/test_fontsel $(HOST)/test_accmem
+     $(HOST)/test_fontsel $(HOST)/test_accmem $(HOST)/test_dialog
 
 $(HOST)/%.o: src/core/%.c src/core/*.h | $(HOST)
 	$(CC) $(CPPFLAGS) $(WARN) $(CFLAGS) -c -o $@ $<
@@ -76,6 +76,11 @@ $(HOST)/test_fonts: tests/test_fonts.c $(HOST)/libehv.a
 # an accessory's memory (common/tests/accmem, with its stubbed GEMDOS)
 $(HOST)/test_accmem: common/tests/accmem/test_accmem.c common/ui/accmem.c common/ui/accmem.h | $(HOST)
 	$(CC) $(CFLAGS) -Icommon/tests/accmem/stub -Icommon/ui -o $@ common/tests/accmem/test_accmem.c common/ui/accmem.c
+
+# the shared dialog loop and its fields that hold more than they show
+# (guidelines 5.4), against common/tests/dialog's stand-in AES
+$(HOST)/test_dialog: common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c common/ui/field.h common/ui/dialog.h | $(HOST)
+	$(CC) $(CFLAGS) -Icommon/tests/dialog/stub -Icommon/ui -Icommon/atari -o $@ common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c
 
 # the family's Font dialog, its part without GEM (common/tests/fontsel)
 $(HOST)/test_fontsel: common/tests/fontsel/test_fontsel.c common/ui/fontsel.c common/ui/fontsel.h | $(HOST)
@@ -118,6 +123,7 @@ test: all
 	$(HOST)/test_bookmark
 	$(HOST)/test_fontsel
 	$(HOST)/test_accmem
+	$(HOST)/test_dialog
 	sh tests/run_golden.sh $(HOST)/hypdump
 
 asan:
@@ -252,7 +258,7 @@ GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookm
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/settings.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/colour.o \
-           $(ATARI)/bigbuf.o $(ATARI)/accmem.o
+           $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
 # and the build never writes it. Every build shows it as it is in the

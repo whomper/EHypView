@@ -43,6 +43,11 @@ DOWN, UP = 0x50, 0x48
 IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
 COMMA, SEMICOLON, BACKSLASH = 0x33, 0x27, 0x2B
+CLRHOME = 0x47
+
+# a folder longer than the Settings field shows (40): the field holds it
+# all (guidelines 5.4) and scrolls with the cursor
+LONG = "C:\\NOWHERE\\AFOLDERNAMELONGERTHANTHEFIELD\\SHOWS\\GUIDES\\EN"
 
 
 def typed(text):
@@ -610,9 +615,12 @@ MOUSE_STEPS = [
     ([("click", 320, 300)], []),                            # a click closes it
     ([item(DESK, 0)], ["menu about", "dialog about *"]),    # the About box
     ([("click", 320, 300)], []),                            # a click closes it
-    # Settings: START= from the popup, two folders on the Library page;
+    # Settings: START= from the popup, three folders on the Library page;
     # one that isn't there is asked about (Esc: Change, back to the page),
-    # then kept; OK writes EHYPVIEW.INF and looks through the library again
+    # then kept; OK writes EHYPVIEW.INF and looks through the library again.
+    # The third is longer than its field shows (5.4), typed with an X in
+    # front that ClrHome and Delete take away at its start, then its end
+    # added after Shift+Right: the whole of it is kept
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
     ([("click",) + SET_START], ["menu settings-start"]),
     ([("click",) + SET_START_NOW], ["settings-start now"]),
@@ -621,12 +629,15 @@ MOUSE_STEPS = [
     ([("click",) + SET_LAYOUT_PANES], ["settings-layout panes"]),
     ([("click",) + SET_FIELD] + typed("C:\\FIXT\\SUB"), []),
     ([TAB] + typed("C:\\NOWHERE"), []),
+    ([TAB] + typed("X" + LONG[:-3]) + [("field", None, CLRHOME), ("field", None, DELETE),
+                                       ("field", SHIFT, RIGHT)] + typed(LONG[-3:]), []),
     ([RETURN], ["alert no-folder C:\\NOWHERE"]),
     ([ESC], ["alert-closed no-folder change"]),
     ([RETURN], ["alert no-folder C:\\NOWHERE"]),
+    ([RETURN], ["alert-closed no-folder keep", "alert no-folder " + LONG]),
     ([RETURN], ["alert-closed no-folder keep", "dialog-closed settings ok", "settings START now",
-                "settings LIBRARY panes", "settings PATHS C:\\FIXT\\SUB;C:\\NOWHERE", "index again",
-                "index 5 guides"]),
+                "settings LIBRARY panes", "settings PATHS C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG,
+                "index again", "index 5 guides"]),
     # the guide, when it is nowhere: where to put it
     ([item(HELPMENU, 0)], ["menu guide", "alert no-guide"]),
     ([RETURN], []),
@@ -930,7 +941,7 @@ def main():
             finally:
                 xvfb.terminate()
             ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
-                                  ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE", "LIBRARY=panes"])
+                                  ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG, "LIBRARY=panes"])
         else:
             print("skip  mouse: needs Xvfb and xdotool")
     if ok:
