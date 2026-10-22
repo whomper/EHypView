@@ -15,8 +15,8 @@
 #                   (needs Xvfb and xdotool for the mouse)
 #   make quiet-test the accessory's start and indexing measured in Hatari:
 #                   no stretch over 50 ms between event calls
-#   make icons      draw the icon again: src/gem/icon*.h, docs/icon*.png and
-#                   icons/EHYPVIEW.RSC (needs python3-pil for the PNGs)
+#   make icons      the icon again from common/icons/EHYPVIEW.txt: src/gem/icon*.h,
+#                   docs/icon*.png, icons/ (python3-pil for the PNGs)
 #   make dist       a release's files in dist/: each file, and EHYPVIEW-x.y.zip
 #
 # binary/ is what make builds, never committed: releases carry the
@@ -320,9 +320,11 @@ binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC: binary/%: $(HATARI_DIR)/%
 # the icon: src/gem/icon.h and icon16.h (the About box), docs/icon*.png,
 # and icons/ (EHYPVIEW.RSC and ICN files for desktop icons), committed;
 # a release carries them
-icons: tools/icon/make_icon.py tools/icon/make_rsc.py
-	python3 tools/icon/make_icon.py >/dev/null
-	cd tools/icon && python3 make_rsc.py
+# the family's icons (guidelines 5.5): the lifebuoy, drawn in AERA-Atari
+# (common/icons/EHYPVIEW.txt), made into everything by common/tools/appicon.py
+icons: common/icons/EHYPVIEW.txt common/tools/appicon.py
+	python3 common/tools/appicon.py EHYPVIEW --rsc icons/EHYPVIEW.RSC --icn icons/EHYPVIEW.ICN \
+		--mask icons/EHYPVWMK.ICN --headers src/gem --docs docs
 
 # the help file, EHYPVIEW.HYP, from docs/GUIDE.md with the family's front
 # page (docs/front.json, common/tools/helpfront.py), and EHYPVIEW.REF, the

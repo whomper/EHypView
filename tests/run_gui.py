@@ -933,6 +933,8 @@ ST_FIELD_STEPS = [
                    [("field", SHIFT, CLRHOME)] + typed("Q") + [("field", None, BACKSPACE)])), []),
     ([RETURN], ["alert no-folder " + LONG]),
     ([RETURN], ["alert-closed no-folder keep", "dialog-closed settings ok", "settings PATHS " + LONG]),
+    ([item(DESK, 0), ("hover", 620, 380), ("still", 5)], ["menu about", "dialog about *"]),  # its mono icon
+    ([("click", 320, 200)], []),                            # a click closes it
     ([("ctrl", Q)], ["quit"]),
 ]
 
