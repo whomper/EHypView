@@ -12,7 +12,7 @@ when you press Help.
 | `EHYPVIEW.PRG` | the viewer as a program, with a menu bar |
 | `EHYPVIEW.ACC` | the same viewer as a desk accessory (one program under two names) |
 | `EHYPVIEW.HYP` | this guide (and `EHYPVIEW.REF`, its index for ST-Guide) |
-| `EHYPVIEW.RSC`, `.ICN` | the desktop icon, in the zip's `icons` folder |
+| `EHYPVIEW.RSC`, `.ICN` | the desktop icon, in the zip's `icons` folder; `EHYPVNV.RSC` is the same for NVDI with its own palette (`EHYPVIEW.RSC` under TOS, EmuTOS, or NVDI with COLORVDI) |
 
 - **The program:** copy `EHYPVIEW.PRG` into any folder and start it. It keeps its index
   (`EHYPVIEW.IDX`), its list of fonts (`EHYPVIEW.FNT`) and any `CRASH.LOG` next to itself, so a
