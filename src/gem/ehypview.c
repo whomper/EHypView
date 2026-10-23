@@ -372,7 +372,7 @@ static void set_sliders(void)
 
 short link_color(void)
 {
-	return ncolors >= 16 ? 4 : 1;          /* blue, or black */
+	return ncolors >= 16 ? ui_colour(4) : 1;   /* blue, or black */
 }
 
 void fill(short color, short x1, short y1, short x2, short y2)
