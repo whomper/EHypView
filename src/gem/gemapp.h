@@ -26,6 +26,7 @@ extern ehv_index *idx;
 
 void log_event(const char *what, const char *a, const char *b);
 short link_color(void);
+short ui_colour(unsigned short n);        /* pagedraw.c: TOS's VDI colour n among 0-15 now */
 void fill(short color, short x1, short y1, short x2, short y2);
 void text_at(short x, short y, const char *s, long n);
 int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short w2, short h2);

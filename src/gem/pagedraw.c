@@ -38,6 +38,7 @@ static struct {
 } scr;
 
 static short scrinfo[272];
+static short ui_pen[16] = { -1 };      /* ui_colour(): -1 not read */
 
 static unsigned char from1000(short v)
 {
@@ -186,24 +187,63 @@ static void screen_colours(void)
 text:
 	for (i = 0; i < 256; i++)
 		scr.text[0][i] = scr.text[1][i] = -1;
+	ui_pen[0] = -1;
 }
 
 /* the VDI colour that draws text colour n (bg: behind the text; -1 for
-   none, the page's white) */
+   none, the page's white): TOS's colour n matched to what VDI colours
+   0-15 are now, never 16 and up, which may hold anything whatever the
+   VDI's table says (guidelines 5.2) */
 static short text_colour(unsigned short n, int bg)
 {
 	short *v = &scr.text[bg ? 1 : 0][n & 255];
 
 	if (*v == -1)
 	{
+		static crgb pal[256];
+		static unsigned char pen[256];
 		crgb c;
-		int i;
+		unsigned short i, m = 0;
+		int k;
 
+		for (i = 0; i < scr.n; i++)
+			if (scr.vdi[i] >= 0 && scr.vdi[i] < 16)
+			{
+				pal[m].r = scr.rgb[i].r;       /* not pal[m] = ...: a 68000 */
+				pal[m].g = scr.rgb[i].g;       /* faults on its word moves at */
+				pal[m].b = scr.rgb[i].b;       /* an odd address */
+				pen[m++] = (unsigned char) i;
+			}
 		colour_vdi_std(n, &c);
-		i = colour_text(scr.rgb, scr.n, &c, bg);
-		*v = (short) (i < 0 ? -2 : scr.vdi[i]);
+		k = colour_text(pal, m, &c, bg);
+		*v = (short) (k < 0 ? -2 : scr.vdi[pen[k]]);
 	}
 	return *v == -2 ? -1 : *v;
+}
+
+/* the same for the windows' own greys and accents, from VDI colours
+   0-15 alone (read once, and again with the page's colours) */
+short ui_colour(unsigned short n)
+{
+	if (ui_pen[0] < 0)
+	{
+		crgb pal[16], c;
+		short rgb[3], i;
+
+		for (i = 0; i < 16; i++)
+		{
+			vq_color(vdi_h, i, rgb);
+			pal[i].r = from1000(rgb[0]);
+			pal[i].g = from1000(rgb[1]);
+			pal[i].b = from1000(rgb[2]);
+		}
+		for (i = 0; i < 16; i++)
+		{
+			colour_vdi_std((unsigned short) i, &c);
+			ui_pen[i] = (short) colour_text(pal, 16, &c, 0);
+		}
+	}
+	return ui_pen[n & 15];
 }
 
 /* ---------------------------------------------------------------- */

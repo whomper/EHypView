@@ -394,7 +394,7 @@ static short tint_color(int tint)
 	static const short c4[] = { 2, 3 };                             /* red, green */
 
 	if (ncolors >= 16)
-		return tint == 0 ? 9 : c16[(tint - 1) % 8];
+		return ui_colour((unsigned short) (tint == 0 ? 9 : c16[(tint - 1) % 8]));
 	if (ncolors >= 4)
 		return tint == 0 ? 1 : c4[(tint - 1) % 2];
 	return 1;
@@ -402,17 +402,17 @@ static short tint_color(int tint)
 
 static short about_color(void)
 {
-	return ncolors >= 16 ? 13 : 1;         /* dark cyan */
+	return ncolors >= 16 ? ui_colour(13) : 1;  /* dark cyan */
 }
 
 static short pane_ground(void)
 {
-	return ncolors >= 16 ? 8 : 0;          /* light grey */
+	return ncolors >= 16 ? ui_colour(8) : 0;   /* light grey */
 }
 
 static short grey(void)
 {
-	return ncolors >= 16 ? 9 : 1;          /* dark grey */
+	return ncolors >= 16 ? ui_colour(9) : 1;   /* dark grey */
 }
 
 /* a subject's square or spine: its colour; in mono solid, half-tone
