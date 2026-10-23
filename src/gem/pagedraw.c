@@ -209,7 +209,9 @@ static short text_colour(unsigned short n, int bg)
 		for (i = 0; i < scr.n; i++)
 			if (scr.vdi[i] >= 0 && scr.vdi[i] < 16)
 			{
-				pal[m] = scr.rgb[i];
+				pal[m].r = scr.rgb[i].r;       /* not pal[m] = ...: a 68000 */
+				pal[m].g = scr.rgb[i].g;       /* faults on its word moves at */
+				pal[m].b = scr.rgb[i].b;       /* an odd address */
 				pen[m++] = (unsigned char) i;
 			}
 		colour_vdi_std(n, &c);
