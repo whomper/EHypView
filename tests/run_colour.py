@@ -360,10 +360,14 @@ def run_mode(name, spec, opts, vmode, pal, how):
         check(band <= {0x000000, 0xFFFFFF}, "%s: the text black and white only" % name)
     else:
         p = pal if pal is not None else [STD[VDI_PEN[n]] for n in range(16)]
+        # only the pens of VDI colours 0-15 (guidelines 5.2): in 256
+        # colours VDI 1, black, is the last pen
+        pens = sorted({len(p) - 1 if n == 1 else VDI_PEN[n] for n in range(16)}) if len(p) > 16 \
+            else list(range(len(p)))
         want = {}
         for label, n, bg in (("red", 2, 0), ("green", 3, 0), ("blue", 4, 0), ("light grey", 8, 0),
                              ("yellow behind", 6, 1), ("black behind", 1, 1)):
-            i = text_pen(p, STD[VDI_PEN[n]], bg)
+            i = pens[text_pen([p[k] for k in pens], STD[VDI_PEN[n]], bg)]
             want[label] = (shown if pal is not None else p)[i]
     tol = 8 if pal is None and planes > 1 else 0
     missing = [l for l, c in want.items() if not near(c, tol)]
