@@ -179,8 +179,9 @@ what a hypertext is about: `Documentation/Editors` is Editors. Settings chooses 
   each heading with the subject's colour, the number of hypertexts in it and a triangle: a click on
   it, or Return, folds the group; Left and Right fold and open it from the keyboard. A hypertext takes
   two lines, its title over its author and version, with the file on the right.
-- **Two panes.** The subjects on the left (Bookmarks, Recently read, All hypertexts, each subject), the
-  hypertexts of the one chosen on the right, and under them what the row chosen is: its title, author
+- **Two panes.** The subjects on the left (Bookmarks, Recently read, All hypertexts, each subject),
+  scrolling on their own with a bar of AES objects at their right, so it takes the AES's look
+  (guidelines 5.1, `common/ui/panebar.c`); the hypertexts of the one chosen on the right, and under them what the row chosen is: its title, author
   and version, the file and its `.REF`, with **Open** and **Index**. Left or Tab goes to the subjects,
   Right, Tab or Return back to the rows. A window narrower than 56 characters shows the Outline.
 
