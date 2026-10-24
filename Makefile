@@ -318,13 +318,14 @@ binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC: binary/%: $(HATARI_DIR)/%
 	cp $< $@
 
 # the icon: src/gem/icon.h and icon16.h (the About box), docs/icon*.png,
-# and icons/ (EHYPVIEW.RSC and ICN files for desktop icons), committed;
+# and icons/ (EHYPVIEW.RSC, EHYPVNV.RSC for NVDI's own 256 colours, and
+# ICN files for desktop icons), committed;
 # a release carries them
 # the family's icons (guidelines 5.5): the lifebuoy, drawn in AERA-Atari
 # (common/icons/EHYPVIEW.txt), made into everything by common/tools/appicon.py
 icons: common/icons/EHYPVIEW.txt common/tools/appicon.py
-	python3 common/tools/appicon.py EHYPVIEW --rsc icons/EHYPVIEW.RSC --icn icons/EHYPVIEW.ICN \
-		--mask icons/EHYPVWMK.ICN --headers src/gem --docs docs
+	python3 common/tools/appicon.py EHYPVIEW --rsc icons/EHYPVIEW.RSC --rscnv icons/EHYPVNV.RSC \
+		--icn icons/EHYPVIEW.ICN --mask icons/EHYPVWMK.ICN --headers src/gem --docs docs
 
 # the help file, EHYPVIEW.HYP, from docs/GUIDE.md with the family's front
 # page (docs/front.json, common/tools/helpfront.py), and EHYPVIEW.REF, the
@@ -394,7 +395,7 @@ hatari-test: atari $(HOST)/ehvcheck
 # a release's files: each one in dist/, and all of them in
 # dist/EHYPVIEW-x.y.zip (the icons in icons/), for the release workflow
 DIST    := binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPVIEW.HYP binary/EHYPVIEW.REF
-ICONS   := icons/EHYPVIEW.RSC icons/EHYPVIEW.ICN icons/EHYPVWMK.ICN
+ICONS   := icons/EHYPVIEW.RSC icons/EHYPVNV.RSC icons/EHYPVIEW.ICN icons/EHYPVWMK.ICN
 dist: atari help
 	@$(HYPCHECK)
 	rm -rf dist

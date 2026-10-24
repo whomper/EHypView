@@ -46,7 +46,7 @@ each file on its own, and all of them together in `EHYPVIEW-x.y.zip`.
 | `EHYPVIEW.PRG` | the viewer as a program, with a menu bar |
 | `EHYPVIEW.ACC` | the same viewer as a desk accessory (one program under two names) |
 | `EHYPVIEW.HYP`, `EHYPVIEW.REF` | the user guide (and its index for ST-Guide) |
-| `EHYPVIEW.RSC`, `EHYPVIEW.ICN`, `EHYPVWMK.ICN` | the desktop icon, in the zip's `icons/` folder (see [The desktop icon](#the-desktop-icon)) |
+| `EHYPVIEW.RSC`, `EHYPVNV.RSC`, `EHYPVIEW.ICN`, `EHYPVWMK.ICN` | the desktop icon, in the zip's `icons/` folder (see [The desktop icon](#the-desktop-icon)) |
 | `EHYPVIEW-x.y.zip` | all of them |
 
 1. Copy `EHYPVIEW.PRG` into any folder and start it. It keeps its index (`EHYPVIEW.IDX`), its list
@@ -309,6 +309,13 @@ icon (G_CICON) in black and white, 16 and 256 colours, each with its mask and it
 copy them into `DESKICON.RSC` / `DESKCICN.RSC` with a resource editor (Interface, ORCS, RSM...), or
 use it as it is in Thing or Teradesk. `EHYPVIEW.ICN` and `EHYPVWMK.ICN` are the image and its mask in
 ICN text format.
+
+Which RSC to take: the desktop draws an icon's pixels straight as colour registers, and NVDI's own
+256 colours are not TOS's.
+
+- `EHYPVIEW.RSC` under TOS, EmuTOS, or NVDI with TOS's palette loaded (COLORVDI.CPX);
+- `EHYPVNV.RSC` under NVDI with its own palette: the same icon, its 256-colour image on NVDI's
+  colours.
 
 ## Building
 
