@@ -179,7 +179,9 @@ holds, on two pages. OK keeps the changes, Cancel (or Esc, or Undo) forgets them
   you open it, or a program asks it for a page), **At start**, **After a minute** or **After 5
   minutes**. It takes effect at the next start. The program looks as it starts. Under it,
   EHypView's folder: where the library's index (`EHYPVIEW.IDX`) and the fonts measured
-  (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` was started from.
+  (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` was started from. Last, **3D dialogs**: where the system
+  draws dialogs in 3D (TOS 4, MagiC, N.AES, XaAES), EHypView's dialogs and alerts are in 3D; untick
+  it for the flat look. It is greyed where the system has no 3D.
 - **Library:** its layout, **Outline** or **Two panes** (see [the library](#the-library)); up to
   three more folders to look for hypertexts in, each with its subfolders. A folder's field holds
   a path of up to 128 characters, more than it shows: it scrolls as you type, the cursor keys
@@ -263,6 +265,7 @@ keeps the notes, and anything it doesn't know, when it writes the file. [Setting
 | `FOLDER=` | EHypView's folder, for `EHYPVIEW.IDX` and `EHYPVIEW.FNT`: the program writes the folder it was started from |
 | `START=` | when the accessory looks through the library: `opened`, `now`, or seconds after boot |
 | `LIBRARY=` | the library's layout: `outline` or `panes` |
+| `DIALOGS3D=` | `1`: dialogs in 3D where the system draws them; `0`: flat |
 | `PATHS=` | more folders to look in, between `;` |
 | `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
 | `PAGEKB=` | the part of it its pages needed at the most, in KB: grows when a viewer window closes having needed more |

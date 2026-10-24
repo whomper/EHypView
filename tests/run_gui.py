@@ -950,6 +950,56 @@ def st_field():
     return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["PATHS=" + LONG])
 
 
+# the dialogs' look (guidelines 5.6): where the AES draws 3D (TOS 4) the
+# Settings tick turns it off, kept as DIALOGS3D=0, and the next dialogs
+# are flat; on TOS 1 to 3 and EmuTOS the tick is greyed and a click
+# leaves it. The screenshots show Settings, the Font dialog and an alert
+# each way (look-01, -03, -06; look-10, -12, -15)
+SET_3D = (321, 334)
+
+
+def look_off(rig):
+    """the tick clicked, then OK: 0 where the AES has 3D, else 1 still"""
+    want = "1" if "settings-look no-3d" in rig.events() else "0"
+    in_settings(("click",) + SET_3D)(rig)
+    rig.press(RETURN)
+    return rig.wait_for("settings DIALOGS3D " + want)
+
+
+LOOK_STEPS = [
+    ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
+    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *", "settings-look *"]),
+    ([ESC], ["dialog-closed settings cancel"]),
+    ([("ctrl+shift", F)], ["dialog font"]),
+    ([ESC], ["dialog-closed font cancel"]),
+    ([("ctrl", L)], ["library *"]),
+    ([HELP], ["alert no-guide"]),                       # the library's Help: no EHYPVIEW.HYP here
+    ([RETURN, ("ctrl", W)], []),
+    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
+    (look_off, []),
+    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *", "settings-look *"]),
+    ([ESC], ["dialog-closed settings cancel"]),
+    ([("ctrl+shift", F)], ["dialog font"]),
+    ([ESC], ["dialog-closed font cancel"]),
+    ([("ctrl", L)], ["library *"]),
+    ([HELP], ["alert no-guide"]),
+    ([RETURN, ("ctrl", Q)], ["quit"]),
+]
+
+
+def look():
+    d = copy_dir("look", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
+    xvfb = start_xvfb()
+    try:
+        ok = run_scenario("look", d, LOOK_STEPS, auto=LAUNCH, windowed=True)
+    finally:
+        xvfb.terminate()
+    with open(os.path.join(OUT, "look.log"), errors="replace") as f:
+        flat = "EHV settings-look no-3d" in f.read()
+    print("      the AES %s" % ("draws no 3D: the tick greyed" if flat else "draws 3D"))
+    return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["DIALOGS3D=%d" % flat])
+
+
 # the README's pictures (make shots): the family's guides from their latest
 # releases and EHypView's own in C:\\GUIDES, on the Falcon; each step's
 # screenshot named in SHOT_FILES goes to docs/
@@ -1046,6 +1096,8 @@ def main():
         return 0 if shots() else 1
     if sys.argv[3:] == ["stfield"]:                 # the ST's long field alone
         return 0 if st_field() else 1
+    if sys.argv[3:] == ["look"]:                    # the dialogs' look alone (5.6)
+        return 0 if look() else 1
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
         print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "accnvdi")).describe())
         return 0 if acc_nvdi() else 1
@@ -1085,6 +1137,7 @@ def main():
             ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
                                   ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG, "LIBRARY=panes"])
             ok = ok and st_field()
+            ok = ok and look()
         else:
             print("skip  mouse: needs Xvfb and xdotool")
     if ok:

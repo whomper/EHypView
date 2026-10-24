@@ -8,7 +8,9 @@
  * (common/ui/dialog.c), so Esc and Undo are Cancel (3.5).
  *
  *   General   START=: when the accessory looks through the library;
- *             FOLDER=, shown: where the index is kept
+ *             FOLDER=, shown: where the index is kept;
+ *             DIALOGS3D=: the 3D dialogs tick (5.6), greyed where the
+ *             AES draws no 3D
  *   Library   LIBRARY=: its layout, Outline or Two panes;
  *             PATHS=: folders to look in as well as ST-GUIDE.INF's
  *
@@ -192,7 +194,8 @@ static void show_page(short p, int draw)
 	}
 }
 
-static short o_start, o_layout, o_ok, o_cancel;
+static short o_start, o_layout, o_3d, o_ok, o_cancel;
+static int look_3d, look_was;          /* DIALOGS3D=, and as the file had it */
 static char folder_text[PLEN + 1];
 
 static void build(const char *folder)
@@ -236,6 +239,9 @@ static void build(const char *folder)
 	d_text(SX + 2, (short) (10 | (gap << 8)), folder_text);
 	d_text(SX, (short) (11 | (gap << 8)), "keeps the library's index, EHYPVIEW.IDX,");
 	d_text(SX, (short) (12 | (gap << 8)), "and the fonts measured, EHYPVIEW.FNT.");
+	d_text(SX, 14, "Look:");
+	o_3d = d_add(G_BUTTON, SELECTABLE, (short) ((look_3d ? SELECTED : 0) | (dlg_3d_ok() ? 0 : DISABLED)),
+		     (long) "3D dialogs", SX + 7, 14, 14, 1);
 	for (i = from; i < nobj; i++)
 		page_of[i] = 1;
 
@@ -264,6 +270,7 @@ static void build(const char *folder)
 	tree[nobj - 1].ob_flags |= LASTOB;
 	for (i = 0; i < nobj; i++)
 		rsrc_obfix(tree, i);
+	dlg_3d(tree);
 	for (k = 0; k < NPATH; k++)
 		lf_init(&path_field[k], tree, o_path[k], paths[k], PCAP, 0);
 	show_page(1, 0);
@@ -399,7 +406,13 @@ int settings_dialog(const char *inf_path, const char *folder)
 			snprintf(paths[k], sizeof(paths[k]), "%s", (unsigned int) k < n ? list[k] : "");
 		inf_free_list(list, n);
 	}
+	{
+		const char *v = inf != NULL ? inf_get(inf, "DIALOGS3D") : NULL;
+
+		look_3d = v == NULL || atoi(v) != 0;
+	}
 	inf_free(inf);
+	look_was = look_3d;
 	start_was = start_sel;
 	layout_was = layout_sel;
 	paths_join(was, sizeof(was));
@@ -416,6 +429,7 @@ int settings_dialog(const char *inf_path, const char *folder)
 		sprintf(at, "%d %d", x, y);
 		log_event("dialog", "settings", at);
 	}
+	log_event("settings-look", !dlg_3d_ok() ? "no-3d" : look_3d ? "3d" : "flat", NULL);
 	for (;;)
 	{
 		r = (short) (dlg_do(tree, 0, o_cancel) & 0x7fff);
@@ -450,6 +464,7 @@ int settings_dialog(const char *inf_path, const char *folder)
 	lf_forget(tree);
 	wind_update(2);                    /* END_MCTRL */
 	wind_update(END_UPDATE);
+	look_3d = (tree[o_3d].ob_state & SELECTED) != 0;
 	tree[r].ob_state &= (unsigned short) ~SELECTED;
 	log_event("dialog-closed", "settings", r == o_ok ? "ok" : "cancel");
 	if (r != o_ok)
@@ -479,5 +494,11 @@ int settings_dialog(const char *inf_path, const char *folder)
 		changed |= SETTINGS_PATHS;
 	}
 	log_event("settings", "PATHS", now);
+	if (look_3d != look_was)
+	{
+		settings_put("DIALOGS3D", look_3d ? "1" : "0", dialogs3d_note);	/* and dlg_3d_on with it */
+		changed |= SETTINGS_LOOK;
+	}
+	log_event("settings", "DIALOGS3D", look_3d ? "1" : "0");
 	return changed;
 }
