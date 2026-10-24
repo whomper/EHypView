@@ -183,8 +183,10 @@ static void show_page(short p, int draw)
 			tree[i].ob_flags &= (unsigned short) ~EDITABLE;
 		}
 	}
+	/* the chosen page in a black bar, as the band (never SELECTED: in
+	   3D the AES only inverts the grey, guidelines 5.6) */
 	for (i = 1; i <= 2; i++)
-		tree[page_tab[i]].ob_state = i == p ? SELECTED : 0;
+		((TEDINFO *) tree[page_tab[i]].ob_spec)->te_color = i == p ? 0x1071 : 0x1180;
 	if (draw)
 	{
 		short x, y;

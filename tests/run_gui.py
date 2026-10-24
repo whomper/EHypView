@@ -954,8 +954,8 @@ def st_field():
 # EmuTOS in colour) the Settings tick turns it off, kept as DIALOGS3D=0,
 # and the next dialogs are flat; on TOS 1 to 3 (and EmuTOS in fewer
 # colours) the tick is greyed and a click leaves it. The screenshots show
-# Settings, the Font dialog and an alert each way (look-01, -03, -06;
-# look-10, -12, -15)
+# Settings' two pages, the Font dialog and an alert each way (look-01,
+# -02, -04, -07; look-11, -12, -14, -17)
 SET_3D = (321, 334)
 
 
@@ -970,6 +970,7 @@ def look_off(rig):
 LOOK_STEPS = [
     ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *", "settings-look *"]),
+    (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
     ([ESC], ["dialog-closed settings cancel"]),
     ([("ctrl+shift", F)], ["dialog font"]),
     ([ESC], ["dialog-closed font cancel"]),
@@ -979,6 +980,7 @@ LOOK_STEPS = [
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
     (look_off, []),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *", "settings-look *"]),
+    (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
     ([ESC], ["dialog-closed settings cancel"]),
     ([("ctrl+shift", F)], ["dialog font"]),
     ([ESC], ["dialog-closed font cancel"]),
