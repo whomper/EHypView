@@ -2469,7 +2469,7 @@ static void message(short *msg)
 /* EHYPVIEW.INF: in the boot drive's root, where the accessory finds  */
 /* it too; FOLDER= says where the rest is (the AERA guidelines, 6.1)  */
 
-const char dialogs3d_note[] = "the dialogs' look: 1, 3D where the AES draws it (TOS 4, MagiC, N.AES, XaAES); "
+const char dialogs3d_note[] = "the dialogs' look: 1, 3D where the AES draws it (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour); "
 	"0, flat everywhere (Settings, 3D dialogs)";
 
 static const char inf_head[] =

@@ -179,9 +179,9 @@ holds, on two pages. OK keeps the changes, Cancel (or Esc, or Undo) forgets them
   you open it, or a program asks it for a page), **At start**, **After a minute** or **After 5
   minutes**. It takes effect at the next start. The program looks as it starts. Under it,
   EHypView's folder: where the library's index (`EHYPVIEW.IDX`) and the fonts measured
-  (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` was started from. Last, **3D dialogs**: where the system
-  draws dialogs in 3D (TOS 4, MagiC, N.AES, XaAES), EHypView's dialogs and alerts are in 3D; untick
-  it for the flat look. It is greyed where the system has no 3D.
+  (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` was started from. Last, **3D dialogs**:
+  where the system draws dialogs in 3D (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour), EHypView's
+  dialogs and alerts are in 3D; untick it for the flat look. It is greyed where the system has no 3D.
 - **Library:** its layout, **Outline** or **Two panes** (see [the library](#the-library)); up to
   three more folders to look for hypertexts in, each with its subfolders. A folder's field holds
   a path of up to 128 characters, more than it shows: it scrolls as you type, the cursor keys
