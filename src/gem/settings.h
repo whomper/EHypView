@@ -9,6 +9,7 @@
 #define SETTINGS_START 1               /* START= changed */
 #define SETTINGS_PATHS 2               /* PATHS= changed: look through the library again */
 #define SETTINGS_LAYOUT 4              /* LIBRARY= changed: the library's layout */
+#define SETTINGS_LOOK 8                /* DIALOGS3D= changed (guidelines 5.6) */
 
 /*
  * Settings... (^,): inf_path is EHYPVIEW.INF, folder EHypView's folder
@@ -16,5 +17,8 @@
  * SETTINGS_* of what changed, 0 for Cancel (Esc, Undo) or nothing.
  */
 int settings_dialog(const char *inf_path, const char *folder);
+
+/* DIALOGS3D='s note in EHYPVIEW.INF */
+extern const char dialogs3d_note[];
 
 #endif

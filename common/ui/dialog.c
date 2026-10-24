@@ -218,10 +218,98 @@ static void trace(OBJECT *tree)
 #define trace(tree) ((void)0)
 #endif
 
+#define FL3DIND 0x0200
+#define FL3DBAK 0x0400
+#define FL3DACT 0x0600
+#define FL3DMASK 0x0600
+
+int dlg_3d_ok(void)
+{
+	static int ok = -1;
+	short v, a, b, c, d;
+	if (ok < 0) {
+		v = aes_version();
+		ok = v >= 0x0340;
+		/* appl_getinfo(13): 3D objects; asked only where it exists (an
+		   AES 4, or ?AGI): EmuTOS's hangs */
+		if (ok && (v >= 0x0400 || get_cookie(0x3F414749L)) && appl_getinfo(13, &a, &b, &c, &d))
+			ok = a != 0;
+	}
+	return ok;
+}
+
+int dlg_3d_on = 1;
+
+/* the object that holds i (objc_parent's way: along its brothers to the
+   one whose last child it is) */
+static short parent_of(OBJECT *tree, short i)
+{
+	short p;
+	for (;;) {
+		p = tree[i].ob_next;
+		if (p < 0 || tree[p].ob_tail == i)
+			return p;
+		i = p;
+	}
+}
+
+/* a white box with a frame, not the dialog's own: a list or a text area
+   (EFTP's Sites, EMail's signature), which stays white in 3D, as fields
+   and the Font dialog's lists do, and so does what is in it */
+static int is_well(OBJECT *tree, short i)
+{
+	long spec = tree[i].ob_spec;
+	return i > 0 && (tree[i].ob_type & 0xff) == G_BOX && (signed char)(spec >> 16) != 0 &&
+	       ((spec & 0x70) == 0 || (spec & 0x0f) == 0);
+}
+
+/* a G_BOXTEXT or G_BOX with a frame */
+static int framed(OBJECT *tree, short i)
+{
+	short t = tree[i].ob_type & 0xff;
+	if (t == G_BOXTEXT)
+		return ((TEDINFO *)tree[i].ob_spec)->te_thickness != 0;
+	return t == G_BOX && (signed char)(tree[i].ob_spec >> 16) != 0;
+}
+
+static int in_well(OBJECT *tree, short i)
+{
+	for (i = parent_of(tree, i); i > 0; i = parent_of(tree, i))
+		if (is_well(tree, i))
+			return 1;
+	return 0;
+}
+
+void dlg_3d(OBJECT *tree)
+{
+	short i, t, f;
+	if (!dlg_3d_ok())
+		return;
+	for (i = 0;; i++) {
+		t = tree[i].ob_type & 0xff;
+		f = tree[i].ob_flags & ~FL3DMASK;
+		if (!dlg_3d_on)		/* flat, as asked (the setting) */
+			t = -1;
+		/* buttons, and what is clicked to act or to choose (a pop-up, an
+		   arrow box), out of a list, raised as the AES's buttons; a box
+		   only with a frame (a pop-up has one: a page in a sidebar has
+		   none and stays on the background; EHypView) */
+		if (t == G_BUTTON ||
+		    (t >= 0 && (t == G_BOXCHAR || framed(tree, i)) && (f & (EXIT | TOUCHEXIT)) && !in_well(tree, i)))
+			f |= (f & (EXIT | TOUCHEXIT)) && !(f & RBUTTON) ? FL3DACT : FL3DIND;
+		else if (t >= 0 && t != G_FTEXT && t != G_FBOXTEXT && (i == 0 || (!is_well(tree, i) && !in_well(tree, i))))
+			f |= FL3DBAK;		/* the box, its text, its pictures */
+		tree[i].ob_flags = f;
+		if (tree[i].ob_flags & LASTOB)
+			break;
+	}
+}
+
 static short modal(OBJECT *tree, short start, short cancel, int save)
 {
 	short x, y, w, h, r;
 	SAVED s;
+	dlg_3d(tree);
 	wind_update(BEG_UPDATE);
 	wind_update(BEG_MCTRL);
 	form_center(tree, &x, &y, &w, &h);

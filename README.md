@@ -229,7 +229,9 @@ on two pages, as EMail's and ECal's Settings do. OK keeps the changes; Cancel, E
 ![The Settings dialog over the library: the Library page, with the library's layout and the folders to look in as well, the first one longer than its field shows](docs/settings.png)
 
 - **General:** when the accessory looks through the library (`START=`): when first opened, at start,
-  after a minute or after 5 minutes; and EHypView's folder (`FOLDER=`), where the index is kept.
+  after a minute or after 5 minutes; EHypView's folder (`FOLDER=`), where the index is kept; and
+  **3D dialogs** (`DIALOGS3D=`, guidelines 5.6): dialogs and alerts in 3D where the AES draws them
+  (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour), flat when unticked, greyed where the AES has no 3D (`common/ui/dialog.c`).
 - **Library:** its layout, Outline or Two panes (`LIBRARY=`); up to three more folders to look for
   hypertexts in, with their subfolders (`PATHS=`). Each field holds a path of up to 128 characters,
   more than it shows (guidelines 5.4, `common/ui/field.c`). A folder that isn't there is asked about: **Keep**

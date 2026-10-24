@@ -44,6 +44,7 @@
 #include "popup.h"
 #include "aboutbox.h"
 #include "alert.h"
+#include "dialog.h"
 #include "iconify.h"
 #include "clip.h"
 #include "dd.h"
@@ -2468,6 +2469,9 @@ static void message(short *msg)
 /* EHYPVIEW.INF: in the boot drive's root, where the accessory finds  */
 /* it too; FOLDER= says where the rest is (the AERA guidelines, 6.1)  */
 
+const char dialogs3d_note[] = "the dialogs' look: 1, 3D where the AES draws it (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour); "
+	"0, flat everywhere (Settings, 3D dialogs)";
+
 static const char inf_head[] =
 	"; EHYPVIEW.INF: EHypView's settings, the program's and the accessory's.\r\n"
 	"; A line starting with ';' is a note. EHypView keeps the notes, and\r\n"
@@ -2484,10 +2488,15 @@ static inf_file *own_inf;
 
 static void own_set(char *text)
 {
+	const char *v;
+
 	free(own_text);
 	inf_free(own_inf);
 	own_text = text;
 	own_inf = text != NULL ? inf_parse(text, NULL) : NULL;
+	/* DIALOGS3D= (guidelines 5.6): the next dialog follows it */
+	v = own_inf != NULL ? inf_get(own_inf, "DIALOGS3D") : NULL;
+	dlg_3d_on = v == NULL || atoi(v) != 0;
 }
 
 static void own_reload(void)
@@ -2690,6 +2699,8 @@ static void find_home(void)
 		if (own_inf == NULL || inf_get(own_inf, "START") == NULL)
 			settings_put("START", "opened", "when the accessory looks through the library: opened (when "
 				     "first opened or asked for a page), now (at boot), or seconds after boot");
+		if (own_inf == NULL || inf_get(own_inf, "DIALOGS3D") == NULL)
+			settings_put("DIALOGS3D", "1", dialogs3d_note);
 		return;
 	}
 	own_reload();

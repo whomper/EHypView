@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""All three AERA accessories at once (Erez, 19 Oct 2026): ECal, EContact
-and EHypView, their latest releases (getrelease.py), loaded together on a
-4 MB machine, as on Erez's own:
+"""All the AERA accessories at once (Erez, 19 Oct 2026): ECal, EContact
+and EHypView, and EMail's EMail check (EMAILCHK.ACC, from EMail's release,
+--accs ...,EMailCheck), their latest releases (getrelease.py), loaded
+together on a 4 MB machine, as on Erez's own:
 
     common/tests/family/acc_all.py WORK [MACHINE] [--nvdi [--font]] [--display :N] [--use FILE]...
                                    [--accs ECal,EContact] [--prg EMail]
 
 MACHINE is ST (4 MB, TOS 1.04: ECALST.ACC and ECONTST.ACC, the ST
-editions) or Falcon-4 (4 MB, no TT RAM, TOS 4.04: ECAL.ACC and
+editions, while a release has them; ECAL.ACC and ECONTACT.ACC when it
+doesn't, or when --use gives them, as from TLS.OVL on) or Falcon-4 (4 MB, no TT RAM, TOS 4.04: ECAL.ACC and
 ECONTACT.ACC), ST by default; EHYPVIEW.ACC runs on both. --nvdi boots
 with Erez's NVDI (machines.py, m.nvdi()); --font gives EHypView one of
 his Bitstream fonts (FONT=Courier 10 Pitch, 10 pt), loaded at its boot. --use FILE puts a
@@ -84,13 +86,31 @@ for d in (hd, shots, rel):
 m = machines.Machine(machine + ("" if ":" in machine or not st else ":mono"), hd)
 if nvdi and not m.nvdi():
     sys.exit("acc_all: no NVDI here (machines.py, AERA_NVDI)")
-want = {"ECal": "ECALST.ACC" if st else "ECAL.ACC",
-        "EContact": "ECONTST.ACC" if st else "ECONTACT.ACC",
-        "EHypView": "EHYPVIEW.ACC"}
-want = {a: f for a, f in want.items() if a in accs}
-for app, f in want.items():
-    subprocess.run([sys.executable, os.path.join(TOOLS, "getrelease.py"), app, rel, f], check=True,
-                   stdout=subprocess.DEVNULL)
+def get(app, names):
+    """the release's files that --use doesn't give; True if it has them"""
+    need = [n for n in names if n not in use]
+    if not need:
+        return True
+    return subprocess.run([sys.executable, os.path.join(TOOLS, "getrelease.py"), app, rel] + need,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+
+
+# on an ST the ST edition, while a release has one: from TLS.OVL on (the
+# guidelines, 7.4) the one ACC runs on every Atari
+want = {"ECal": ("ECALST.ACC", "ECAL.ACC"), "EContact": ("ECONTST.ACC", "ECONTACT.ACC"),
+        "EHypView": ("EHYPVIEW.ACC", "EHYPVIEW.ACC"), "EMailCheck": ("EMAILCHK.ACC", "EMAILCHK.ACC")}
+# the release an accessory comes in, where it isn't its own app's name
+repo = {"EMailCheck": "EMail"}
+# accessories whose Desk entry shows an alert rather than a window: Esc
+# closes it again, each round (EMail check's [Check now|About|OK])
+alerts = {"EMailCheck"}
+want = {a: (f[0] if st and f[1] not in use else f[1], f[1]) for a, f in want.items() if a in accs}
+for app, (f, one) in list(want.items()):
+    if not get(repo.get(app, app), [f]):
+        if f == one or not get(repo.get(app, app), [one]):
+            sys.exit("acc_all: %s's release has no %s" % (app, f))
+        f = one
+    want[app] = f
     shutil.copy(use.get(f, os.path.join(rel, f)), os.path.join(hd, f))
 # ECal and EContact as set up already (their folders, named in C:\NAME.INF),
 # so that no first-time question holds the Desk menu
@@ -98,6 +118,12 @@ for name in ("ECAL", "ECONTACT"):
     os.makedirs(os.path.join(hd, name))
     with open(os.path.join(hd, name + ".INF"), "w", newline="") as f:
         f.write("[OPTIONS]\r\nFOLDER=C:\\%s\r\n" % name)
+if "EMailCheck" in want:
+    # EMail check told where EMail is (C:\EMAIL, --prg EMail's folder), so
+    # that its first-time question doesn't hold the Desk menu
+    os.makedirs(os.path.join(hd, "EMAIL"), exist_ok=True)
+    with open(os.path.join(hd, "EMAILCHK.INF"), "w", newline="") as f:
+        f.write("; EMail's folder, where EMAIL.PRG and EMAIL.INF are\r\nFOLDER=C:\\EMAIL\r\n\r\n")
 if font:
     with open(os.path.join(hd, "EHYPVIEW.INF"), "w", newline="") as f:
         f.write("FOLDER=C:\\\r\nFONT=Courier 10 Pitch\r\nPOINT=10\r\n")
@@ -107,14 +133,15 @@ if prg:
     # (EWeb:EWEBST.PRG:EWEB.FNT on an ST); else APP.PRG alone
     parts = prg.split(":")
     prg, pf, more = (parts[0], parts[1], parts[2:]) if len(parts) > 1 else (prg, prg.upper() + ".PRG", [])
-    subprocess.run([sys.executable, os.path.join(TOOLS, "getrelease.py"), prg, rel, pf] + more, check=True,
-                   stdout=subprocess.DEVNULL)
+    if not get(prg, [pf] + more):
+        sys.exit("acc_all: %s's release has no %s" % (prg, " ".join(n for n in [pf] + more if n not in use)))
     os.makedirs(os.path.join(hd, prg.upper()), exist_ok=True)
     shutil.copy(use.get(pf, os.path.join(rel, pf)), os.path.join(hd, prg.upper(), pf))
     for f in more:
         shutil.copy(use.get(f, os.path.join(rel, f)), os.path.join(hd, prg.upper(), f))
     auto = ["--auto", "C:\\%s\\%s" % (prg.upper(), pf)]
-versions = ", ".join("%s %s" % (a, use[f] if f in use else open(os.path.join(rel, a.upper() + ".VERSION")).read().strip())
+versions = ", ".join("%s %s" % (a, use[f] if f in use else
+                                 open(os.path.join(rel, repo.get(a, a).upper() + ".VERSION")).read().strip())
                      for a, f in want.items())
 if prg:
     versions += ", %s %s in front" % (prg, use[pf] if pf in use else
@@ -190,18 +217,51 @@ try:
             print("NOTE  %s couldn't open its screen (v_opnvwk 0): the accessories hold the memory; "
                   "its own alert, see 0-desktop.png" % prg)
     if prg and prg.upper() == "EMAIL":
-        # a first start's welcome (EMail's "Let's set up your mail account")
-        # waits for OK, then the account dialog: Esc declines (only EMail's:
-        # in EFTP, Return opens the drive row A:, and TOS asks for a disk)
-        xdo("key", "Return")
-        time.sleep(3)
-        xdo("key", "Escape")
-        time.sleep(3)
+        # a first start's welcome (EMail's "Let's set up your mail account"),
+        # then the account dialog: Esc closes each (only EMail's: in EFTP,
+        # Return opens the drive row A:, and TOS asks for a disk). On a slow
+        # machine (a 4 MB Falcon with NVDI) each came later than the keys
+        # were sent, and a Return on the dialog would save an empty account:
+        # Esc once the screen is still, again until two Escs change nothing
+        def still(name, most=10):
+            prev = shot(name)
+            for _ in range(most):
+                time.sleep(2)
+                cur = shot(name + "-next")
+                if differs(prev, cur) == 0:
+                    return cur
+                prev = shutil.copy(cur, os.path.join(shots, name + ".png"))
+            return prev
+        idle = 0
+        for k in range(6):
+            before = still("0a-%d" % k)
+            xdo("key", "Escape")
+            time.sleep(3)
+            idle = idle + 1 if differs(before, still("0a-%d-esc" % k)) < 500 else 0
+            if idle == 2:
+                break
         desk = shot("0b-%s-ready" % prg.lower())
     click(30, 8)                                     # the Desk menu (the first title's middle:
     time.sleep(1)                                    # EWeb's "EWeb" starts past x 18)
     menu = shot("1-desk-menu")
     check(differs(desk, menu) > 500, "the Desk menu opens (see 1-desk-menu.png: %d accessories)" % len(want))
+    alert_rows = set()
+    if alerts & set(want):
+        # which rows open an alert: the TOS orders the Desk menu as it
+        # likes (TOS 1.04 the last loaded first), so EMail check's row is
+        # told by its name, the longest ("  EMail check")
+        from PIL import Image
+        im = Image.open(menu).convert("L")
+
+        def extent(i):
+            # (its row's text, inside the menu's box: the longest name ends
+            # near x 120, the box's edge is past 160)
+            y0 = 64 + 16 * i
+            xs = [x for x in range(30, 160) for y in range(y0 - 6, y0 + 3) if im.getpixel((x, y)) < 100]
+            return max(xs) if xs else 0
+        ext = [extent(i) for i in range(len(want))]
+        alert_rows = {ext.index(max(ext))}
+        print("note  EMail check's row in the Desk menu: %d (text to x %s)" % (min(alert_rows) + 1, ext), flush=True)
     click(300, 300)                                  # closed again
     time.sleep(1)
     for rnd in (1, 2):
@@ -217,7 +277,11 @@ try:
             time.sleep(8 if st else 5)
             after = shot("%d-%d-opened" % (rnd, i))
             n = differs(before, after)
-            if rnd == 1:            # a first start's welcome (EContact's) waits for OK,
+            if i in alert_rows:
+                xdo("key", "Escape")
+                time.sleep(2)
+                shot("%d-%d-closed" % (rnd, i))
+            elif rnd == 1:          # a first start's welcome (EContact's) waits for OK,
                 xdo("key", "Return")  # then offers to add an account: Esc declines
                 time.sleep(2)
                 xdo("key", "Escape")
@@ -227,7 +291,7 @@ try:
     if prg:
         # the accessories' windows closed (^W, the top one each time), then
         # the program quit: the desktop must come back
-        for i in range(len(want)):
+        for i in range(len(want) - len(alerts & set(want))):
             xdo("key", "ctrl+w")
             time.sleep(3)
         before = shot("8-accessories-closed")
