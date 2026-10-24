@@ -18,7 +18,11 @@
  *              the right and, under them, what the row chosen is, with
  *              Open and Index.  Left, Right and Tab go from one side to
  *              the other.  A window narrower than PANES_COLS characters
- *              (an ST in low resolution) shows the Outline.
+ *              (an ST in low resolution) shows the Outline.  The
+ *              Subjects scroll on their own, with the family's pane
+ *              bar of AES objects at their right (libbar.c,
+ *              common/ui/panebar.c; the guidelines 5.1); the rest
+ *              scrolls as one, with the window's sliders.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +38,7 @@
 #include "av.h"
 #include "clip.h"
 #include "fsys.h"
+#include "libbar.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
 #define MARGIN 4
@@ -140,9 +145,16 @@ static short strip_h(void)
 	return chips() > 0 ? (short) (ch + 14) : 0;
 }
 
+/* the Subjects pane, its bar at its right included */
 static short pane_w(void)
 {
-	return panes() ? (short) (PANE_COLS * cw + 2 * MARGIN) : 0;
+	return panes() ? (short) (PANE_COLS * cw + 2 * MARGIN + libbar_width()) : 0;
+}
+
+/* its lines' part: the pane less the bar */
+static short pane_text_w(void)
+{
+	return (short) (pane_w() - libbar_width());
 }
 
 static short pane_line_h(void)
@@ -176,9 +188,32 @@ static long pane_last(void)
 
 	work_area(&wx, &wy, &ww, &wh);
 	for (i = pane_top; i < (long) lib.npanes; i++)
-		if (pane_y(i) + pane_line_h() > wy + wh - ch - 4)
+		if (pane_y(i) + pane_line_h() > wy + wh - 4)
 			break;
 	return i - 1 >= pane_top ? i - 1 : pane_top;
+}
+
+/* the last first line: the one that shows the last line at the bottom
+   (pane_y's way: the rule before All hypertexts when it isn't the top) */
+static long pane_max_top(void)
+{
+	short wx, wy, ww, wh, room;
+	long t, used = 0, all = -1;
+
+	work_area(&wx, &wy, &ww, &wh);
+	room = (short) (wh - 4 - header_h() - ch - 8);
+	for (t = 0; t < (long) lib.npanes; t++)
+		if (lib.panes[t].kind == PANE_ALL)
+			all = t;
+	for (t = (long) lib.npanes; t > 0; t--)
+	{
+		used += pane_line_h();
+		if (used + (all > t - 1 ? 6 : 0) > room)
+			break;
+	}
+	if (t >= (long) lib.npanes)
+		t = (long) lib.npanes - 1;     /* not even one line fits */
+	return t > 0 ? t : 0;
 }
 
 static void pane_clamp(void)
@@ -720,25 +755,45 @@ static void draw_detail(short wx, short ww, short y)
 
 /* ---------------------------------------------------------------- */
 
-/* the Subjects pane */
-static void draw_panes(short wx, short wy, short wh)
+/* the Subjects pane's bar where the window is now */
+static void bar_place(void)
 {
-	short pw = pane_w(), y = (short) (wy + header_h()), lh = pane_line_h();
+	short wx, wy, ww, wh, y;
+
+	work_area(&wx, &wy, &ww, &wh);
+	y = (short) (wy + header_h());
+	libbar_set((short) (wx + pane_text_w()), y, libbar_width(), (short) (wy + wh - y),
+		   (long) lib.npanes, pane_last() - pane_top + 1, pane_top);
+}
+
+/* the line chosen when the pane was drawn last: when it changed, the
+   pane goes to it; the bar scrolls the pane without choosing */
+static long pane_seen = -2;
+
+/* the Subjects pane, within the rectangle cx, cy, cw_, ch_ */
+static void draw_panes(short wx, short wy, short wh, short cx, short cy, short cw_, short ch_)
+{
+	short pw = pane_text_w(), y = (short) (wy + header_h()), lh = pane_line_h();
 	unsigned long i;
 
+	if (lib.pane != pane_seen)
+	{
+		pane_clamp();
+		pane_seen = lib.pane;
+	}
+	if (pane_top > pane_max_top())
+		pane_top = pane_max_top();     /* a taller window: no room left below */
 	fill(pane_ground(), wx, y, (short) (wx + pw - 1), (short) (wy + wh - 1));
-	fill(0, (short) (wx + pw + 1), y, (short) (wx + pw + 2), (short) (wy + wh - 1));
-	/* a double line beside it */
-	line_((short) (wx + pw), y, (short) (wx + pw), (short) (wy + wh - 1), 1);
-	line_((short) (wx + pw + 3), y, (short) (wx + pw + 3), (short) (wy + wh - 1), 1);
+	{
+		short bx = (short) (wx + pane_w());
+
+		fill(0, (short) (bx + 1), y, (short) (bx + 2), (short) (wy + wh - 1));
+		/* a double line beside it */
+		line_(bx, y, bx, (short) (wy + wh - 1), 1);
+		line_((short) (bx + 3), y, (short) (bx + 3), (short) (wy + wh - 1), 1);
+	}
 	put((short) (wx + MARGIN + cw / 2), (short) (y + 4), "Subjects", PANE_COLS, 1, 1);
-	pane_clamp();
-	/* more above, more below: arrows to click */
-	if (pane_top > 0)
-		put((short) (wx + pw - MARGIN - cw - cw / 2), (short) (y + 4), "\x01", 1, 1, 0);
-	if (pane_last() < (long) lib.npanes - 1)
-		put((short) (wx + pw - MARGIN - cw - cw / 2), (short) (wy + wh - ch - 2), "\x02", 1, 1, 0);
-	for (i = (unsigned long) pane_top; (long) i <= pane_last(); i++)
+	for (i = (unsigned long) pane_top; i < lib.npanes && (long) i <= pane_last(); i++)
 	{
 		const lib_pane *p = &lib.panes[i];
 		short color = 1, gx = (short) (wx + MARGIN + cw / 2 + (p->level ? 2 * cw : 0));    /* a part: under its subject */
@@ -776,6 +831,10 @@ static void draw_panes(short wx, short wy, short wh)
 		put((short) (gx + 2 * cw), (short) (y + 3), p->text, room, color, 0);
 		put_right((short) (wx + pw - MARGIN - cw / 2), (short) (y + 3), n, 8, color);
 	}
+	bar_place();
+	if (!libbar_draw(cx, cy, cw_, ch_))      /* too low for one: the pane's ground */
+		fill(pane_ground(), (short) (wx + pw), (short) (wy + header_h()), (short) (wx + pane_w() - 1),
+		     (short) (wy + wh - 1));
 }
 
 /* Continue: the pages read last, as buttons; where each is */
@@ -1018,7 +1077,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 		short hx = (short) (lx + MARGIN + cw / 2), hy = (short) (wy + header_h() + 4);
 
 		if (cx < wx + pane_w() + 4)
-			draw_panes(wx, wy, wh);
+			draw_panes(wx, wy, wh, cx, cy, cw_, ch_);
 		if (cy < ly)
 		{
 			char head[96];
@@ -1293,6 +1352,16 @@ void libwin_open(void)
 	}
 	log_event("library", n, NULL);
 	log_event("library-layout", panes() ? "panes" : "outline", NULL);
+	if (panes())
+	{
+		short x, y, w, h;
+		char at[32];
+
+		bar_place();
+		libbar_rect(&x, &y, &w, &h);
+		sprintf(at, "%d %d %d %d", x, y, w, h);
+		log_event("library-bar", at, NULL);
+	}
 }
 
 void libwin_close(void)
@@ -1493,6 +1562,37 @@ static void pane_moved(long before, long top_before)
 	refresh(R_LIST | R_DETAIL);
 }
 
+/* the bar: the Subjects scrolled to t first (the line chosen stays as
+   it is), the lines and the bar's slider drawn again; 0 when they were
+   there already */
+static int pane_goto(long t)
+{
+	long old = pane_top, m = pane_max_top();
+	short wx, wy, ww, wh, x, y, w, h;
+	char n[12];
+
+	if (t > m)
+		t = m;
+	if (t < 0)
+		t = 0;
+	if (t == old)
+		return 0;
+	pane_top = t;
+	work_area(&wx, &wy, &ww, &wh);
+	redraw(wx, (short) (wy + header_h()), pane_text_w(), (short) (wh - header_h()));
+	bar_place();
+	libbar_moved(old, &x, &y, &w, &h);
+	redraw(x, y, w, h);
+	sprintf(n, "%ld", t);
+	log_event("pane-top", n, NULL);
+	return 1;
+}
+
+static int pane_scroll(long n)
+{
+	return pane_goto(pane_top + n);
+}
+
 /* ^C ^X ^V: the search line (^C: the hypertext chosen, else the search) */
 void libwin_clip(int what)
 {
@@ -1659,40 +1759,21 @@ void libwin_click(short mx, short my)
 	}
 	if (panes() && mx < x + pane_w() + 4)
 	{
-		/* a line of the Subjects pane, or its arrows */
+		/* a line of the Subjects pane, or its bar */
 		long i, before = lib.pane, top_before = pane_top;
 
 		if (mx >= x + pane_w())
 			return;
-		if (mx >= x + pane_w() - MARGIN - 2 * cw)
+		bar_place();
+		if (libbar_hit(mx, my))
 		{
-			long page = pane_last() - pane_top + 1;
-
-			if (pane_top > 0 && my < y + header_h() + ch + 8)
-			{
-				pane_top = pane_top > page ? pane_top - page : 0;
-				lib_pane_select(&lib, pane_last());
-				if (lib.pane == before)
-					refresh(R_PANE);
-				pane_moved(before, -1);
-				return;
-			}
-			if (pane_last() < (long) lib.npanes - 1 && my >= y + h - ch - 4)
-			{
-				pane_top += page;
-				if (pane_top >= (long) lib.npanes)
-					pane_top = (long) lib.npanes - 1;
-				lib_pane_select(&lib, pane_top);
-				if (lib.pane == before)
-					refresh(R_PANE);
-				pane_moved(before, -1);
-				return;
-			}
+			libbar_click(mx, my, pane_scroll, pane_goto);
+			return;
 		}
-		for (i = pane_top; i <= pane_last(); i++)
+		for (i = pane_top; i < (long) lib.npanes && i <= pane_last(); i++)
 			if (my >= pane_y(i) && my < pane_y(i) + pane_line_h())
 				break;
-		if (i > pane_last())
+		if (i >= (long) lib.npanes || i > pane_last())
 			return;
 		if (lib.query[0] != '\0')
 		{

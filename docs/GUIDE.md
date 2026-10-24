@@ -109,8 +109,9 @@ nothing of what a hypertext is about: `Documentation/Editors` is Editors. It has
 **Two panes**:
 
 - **Subjects** on the left: Bookmarks, Recently read, All hypertexts, then each subject with its
-  colour and the number of hypertexts in it, its parts under it. The rows of the one chosen are on
-  the right: a subject's own, then each part's.
+  colour and the number of hypertexts in it, its parts under it. When there are more than fit, they
+  scroll with a bar of their own at their right, drawn by the system as the window's are. The rows
+  of the one chosen are on the right: a subject's own, then each part's.
 - **What you chose** is shown under the rows: the title, the author and version, the file and its
   `.REF`. **Open** opens it; **Index** opens its index page, when it has one.
 - **Keys:** Left or Tab goes to the subjects, where Up and Down choose one; Right, Tab or Return

@@ -1003,6 +1003,60 @@ def look():
     return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["DIALOGS3D=%d" % flat])
 
 
+# the Subjects pane's bar (guidelines 5.1: AES objects, common/ui/panebar.c):
+# twenty hypertexts, each its own subject, more than the pane shows; a
+# click on the bar's down arrow scrolls it a line, one on its track below
+# the slider a page, and the line chosen stays. Its screenshots show the
+# bar (panebar-01, after the scroll -03); run on ST:mono, Falcon:16 (3D,
+# and DIALOGS3D=0) and under XaAES for the hub
+def bar_click(where):
+    """a click on the bar ("library-bar X Y W H"): its down arrow, or
+    its track just above the down arrow"""
+    def step(rig):
+        at = [ev.split()[1:5] for ev in rig.events() if ev.startswith("library-bar ")]
+        if not at:
+            return False
+        x, y, w, h = (int(v) for v in at[-1])
+        skew = ST_SKEW if MACHINE.startswith("ST") else 0
+        rig.press(("click", x + w // 2 - skew, (y + h - w // 2 if where == "down" else y + h * 3 // 4) - skew))
+        return True
+    return step
+
+
+# on the ST in mono the Atari's pointer lands 19 pixels right of and below
+# where xdotool puts it in Hatari's window (measured: a click sent to
+# 60,180 came at 79,199), an arrow box's height; the bar's clicks allow
+# for it
+ST_SKEW = 19
+
+PANEBAR_STEPS = [
+    ([], ["library *", "library-layout panes", "library-bar *", "index 20 guides"]),
+    ([("home",), ("hover", 620, 380), ("still", 5)], []),   # (the pointers in step)
+    (bar_click("down"), ["pane-top 1"]),
+    (bar_click("track"), ["pane-top *"]),
+    ([("hover", 620, 380), ("still", 5)], []),
+    ([("ctrl", Q)], ["quit"]),
+]
+
+
+def panebar(look3d=1):
+    d = copy_dir("panebar", "PATHS=C:\\GUIDES\n", "; the layout\nLIBRARY=panes\n"
+                 "; the dialogs' look\nDIALOGS3D=%d\n" % look3d)
+    shutil.rmtree(os.path.join(d, "FIXT"))
+    os.makedirs(os.path.join(d, "GUIDES"))
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "colour.hyp"), "rb") as f:
+        hyp = f.read()
+    assert hyp.count(b"Test/EHypView") == 1
+    for i in range(20):
+        with open(os.path.join(d, "GUIDES", "S%02d.HYP" % i), "wb") as f:
+            f.write(hyp.replace(b"Test/EHypView", b"Sub%02d/EHypVie" % i))   # as long
+    xvfb = start_xvfb()
+    try:
+        return run_scenario("panebar", d, PANEBAR_STEPS, windowed=True)
+    finally:
+        xvfb.terminate()
+
+
 # the README's pictures (make shots): the family's guides from their latest
 # releases and EHypView's own in C:\\GUIDES, on the Falcon; each step's
 # screenshot named in SHOT_FILES goes to docs/
@@ -1101,6 +1155,8 @@ def main():
         return 0 if st_field() else 1
     if sys.argv[3:] == ["look"]:                    # the dialogs' look alone (5.6)
         return 0 if look() else 1
+    if sys.argv[3:4] == ["panebar"]:                # the Subjects pane's bar alone (5.1)
+        return 0 if panebar(int(sys.argv[4]) if sys.argv[4:] else 1) else 1
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
         print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "accnvdi")).describe())
         return 0 if acc_nvdi() else 1
@@ -1141,6 +1197,7 @@ def main():
                                   ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG, "LIBRARY=panes"])
             ok = ok and st_field()
             ok = ok and look()
+            ok = ok and panebar()
         else:
             print("skip  mouse: needs Xvfb and xdotool")
     if ok:
