@@ -191,7 +191,7 @@ static void show_page(short p, int draw)
 		dlg_draw(tree, 0);
 }
 
-static short o_start, o_layout, o_3d, o_ok, o_cancel;
+static short o_band, o_start, o_layout, o_3d, o_ok, o_cancel;
 static int look_3d, look_was;          /* DIALOGS3D=, and as the file had it */
 static char folder_text[PLEN + 1];
 
@@ -214,7 +214,7 @@ static void build(const char *folder)
 	tree[0].ob_height = H;
 
 	/* the band, the list of pages, a line between them and the page */
-	d_add(G_BOXTEXT, 0, 0, (long) d_ted(band, "", "", 0x1071), 0, 0, W, 1);
+	o_band = d_add(G_BOXTEXT, 0, 0, (long) d_ted(band, "", "", 0x1071), 0, 0, W, 1);
 	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short) (0 | (1 << 8)), H - 1);
 	page_tab[1] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(tab1, "", "", 0x1180),
 			    (short) (0 | (2 << 8)), 2, (short) ((SW - 1) | (6 << 8)), 1);
@@ -426,6 +426,7 @@ int settings_dialog(const char *inf_path, const char *folder)
 	/* over the screen on TOS and EmuTOS; on MiNT and MagiC a window of
 	   the AES's that can be moved (guidelines 3.5) */
 	dlg_name("Settings");
+	dlg_band(o_band);                  /* in a window its title bar names it */
 	dlg_open(tree, &x, &y, &w, &h);
 	{
 		char at[16];
