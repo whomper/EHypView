@@ -2964,18 +2964,12 @@ const char *index_busy(void)
 
 /* ---------------------------------------------------------------- */
 
-/* the command line of an application: length byte, then the text */
+/* the command line: the basepage's, or the ARGV words where MiNT and
+   MagiC pass it that way (the Help key of another app starting EHypView
+   there, guidelines 4.3; a .HYP double-clicked): common/atari/tos.c */
 static const char *command_line(void)
 {
-	static char arg[130];
-	const unsigned char *cmd = (const unsigned char *) _BasePage + 0x80;
-	int n = cmd[0] < 127 ? cmd[0] : 126;
-
-	memcpy(arg, cmd + 1, (size_t) n);
-	arg[n] = '\0';
-	while (n > 0 && (arg[n - 1] == ' ' || arg[n - 1] == '\r' || arg[n - 1] == '\n'))
-		arg[--n] = '\0';
-	return arg;
+	return cmd_line();
 }
 
 /* the program's buffer for writing the index in one go: TT RAM first

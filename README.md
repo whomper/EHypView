@@ -275,6 +275,10 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
   EHypView first, then ST-Guide and HypView. Any program or desktop (Thing, jinnee, Gemini) can hand
   it a hypertext and a page the same way, with the AV protocol's `VA_START`, or as ST-Guide is asked,
   with `AC_HELP`.
+  Under MiNT and MagiC, when no viewer runs, their Help key starts `EHYPVIEW.PRG` beside them with the
+  hypertext and page on its command line (`common/ui/help.c`), found by `FOLDER=` in `EHYPVIEW.INF`,
+  which the program writes: so it needs to have run once. EHypView reads its command line the ARGV
+  way too (`cmd_line()`, `common/atari/tos.c`), as MiNT and MagiC pass it.
 - **The clipboard.** ^C copies the page shown, as text, to the GEM clipboard (`SCRAP.TXT`); in the
   library ^C copies the hypertext chosen, and ^V and ^X paste into and cut the search.
 - **Drag and drop.** Under MultiTOS, MagiC or XaAES, a hypertext dragged onto EHypView's windows opens.

@@ -219,6 +219,8 @@ The font is chosen with **View > Font...**, and bookmarks from the Bookmarks men
   Help key when it runs (as an accessory, or as a program under MultiTOS or MagiC): they look for
   EHypView first, then ST-Guide and HypView. Any program or desktop can hand it a hypertext and a page the same way, with the AV protocol's `VA_START`, or as
   ST-Guide with `AC_HELP`.
+  Under MiNT and MagiC, when no viewer runs, their Help key starts EHYPVIEW.PRG beside them, on
+  the page asked for, once the program has run one time (it writes its folder into EHYPVIEW.INF).
 - **Drag and drop.** Under MultiTOS, MagiC or XaAES, a hypertext dragged onto EHypView's windows
   opens. The accessory tells the desktop about its windows, so Thing and the like can drop one on
   them under plain TOS too.
