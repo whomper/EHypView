@@ -188,12 +188,7 @@ static void show_page(short p, int draw)
 	for (i = 1; i <= 2; i++)
 		((TEDINFO *) tree[page_tab[i]].ob_spec)->te_color = i == p ? 0x1071 : 0x1180;
 	if (draw)
-	{
-		short x, y;
-
-		objc_offset(tree, 0, &x, &y);
-		objc_draw(tree, 0, 8, x, y, tree[0].ob_width, tree[0].ob_height);
-	}
+		dlg_draw(tree, 0);
 }
 
 static short o_start, o_layout, o_3d, o_ok, o_cancel;
@@ -278,6 +273,16 @@ static void build(const char *folder)
 	show_page(1, 0);
 }
 
+/* the dialog under a popup drawn again: in a window through the AES's
+   rectangles (it may have been moved, guidelines 3.5) */
+static void under_popup(void)
+{
+	if (dlg_in_window())
+		dlg_draw(tree, 0);
+	else
+		objc_draw(tree, 0, 8, popup_area.x, popup_area.y, popup_area.w, popup_area.h);
+}
+
 /* the popup of START= choices, below its button; the dialog under it
    drawn again */
 static void start_pick(void)
@@ -294,13 +299,12 @@ static void start_pick(void)
 	objc_offset(tree, o_start, &x, &y);
 	log_event("menu", "settings-start", NULL);
 	r = popup(x, (short) (y + tree[o_start].ob_height + 1), l, NSTART);
-	objc_draw(tree, 0, 8, popup_area.x, popup_area.y, popup_area.w, popup_area.h);
+	under_popup();
 	if (r < 0)
 		return;
 	start_sel = r;
 	start_show();
-	objc_offset(tree, o_start, &x, &y);
-	objc_draw(tree, o_start, 0, x - 1, y - 1, tree[o_start].ob_width + 2, tree[o_start].ob_height + 2);
+	dlg_draw(tree, o_start);
 	log_event("settings-start", start_val[r], NULL);
 }
 
@@ -319,13 +323,12 @@ static void layout_pick(void)
 	objc_offset(tree, o_layout, &x, &y);
 	log_event("menu", "settings-layout", NULL);
 	r = popup(x, (short) (y + tree[o_layout].ob_height + 1), l, NLAYOUT);
-	objc_draw(tree, 0, 8, popup_area.x, popup_area.y, popup_area.w, popup_area.h);
+	under_popup();
 	if (r < 0)
 		return;
 	layout_sel = r;
 	layout_show();
-	objc_offset(tree, o_layout, &x, &y);
-	objc_draw(tree, o_layout, 0, x - 1, y - 1, tree[o_layout].ob_width + 2, tree[o_layout].ob_height + 2);
+	dlg_draw(tree, o_layout);
 	log_event("settings-layout", layout_val[r], NULL);
 }
 
@@ -420,11 +423,10 @@ int settings_dialog(const char *inf_path, const char *folder)
 	paths_join(was, sizeof(was));
 	build(folder);
 
-	form_center(tree, &x, &y, &w, &h);
-	wind_update(BEG_UPDATE);
-	wind_update(3);                    /* BEG_MCTRL: the dialog keeps the mouse */
-	form_dial(FMD_START, x, y, w, h);
-	objc_draw(tree, 0, 8, x, y, w, h);
+	/* over the screen on TOS and EmuTOS; on MiNT and MagiC a window of
+	   the AES's that can be moved (guidelines 3.5) */
+	dlg_name("Settings");
+	dlg_open(tree, &x, &y, &w, &h);
 	{
 		char at[16];
 
@@ -457,15 +459,13 @@ int settings_dialog(const char *inf_path, const char *folder)
 		if (r == o_ok && !paths_check())
 		{
 			tree[o_ok].ob_state &= (unsigned short) ~SELECTED;
-			objc_draw(tree, o_ok, 0, x, y, w, h);
+			dlg_draw(tree, o_ok);
 			continue;
 		}
 		break;
 	}
-	form_dial(FMD_FINISH, x, y, w, h);
+	dlg_close();
 	lf_forget(tree);
-	wind_update(2);                    /* END_MCTRL */
-	wind_update(END_UPDATE);
 	look_3d = (tree[o_3d].ob_state & SELECTED) != 0;
 	tree[r].ob_state &= (unsigned short) ~SELECTED;
 	log_event("dialog-closed", "settings", r == o_ok ? "ok" : "cancel");

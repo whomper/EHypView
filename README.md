@@ -280,6 +280,11 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
 - **Drag and drop.** Under MultiTOS, MagiC or XaAES, a hypertext dragged onto EHypView's windows opens.
   The accessory tells the desktop about its windows, so Thing and the like can drop one on them under
   plain TOS too.
+- **Dialogs and alerts under MiNT and MagiC.** Where the AES runs several programs at once (MiNT with
+  XaAES, N.AES or MyAES; MagiC), EHypView's alerts are the AES's own, and its dialogs (Settings, Font,
+  About) open in windows with their own names: they can be moved, the closer works as Esc, and other
+  programs go on running meanwhile. Under TOS and EmuTOS they are drawn over the screen as before
+  (`common/ui/dialog.c`).
 - **Iconify.** Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the viewer and the
   library have the iconify button: each shrinks to EHypView's icon. A page asked for by another program
   (the Help key) brings the viewer back.

@@ -224,6 +224,9 @@ The font is chosen with **View > Font...**, and bookmarks from the Bookmarks men
   them under plain TOS too.
 - **The clipboard.** ^C copies the page shown, as text, to the GEM clipboard (`SCRAP.TXT`); in the
   library ^C copies the hypertext chosen, and ^V and ^X paste into and cut the search.
+- **Dialogs under MiNT and MagiC.** Where the system runs several programs at once (MiNT with
+  XaAES, N.AES or MyAES; MagiC), the alerts are the system's own, and Settings, Font and About open
+  in windows: they can be moved, the closer works as Esc, and the other programs go on running.
 - **Iconify.** Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the viewer and the
   library shrink to EHypView's icon. A page asked for by another program brings the viewer back.
 

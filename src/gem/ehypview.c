@@ -2462,6 +2462,17 @@ static void message(short *msg)
 		cur = keep;
 }
 
+/* the viewers and the library drawn while a dialog window is open (on
+   MiNT and MagiC, guidelines 3.5): dialog.c hands their WM_REDRAW here */
+static void dialog_redraw(const short *msg)
+{
+	short m[8];
+
+	memcpy(m, msg, sizeof(m));
+	if (!libwin_message(m))
+		message(m);
+}
+
 /* ---------------------------------------------------------------- */
 /* index: load the cache, then rescan in the background              */
 
@@ -3231,6 +3242,8 @@ int main(void)
 	if (ap_id < 0)
 		return 1;
 	twin_init("EHYPVIEW");
+	dlg_title = "EHypView";            /* dialogs in a window (MiNT, MagiC) */
+	dlg_redraw_hook = dialog_redraw;
 	if (!is_acc && twin_handover(command_line()))
 	{
 		appl_exit();                   /* EHYPVIEW.ACC runs, and has it */
