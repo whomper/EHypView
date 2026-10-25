@@ -219,11 +219,16 @@ The font is chosen with **View > Font...**, and bookmarks from the Bookmarks men
   Help key when it runs (as an accessory, or as a program under MultiTOS or MagiC): they look for
   EHypView first, then ST-Guide and HypView. Any program or desktop can hand it a hypertext and a page the same way, with the AV protocol's `VA_START`, or as
   ST-Guide with `AC_HELP`.
+  Under MiNT and MagiC, when no viewer runs, their Help key starts EHYPVIEW.PRG beside them, on
+  the page asked for, once the program has run one time (it writes its folder into EHYPVIEW.INF).
 - **Drag and drop.** Under MultiTOS, MagiC or XaAES, a hypertext dragged onto EHypView's windows
   opens. The accessory tells the desktop about its windows, so Thing and the like can drop one on
   them under plain TOS too.
 - **The clipboard.** ^C copies the page shown, as text, to the GEM clipboard (`SCRAP.TXT`); in the
   library ^C copies the hypertext chosen, and ^V and ^X paste into and cut the search.
+- **Dialogs under MiNT and MagiC.** Where the system runs several programs at once (MiNT with
+  XaAES, N.AES or MyAES; MagiC), the alerts are the system's own, and Settings, Font and About open
+  in windows: they can be moved, the closer works as Esc, and the other programs go on running.
 - **Iconify.** Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the viewer and the
   library shrink to EHypView's icon. A page asked for by another program brings the viewer back.
 

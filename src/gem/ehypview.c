@@ -2462,6 +2462,17 @@ static void message(short *msg)
 		cur = keep;
 }
 
+/* the viewers and the library drawn while a dialog window is open (on
+   MiNT and MagiC, guidelines 3.5): dialog.c hands their WM_REDRAW here */
+static void dialog_redraw(const short *msg)
+{
+	short m[8];
+
+	memcpy(m, msg, sizeof(m));
+	if (!libwin_message(m))
+		message(m);
+}
+
 /* ---------------------------------------------------------------- */
 /* index: load the cache, then rescan in the background              */
 
@@ -2953,18 +2964,12 @@ const char *index_busy(void)
 
 /* ---------------------------------------------------------------- */
 
-/* the command line of an application: length byte, then the text */
+/* the command line: the basepage's, or the ARGV words where MiNT and
+   MagiC pass it that way (the Help key of another app starting EHypView
+   there, guidelines 4.3; a .HYP double-clicked): common/atari/tos.c */
 static const char *command_line(void)
 {
-	static char arg[130];
-	const unsigned char *cmd = (const unsigned char *) _BasePage + 0x80;
-	int n = cmd[0] < 127 ? cmd[0] : 126;
-
-	memcpy(arg, cmd + 1, (size_t) n);
-	arg[n] = '\0';
-	while (n > 0 && (arg[n - 1] == ' ' || arg[n - 1] == '\r' || arg[n - 1] == '\n'))
-		arg[--n] = '\0';
-	return arg;
+	return cmd_line();
 }
 
 /* the program's buffer for writing the index in one go: TT RAM first
@@ -3231,6 +3236,8 @@ int main(void)
 	if (ap_id < 0)
 		return 1;
 	twin_init("EHYPVIEW");
+	dlg_title = "EHypView";            /* dialogs in a window (MiNT, MagiC) */
+	dlg_redraw_hook = dialog_redraw;
 	if (!is_acc && twin_handover(command_line()))
 	{
 		appl_exit();                   /* EHYPVIEW.ACC runs, and has it */
