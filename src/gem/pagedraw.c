@@ -10,6 +10,7 @@
 #include <string.h>
 #include "gem.h"
 #include "colour.h"
+#include "hypfile.h"
 #include "gemapp.h"
 #include "pagedraw.h"
 #include "stmem.h"
@@ -328,107 +329,189 @@ static void row_keys(unsigned char *const *pl, unsigned short np, unsigned long 
 }
 
 /*
- * Convert a HYP image (planar, standard format) for the screen.  Each
+ * A HYP image (planar, standard format) converted for the screen.  Each
  * pixel value is a standard colour (colour.h), drawn with the screen's
  * nearest: dithered between two pens with 4 colours, black or white on
  * mono (through the hcp source's dither mask when it gave one, else by
  * brightness).  Where pixels are twice as tall as wide (ST medium), two
  * rows make one, so that pictures keep their shape.
+ *
+ * It is done a piece at a time between event calls (the guidelines'
+ * Speed: the page's text shows at once, each picture as it is ready, a
+ * grey box holding its place until then): the header at once (the
+ * picture's size, for the layout), then the object unpacked a piece at a
+ * time, the colours worked out, and the rows converted a band at a time,
+ * each band made the screen's own format straight into the picture.
  */
-static void load_image(hyp_doc *doc, const hyp_gfx *g, gimage *im)
-{
-	unsigned char *data;
-	unsigned long size, plane, wdw, p, oplane;
-	unsigned short w, h, oh, np, present, onoff, keys, k;
-	unsigned char *std, *out;
-	int i, halve, same, pairs;
+#define UNPACK_STEP 2048               /* bytes unpacked a step */
+#define KEYS_STEP   32                 /* colours worked out a step */
+#define BAND        8                  /* rows converted a step */
+
+enum { PIC_UNPACK, PIC_KEYS, PIC_ROWS };
+
+static int kept_drop_oldest(void);
+
+typedef struct picjob {
+	int stage;
+	const hyp_gfx *g;
+	hyp_unpack *u;
+	unsigned short w, h, oh, np, present, onoff, keys, k, y;
+	unsigned long wdw, plane, oplane;
+	int halve, same, pairs;
+	unsigned char *std, *pl[8], *kbuf, *band, (*pens)[256];
 	cpick *pick;
-	unsigned long *dev = NULL;
-	unsigned char *pl[8], *kbuf, (*pens)[256] = NULL;
-	MFDB src;
+	unsigned long *dev;
+} picjob;
+
+static void pic_free(picjob *j)
+{
+	if (j == NULL)
+		return;
+	hyp_unpack_free(j->u);
+	free(j->std);
+	free(j->kbuf);
+	free(j->band);
+	free(j->pens);
+	free(j->pick);
+	free(j->dev);
+	free(j);
+}
+
+/* the picture given up: none shown */
+static void pic_fail(gimage *im)
+{
+	if (im->w > 0)
+		log_event("picture-lost", im->form.fd_addr == NULL ? "memory" : "data", NULL);
+	pic_free(im->job);
+	im->job = NULL;
+	st_free(im->form.fd_addr);
+	im->form.fd_addr = NULL;
+	im->w = 0;
+}
+
+/* the job begun: the header read at once (the picture's size) */
+static void pic_begin(hyp_doc *doc, const hyp_gfx *g, gimage *im)
+{
+	picjob *j;
+	unsigned char d[8];
+	int rc;
 
 	memset(im, 0, sizeof(*im));
-	if (hyp_load(doc, g->image, &data, &size) != HYP_OK)
+	if ((j = calloc(1, sizeof(*j))) == NULL)
 		return;
-	if (size < 8)
+	j->g = g;
+	j->u = hyp_unpack_begin(doc, g->image, &rc);
+	im->job = j;
+	if (j->u == NULL)
 	{
-		free(data);
+		pic_fail(im);
 		return;
 	}
-	w = (unsigned short) ((data[0] << 8) | data[1]);
-	h = (unsigned short) ((data[2] << 8) | data[3]);
-	np = data[4];
-	present = data[5];
-	onoff = data[6];
-	wdw = (w + 15UL) / 16;
-	plane = wdw * 2 * h;
-	if (w == 0 || h == 0 || np == 0 || np > 8)
+	if (hyp_unpack_head(j->u, d, sizeof(d)) != HYP_OK)
 	{
-		free(data);
+		pic_fail(im);
 		return;
 	}
+	j->w = (unsigned short) ((d[0] << 8) | d[1]);
+	j->h = (unsigned short) ((d[2] << 8) | d[3]);
+	j->np = d[4];
+	j->present = d[5];
+	j->onoff = d[6];
+	if (j->w == 0 || j->h == 0 || j->np == 0 || j->np > 8)
+	{
+		pic_fail(im);
+		return;
+	}
+	j->wdw = (j->w + 15UL) / 16;
+	j->plane = j->wdw * 2 * j->h;
+	j->halve = tall_pixels && j->h > 1;
+	j->oh = (unsigned short) (j->halve ? (j->h + 1) / 2 : j->h);
+	j->oplane = j->wdw * 2 * j->oh;
+	j->keys = (unsigned short) (j->halve && j->np <= 4 ? 256 : 1 << j->np);	/* pairs: 16 x 16 */
+	j->pairs = j->halve && j->np <= 4;
+	j->same = !j->halve && planes <= 8 && j->np <= planes;
+	im->w = (short) j->w;
+	im->h = (short) j->oh;
+	im->planes = planes;
+	im->mono = planes == 1;
+	im->form.fd_w = (short) (j->wdw * 16);
+	im->form.fd_h = (short) j->oh;
+	im->form.fd_wdwidth = (short) j->wdw;
+	im->form.fd_stand = 0;
+	im->form.fd_nplanes = planes;
+}
 
-	/* all planes, filling in the ones that are not stored */
-	std = malloc(plane * np);
-	if (std == NULL)
+/* unpacked: the planes (filling in the ones not stored) and the room */
+static int pic_unpacked(picjob *j, gimage *im)
+{
+	unsigned char *data;
+	unsigned long size, p = 8;
+	int i;
+
+	data = hyp_unpack_take(j->u, &size);
+	j->u = NULL;
+	if (data == NULL)
+		return -1;
+	j->std = malloc(j->plane * j->np);
+	if (j->std == NULL)
 	{
 		free(data);
-		return;
+		return -1;
 	}
-	p = 8;
-	for (i = 0; i < np; i++)
+	for (i = 0; i < j->np; i++)
 	{
-		unsigned char *dst = std + plane * (unsigned long) i;
+		unsigned char *dst = j->std + j->plane * (unsigned long) i;
 
-		if (present & (1 << i))
+		if (j->present & (1 << i))
 		{
-			if (p + plane > size)
+			if (p + j->plane > size)
 			{
-				free(std);
 				free(data);
-				return;
+				return -1;
 			}
-			memcpy(dst, data + p, plane);
-			p += plane;
+			memcpy(dst, data + p, j->plane);
+			p += j->plane;
 		} else
-		{
-			memset(dst, (onoff & (1 << i)) ? 0xff : 0x00, plane);
-		}
+			memset(dst, (j->onoff & (1 << i)) ? 0xff : 0x00, j->plane);
 	}
 	free(data);
-
 	if (spread[0x80] == 0)
 		make_spread();
-	for (i = 0; i < np; i++)
-		pl[i] = std + plane * (unsigned long) i;
-	kbuf = malloc(wdw * 16);                 /* a row's pixel values */
-
-	/* how each pixel value (or, two rows made one, each pair of them up
-	   to 16 colours; above, the upper row's) is drawn */
-	halve = tall_pixels && h > 1;
-	oh = (unsigned short) (halve ? (h + 1) / 2 : h);
-	keys = (unsigned short) (halve && np <= 4 ? 256 : 1 << np);	/* pairs: 16 x 16 */
-	pick = malloc(keys * sizeof(cpick));
+	for (i = 0; i < j->np; i++)
+		j->pl[i] = j->std + j->plane * (unsigned long) i;
+	j->kbuf = malloc(j->wdw * 16);                 /* a row's pixel values */
+	j->pick = malloc(j->keys * sizeof(cpick));
 	if (scr.bytes)
-		dev = malloc(keys * sizeof(unsigned long));
-	if (pick == NULL || (scr.bytes && dev == NULL))
-	{
-		free(kbuf);
-		free(pick);
-		free(dev);
-		free(std);
-		return;
-	}
-	same = !halve && planes <= 8 && np <= planes;
-	pairs = halve && np <= 4;
-	for (k = 0; k < keys; k++)
-	{
-		unsigned short p1 = pairs ? (unsigned short) (k >> 4) : k;
-		unsigned short p2 = pairs ? (unsigned short) (k & 15) : k;
-		crgb c1, c2, c;
+		j->dev = malloc(j->keys * sizeof(unsigned long));
+	else
+		j->band = malloc(j->wdw * 2 * BAND * planes);
+	/* copied to the screen: in ST RAM; the pictures kept for going
+	   back let go of when there is none */
+	while ((im->form.fd_addr = st_alloc((long) (scr.bytes ? j->wdw * 16 * j->oh * scr.bytes :
+						    j->oplane * planes))) == NULL && kept_drop_oldest())
+		;
+	if (j->kbuf == NULL || j->pick == NULL || (scr.bytes ? j->dev == NULL : j->band == NULL) ||
+	    im->form.fd_addr == NULL)
+		return -1;
+	return 0;
+}
 
-		colour_image_pen(np, p1, &c1);
-		colour_image_pen(np, p2, &c2);
+/* how each pixel value (or, two rows made one, each pair of them up to
+   16 colours; above, the upper row's) is drawn: up to KEYS_STEP of them */
+static void pic_keys(picjob *j)
+{
+	const hyp_gfx *g = j->g;
+	unsigned short k, end = (unsigned short) (j->k + KEYS_STEP < j->keys ? j->k + KEYS_STEP : j->keys);
+
+	for (k = j->k; k < end; k++)
+	{
+		unsigned short p1 = j->pairs ? (unsigned short) (k >> 4) : k;
+		unsigned short p2 = j->pairs ? (unsigned short) (k & 15) : k;
+		crgb c1, c2, c;
+		cpick *pk = &j->pick[k];
+
+		colour_image_pen(j->np, p1, &c1);
+		colour_image_pen(j->np, p2, &c2);
 		colour_mix(&c1, &c2, &c);
 		if (planes == 1)
 		{
@@ -436,172 +519,244 @@ static void load_image(hyp_doc *doc, const hyp_gfx *g, gimage *im)
 			int b1 = g->has_dither ? (g->dithermask >> (p1 & 15)) & 1 : colour_dark(&c1);
 			int b2 = g->has_dither ? (g->dithermask >> (p2 & 15)) & 1 : colour_dark(&c2);
 
-			pick[k].a = (unsigned char) (b1 && b2);
-			pick[k].b = 1;
-			pick[k].t = (unsigned char) (b1 != b2 ? 8 : 0);
+			pk->a = (unsigned char) (b1 && b2);
+			pk->b = 1;
+			pk->t = (unsigned char) (b1 != b2 ? 8 : 0);
 		} else if (scr.bytes && scr.packs)
 		{
-			dev[k] = colour_pack(&scr.bits, &c);
+			j->dev[k] = colour_pack(&scr.bits, &c);
 			continue;
 		} else
 		{
-			colour_pick(scr.rgb, scr.n, &c, scr.n < 16, &pick[k]);
+			colour_pick(scr.rgb, scr.n, &c, scr.n < 16, pk);
 			if (scr.bytes)
-				dev[k] = scr.dev[pick[k].a];
+				j->dev[k] = scr.dev[pk->a];
 		}
-		if (pick[k].t != 0 || pick[k].a != k)
-			same = 0;
+		if (pk->t != 0 || pk->a != k)
+			j->same = 0;
 	}
+	j->k = end;
+	if (j->k < j->keys || scr.bytes || j->same || planes > 4)
+		return;
+	/* each key's pen at each place in the Bayer matrix (a table, as the
+	   rest: an ST does each pixel in a few instructions) */
+	if ((j->pens = malloc(16 * 256)) != NULL)
+	{
+		int i;
 
-	im->w = (short) w;
-	im->h = (short) oh;
-	im->planes = planes;
-	im->mono = planes == 1;
-	src.fd_w = (short) (wdw * 16);
-	src.fd_h = (short) oh;
-	src.fd_wdwidth = (short) wdw;
-	src.fd_stand = 1;
-	src.fd_nplanes = planes;
-	src.fd_r1 = src.fd_r2 = src.fd_r3 = 0;
-	im->form = src;
-	im->form.fd_stand = 0;
-	oplane = wdw * 2 * oh;
+		for (i = 0; i < 16; i++)
+			for (k = 0; k < j->keys; k++)
+				j->pens[i][k] = j->pick[k].t > colour_bayer[i >> 2][i & 3] ? j->pick[k].b : j->pick[k].a;
+	}
+}
+
+/* row y of the picture as it is shown (y of oh) into the band's row r
+   (standard format), or, in high and true colour, into the picture */
+static void pic_row(picjob *j, gimage *im, unsigned short y, unsigned short r, unsigned short n)
+{
+	unsigned long row = (unsigned long) (j->halve ? 2 * y : y) * j->wdw * 2;
+	unsigned long next = j->halve && 2 * y + 1 < j->h ? row + j->wdw * 2 : row;
+	unsigned long rb = j->wdw * 2;
+	unsigned char *opl[8];
+	unsigned short bx, x;
+	int i;
 
 	if (scr.bytes)
 	{
 		/* high and true colour: the screen's own pixels, packed */
-		unsigned char *o = st_alloc((long) (wdw * 16 * oh * scr.bytes));
-		unsigned short x, y;
+		unsigned char *o = (unsigned char *) im->form.fd_addr + (unsigned long) y * j->wdw * 16 * scr.bytes;
 
-		im->form.fd_addr = o;
-		if (o != NULL && kbuf != NULL)
-			for (y = 0; y < oh; y++)
-			{
-				unsigned long row = (unsigned long) (halve ? 2 * y : y) * wdw * 2;
-				unsigned long next = halve && 2 * y + 1 < h ? row + wdw * 2 : row;
-
-				row_keys(pl, np, row, next, (unsigned short) (wdw * 2), pairs, kbuf);
-				for (x = 0; x < wdw * 16; x++)
-				{
-					unsigned long px = x < w ? dev[kbuf[x]] : 0;
-					short b;
-
-					for (b = scr.bytes; b-- > 0;)
-						*o++ = (unsigned char) (px >> (8 * b));
-				}
-			}
-		else if (o != NULL)
+		row_keys(j->pl, j->np, row, next, (unsigned short) rb, j->pairs, j->kbuf);
+		for (x = 0; x < j->wdw * 16; x++)
 		{
-			st_free(o);
-			im->form.fd_addr = NULL;
+			unsigned long px = x < j->w ? j->dev[j->kbuf[x]] : 0;
+			short b;
+
+			for (b = scr.bytes; b-- > 0;)
+				*o++ = (unsigned char) (px >> (8 * b));
 		}
-		free(kbuf);
-		free(dev);
-		free(pick);
-		free(std);
-		if (im->form.fd_addr == NULL)
-			im->w = 0;
 		return;
 	}
-
-	if (same)
+	for (i = 0; i < planes; i++)
+		opl[i] = j->band + (unsigned long) (i * n + r) * rb;
+	if (j->same)
 	{
 		/* the screen's pens are the image's: its planes as they are */
-		free(kbuf);
-		out = realloc(std, plane * planes);
-		if (out == NULL)
-		{
-			free(pick);
-			free(std);
-			return;
-		}
-		memset(out + plane * np, 0, plane * (unsigned long) (planes - np));
-	} else
-	{
-		unsigned short x, y;
-		unsigned char *opl[8];
-
-		out = calloc(1, oplane * planes);
-		if (out == NULL || kbuf == NULL)
-		{
-			free(out);
-			free(kbuf);
-			free(pick);
-			free(std);
-			return;
-		}
 		for (i = 0; i < planes; i++)
-			opl[i] = out + oplane * (unsigned long) i;
-		/* each key's pen at each place in the Bayer matrix (a table, as
-		   the rest: an ST does each pixel in a few instructions) */
-		pens = planes <= 4 ? malloc(16 * 256) : NULL;
-		if (pens != NULL)
-			for (i = 0; i < 16; i++)
-				for (k = 0; k < keys; k++)
-					pens[i][k] = pick[k].t > colour_bayer[i >> 2][i & 3] ? pick[k].b : pick[k].a;
-		for (y = 0; y < oh; y++)
-		{
-			unsigned long row = (unsigned long) (halve ? 2 * y : y) * wdw * 2;
-			unsigned long next = halve && 2 * y + 1 < h ? row + wdw * 2 : row;
-			unsigned long at = (unsigned long) y * wdw * 2;
-			unsigned short bx;
-
-			row_keys(pl, np, row, next, (unsigned short) (wdw * 2), pairs, kbuf);
-			if (pens != NULL)
-			{
-				/* up to 4 planes: 4 pixels' pens in a word, then each
-				   plane's 4 bits gathered from it */
-				const unsigned char *t0 = pens[(y & 3) * 4], *t1 = t0 + 256, *t2 = t1 + 256, *t3 = t2 + 256;
-				const unsigned char *kb = kbuf;
-
-				for (bx = 0; bx < wdw * 2; bx++, kb += 8)
-				{
-					unsigned short hi = (unsigned short) (t0[kb[0]] << 12 | t1[kb[1]] << 8 | t2[kb[2]] << 4 | t3[kb[3]]);
-					unsigned short lo = (unsigned short) (t0[kb[4]] << 12 | t1[kb[5]] << 8 | t2[kb[6]] << 4 | t3[kb[7]]);
-
-					for (i = 0; i < planes; i++, hi >>= 1, lo >>= 1)
-					{
-						unsigned short a = hi & 0x1111, b = lo & 0x1111;
-
-						a = (unsigned short) ((a | a >> 3 | a >> 6 | a >> 9) & 15);
-						b = (unsigned short) ((b | b >> 3 | b >> 6 | b >> 9) & 15);
-						opl[i][at + bx] = (unsigned char) (a << 4 | b);
-					}
-				}
-				continue;
-			}
-			for (bx = 0, x = 0; bx < wdw * 2; bx++)
-			{
-				unsigned char ob[8] = { 0, 0, 0, 0, 0, 0, 0, 0 }, m;
-
-				for (m = 0x80; m != 0 && x < w; m >>= 1, x++)
-				{
-					unsigned short pen = COLOUR_AT(&pick[kbuf[x]], x, y);
-
-					for (i = 0; i < planes; i++)
-						if (pen & (1 << i))
-							ob[i] |= m;
-				}
-				for (i = 0; i < planes; i++)
-					opl[i][at + bx] = ob[i];
-			}
-		}
-		free(pens);
-		free(kbuf);
-		free(std);
-	}
-	free(pick);
-
-	src.fd_addr = out;
-	im->form.fd_addr = st_alloc((long) (oplane * planes));   /* copied to the screen: ST RAM */
-	if (im->form.fd_addr == NULL)
-	{
-		free(out);
-		im->w = 0;
+			if (i < j->np)
+				memcpy(opl[i], j->pl[i] + row, rb);
+			else
+				memset(opl[i], 0, rb);
 		return;
 	}
-	vr_trnfm(vdi_h, &src, &im->form);
-	free(out);
+	row_keys(j->pl, j->np, row, next, (unsigned short) rb, j->pairs, j->kbuf);
+	if (j->pens != NULL)
+	{
+		/* up to 4 planes: 4 pixels' pens in a word, then each plane's 4
+		   bits gathered from it */
+		const unsigned char *t0 = j->pens[(y & 3) * 4], *t1 = t0 + 256, *t2 = t1 + 256, *t3 = t2 + 256;
+		const unsigned char *kb = j->kbuf;
+
+		for (bx = 0; bx < rb; bx++, kb += 8)
+		{
+			unsigned short hi = (unsigned short) (t0[kb[0]] << 12 | t1[kb[1]] << 8 | t2[kb[2]] << 4 | t3[kb[3]]);
+			unsigned short lo = (unsigned short) (t0[kb[4]] << 12 | t1[kb[5]] << 8 | t2[kb[6]] << 4 | t3[kb[7]]);
+
+			for (i = 0; i < planes; i++, hi >>= 1, lo >>= 1)
+			{
+				unsigned short a = hi & 0x1111, b = lo & 0x1111;
+
+				a = (unsigned short) ((a | a >> 3 | a >> 6 | a >> 9) & 15);
+				b = (unsigned short) ((b | b >> 3 | b >> 6 | b >> 9) & 15);
+				opl[i][bx] = (unsigned char) (a << 4 | b);
+			}
+		}
+		return;
+	}
+	for (bx = 0, x = 0; bx < rb; bx++)
+	{
+		unsigned char ob[8] = { 0, 0, 0, 0, 0, 0, 0, 0 }, m;
+
+		for (m = 0x80; m != 0 && x < j->w; m >>= 1, x++)
+		{
+			unsigned short pen = COLOUR_AT(&j->pick[j->kbuf[x]], x, y);
+
+			for (i = 0; i < planes; i++)
+				if (pen & (1 << i))
+					ob[i] |= m;
+		}
+		for (i = 0; i < planes; i++)
+			opl[i][bx] = ob[i];
+	}
+}
+
+/* the next piece: 1 the picture is done (ready, or given up), 0 more */
+static int pic_step(gimage *im)
+{
+	picjob *j = im->job;
+
+	if (j == NULL)
+		return 1;
+	if (j->stage == PIC_UNPACK)
+	{
+		int r = hyp_unpack_more(j->u, UNPACK_STEP);
+
+		if (r < 0 || (r == 1 && pic_unpacked(j, im) < 0))
+		{
+			pic_fail(im);
+			return 1;
+		}
+		if (r == 1)
+			j->stage = PIC_KEYS;
+		return 0;
+	}
+	if (j->stage == PIC_KEYS)
+	{
+		pic_keys(j);
+		if (j->k == j->keys)
+			j->stage = PIC_ROWS;
+		return 0;
+	}
+	{
+		unsigned short n = (unsigned short) (j->oh - j->y < BAND ? j->oh - j->y : BAND), r;
+
+		for (r = 0; r < n; r++)
+			pic_row(j, im, (unsigned short) (j->y + r), r, n);
+		if (!scr.bytes)
+		{
+			/* the band made the screen's own format, in its place */
+			MFDB src, dst;
+
+			src = im->form;
+			src.fd_addr = j->band;
+			src.fd_h = (short) n;
+			src.fd_stand = 1;
+			dst = im->form;
+			dst.fd_addr = (unsigned char *) im->form.fd_addr + (unsigned long) j->y * j->wdw * 2 * planes;
+			dst.fd_h = (short) n;
+			vr_trnfm(vdi_h, &src, &dst);
+		}
+		j->y = (unsigned short) (j->y + n);
+	}
+	if (j->y < j->oh)
+		return 0;
+	pic_free(j);
+	im->job = NULL;
+	return 1;
+}
+
+/* ---------------------------------------------------------------- */
+/* pictures kept: the last pages' pictures, ready, for going back      */
+
+#define KEPT 6
+
+static struct {
+	char *path;                    /* NULL: free */
+	unsigned short num;
+	gimage im;
+	unsigned long when;
+} kept[KEPT];
+static unsigned long kept_clock;
+
+static void kept_drop(int i)
+{
+	st_free(kept[i].im.form.fd_addr);
+	free(kept[i].path);
+	memset(&kept[i], 0, sizeof(kept[i]));
+}
+
+/* the one kept longest let go: 0 when none is kept */
+static int kept_drop_oldest(void)
+{
+	int i, old = -1;
+
+	for (i = 0; i < KEPT; i++)
+		if (kept[i].path != NULL && (old < 0 || kept[i].when < kept[old].when))
+			old = i;
+	if (old < 0)
+		return 0;
+	kept_drop(old);
+	return 1;
+}
+
+static void kept_put(const char *path, unsigned short num, const gimage *im)
+{
+	int i, slot = -1;
+
+	for (i = 0; i < KEPT && slot < 0; i++)
+		if (kept[i].path == NULL)
+			slot = i;
+	if (slot < 0)
+	{
+		kept_drop_oldest();
+		for (i = 0; i < KEPT && slot < 0; i++)
+			if (kept[i].path == NULL)
+				slot = i;
+	}
+	if (slot < 0 || (kept[slot].path = malloc(strlen(path) + 1)) == NULL)
+	{
+		st_free(im->form.fd_addr);
+		return;
+	}
+	strcpy(kept[slot].path, path);
+	kept[slot].num = num;
+	kept[slot].im = *im;
+	kept[slot].when = ++kept_clock;
+}
+
+static int kept_take(const char *path, unsigned short num, gimage *im)
+{
+	int i;
+
+	for (i = 0; i < KEPT; i++)
+		if (kept[i].path != NULL && kept[i].num == num && strcmp(kept[i].path, path) == 0)
+		{
+			*im = kept[i].im;
+			free(kept[i].path);
+			memset(&kept[i], 0, sizeof(kept[i]));
+			return 1;
+		}
+	return 0;
 }
 
 void layout_free(playout *L)
@@ -609,12 +764,86 @@ void layout_free(playout *L)
 	unsigned short i;
 
 	for (i = 0; L->images != NULL && i < L->nimages; i++)
-		st_free(L->images[i].form.fd_addr);
+	{
+		gimage *im = &L->images[i];
+
+		if (im->job != NULL)
+			pic_fail(im);
+		else if (im->form.fd_addr != NULL && L->path != NULL)
+			kept_put(L->path, L->pg->gfx[i].image, im);     /* for going back */
+		else
+			st_free(im->form.fd_addr);
+	}
 	free(L->images);
 	free(L->line_y);
 	free(L->gfx_y);
 	free(L->gfx_at);
+	free(L->path);
 	memset(L, 0, sizeof(*L));
+}
+
+/* the pictures' memory let go of, the ones kept for going back too */
+void layout_forget_kept(void)
+{
+	while (kept_drop_oldest())
+		;
+}
+
+/* the pictures' log line, for the tests: how many, and in which RAM */
+static void log_pictures(const playout *L)
+{
+	unsigned short i, shown = 0, in_st = 0;
+	char num[8];
+
+	for (i = 0; i < L->nimages; i++)
+		if (L->images[i].form.fd_addr != NULL)
+		{
+			shown++;
+			in_st = (unsigned short) (in_st + st_ram_addr(L->images[i].form.fd_addr));
+		}
+	if (shown == 0)
+		return;
+	/* (a blitter reads only ST RAM) */
+	sprintf(num, "%u", shown);
+	log_event("pictures", num, in_st == shown ? "st-ram" : "fast-ram");
+}
+
+int layout_busy(const playout *L)
+{
+	unsigned short i;
+
+	for (i = 0; L->images != NULL && i < L->nimages; i++)
+		if (L->images[i].job != NULL)
+			return 1;
+	return 0;
+}
+
+int layout_work(playout *L, long *done)
+{
+	unsigned short i;
+
+	*done = -1;
+	for (i = 0; L->images != NULL && i < L->nimages; i++)
+		if (L->images[i].job != NULL)
+		{
+			if (pic_step(&L->images[i]) == 1)
+			{
+				*done = i;
+				if (!layout_busy(L))
+					log_pictures(L);
+				return layout_busy(L);
+			}
+			return 1;
+		}
+	return 0;
+}
+
+void layout_finish(playout *L)
+{
+	long done;
+
+	while (layout_work(L, &done))
+		;
 }
 
 void layout_make(playout *L, hyp_doc *doc, const hyp_page *pg)
@@ -631,36 +860,29 @@ void layout_make(playout *L, hyp_doc *doc, const hyp_page *pg)
 	L->gfx_y = malloc((size_t) n * sizeof(long));
 	L->images = calloc(pg->ngfx ? pg->ngfx : 1, sizeof(gimage));
 	L->gfx_at = malloc((pg->ngfx ? pg->ngfx : 1) * sizeof(long));
-	if (L->line_y == NULL || L->gfx_y == NULL || L->images == NULL || L->gfx_at == NULL)
+	L->path = malloc(strlen(doc->path) + 1);
+	if (L->line_y == NULL || L->gfx_y == NULL || L->images == NULL || L->gfx_at == NULL || L->path == NULL)
 	{
 		layout_free(L);
 		return;
 	}
+	strcpy(L->path, doc->path);
 	L->pg = pg;
 	L->nimages = pg->ngfx;
 	screen_colours();
 	{
-		unsigned short shown = 0, in_st = 0;
+		int now = 0;
 
 		for (i = 0; i < pg->ngfx; i++)
 			if (pg->gfx[i].type == HYP_GFX_IMAGE)
 			{
-				load_image(doc, &pg->gfx[i], &L->images[i]);
-				if (L->images[i].form.fd_addr != NULL)
-				{
-					shown++;
-					in_st = (unsigned short) (in_st + st_ram_addr(L->images[i].form.fd_addr));
-				}
+				if (kept_take(L->path, pg->gfx[i].image, &L->images[i]))
+					now++;                     /* kept from before: ready */
+				else
+					pic_begin(doc, &pg->gfx[i], &L->images[i]);
 			}
-		if (shown > 0)
-		{
-			/* for the tests: where the pictures are (a blitter reads
-			   only ST RAM) */
-			char num[8];
-
-			sprintf(num, "%u", shown);
-			log_event("pictures", num, in_st == shown ? "st-ram" : "fast-ram");
-		}
+		if (now > 0 && !layout_busy(L))
+			log_pictures(L);
 	}
 
 	/* an @limage pushes the text of its line down (as ST-Guide does);
@@ -688,6 +910,31 @@ void layout_make(playout *L, hyp_doc *doc, const hyp_page *pg)
 	for (i = 0; i < pg->ngfx; i++)
 		if (!(pg->gfx[i].type == HYP_GFX_IMAGE && pg->gfx[i].limage && L->images[i].h > 0))
 			L->gfx_at[i] = L->gfx_y[pg->gfx[i].y < pg->nlines ? pg->gfx[i].y : pg->nlines];
+}
+
+int layout_picture_at(const playout *L, unsigned short i, short ox, long oy, long cols,
+                      long *x, long *y, short *w, short *h)
+{
+	const hyp_gfx *g;
+	const gimage *im;
+
+	if (L->pg == NULL || i >= L->nimages)
+		return 0;
+	g = &L->pg->gfx[i];
+	im = &L->images[i];
+	if (g->type != HYP_GFX_IMAGE || im->w <= 0)
+		return 0;
+	*x = ox + (long) (g->x > 0 ? g->x - 1 : 0) * cw;
+	if (g->x == 0)
+	{
+		long tx = (cols * cw - im->w) / 2;
+
+		*x = ox + (tx > 0 ? tx : 0);
+	}
+	*y = oy + L->gfx_at[i];
+	*w = im->w;
+	*h = im->h;
+	return 1;
 }
 
 /* draw one graphic; oy is the page origin, top/bottom the redrawn rows */
@@ -719,6 +966,23 @@ static void draw_gfx(const playout *L, const hyp_gfx *g, const gimage *im, short
 			long tx = (cols * cw - im->w) / 2;
 
 			x = ox + (tx > 0 ? tx : 0);
+		}
+		if (im->job != NULL)
+		{
+			/* still being made: a grey box holds its place */
+			pxy[0] = (short) x;
+			pxy[1] = (short) y;
+			pxy[2] = (short) (x + im->w - 1);
+			pxy[3] = (short) (y + im->h - 1);
+			vswr_mode(vdi_h, MD_REPLACE);
+			vsf_interior(vdi_h, FIS_PATTERN);
+			vsf_style(vdi_h, 1);
+			vsf_color(vdi_h, 1);
+			vsf_perimeter(vdi_h, 1);
+			v_bar(vdi_h, pxy);
+			vsf_perimeter(vdi_h, 0);
+			vsf_interior(vdi_h, FIS_SOLID);
+			break;
 		}
 		{
 			MFDB screen;

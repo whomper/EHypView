@@ -368,7 +368,9 @@ def help_case(spec, nvdi):
     run = Run(os.path.join(slug(spec), "help"), m, r"C:\ASKHELP.PRG")
     try:
         run.wait("acc registered", 120, 0)
-        run.mark = len(run.lines())
+        # from the accessory's start on: under fast-forward the request
+        # can come before the rig looks
+        run.mark = next((i for i, l in enumerate(run.lines()) if l == "EHV acc registered"), 0)
         ok = run.wait("page " + page, 120, 0)
         run.wait("pictures", 30, 0)
         time.sleep(3)

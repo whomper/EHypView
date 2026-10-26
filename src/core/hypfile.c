@@ -495,3 +495,155 @@ int hyp_load(hyp_doc *doc, unsigned short num, unsigned char **data, unsigned lo
 	*size = e->size;
 	return HYP_OK;
 }
+
+/* ---------------------------------------------------------------- */
+/* an object unpacked a piece at a time (hypfile.h)                  */
+
+struct hyp_unpack {
+	unsigned char *packed, *out;   /* out: made at the first piece */
+	unsigned long packed_size, size, ready;
+	lh5_state *lh5;
+	int stored;                    /* kept as it is: packed is the object */
+	int xor;                       /* "encrypted": XORed with 127 */
+};
+
+void hyp_unpack_free(hyp_unpack *u)
+{
+	if (u == NULL)
+		return;
+	if (u->lh5 != NULL)
+		lh5_end(u->lh5);
+	free(u->packed);
+	free(u->out);
+	free(u);
+}
+
+hyp_unpack *hyp_unpack_begin(hyp_doc *doc, unsigned short num, int *rc)
+{
+	const hyp_entry *e;
+	hyp_unpack *u;
+	int h, r;
+
+	*rc = HYP_ERR_RANGE;
+	if (num >= doc->num_entries)
+		return NULL;
+	e = &doc->entries[num];
+	*rc = HYP_ERR_FORMAT;
+	if (e->size > MAX_OBJECT || e->packed > e->size)
+		return NULL;
+	*rc = HYP_ERR_MEMORY;
+	if ((u = calloc(1, sizeof(*u))) == NULL)
+		return NULL;
+	u->size = e->size;
+	u->packed_size = e->packed;
+	u->stored = e->packed == e->size;
+	u->xor = (doc->stg_flags & HYP_STG_ENCRYPTED) != 0;
+	/* only the packed bytes for now: the room for the whole when it is
+	   unpacked (a page's pictures wait their turn, one at a time) */
+	if ((u->packed = malloc(e->packed + 1)) == NULL)
+	{
+		hyp_unpack_free(u);
+		return NULL;
+	}
+	/* the file as held (hyp_open_held), else opened for the object */
+	h = doc->h >= 0 ? doc->h : pf_open(doc->path, PF_READ);
+	*rc = HYP_ERR_OPEN;
+	if (h < 0)
+	{
+		hyp_unpack_free(u);
+		return NULL;
+	}
+	r = pf_read_at(h, e->offset, u->packed, e->packed);
+	if (h != doc->h)
+		pf_close(h);
+	if (r != 0)
+	{
+		hyp_unpack_free(u);
+		return NULL;
+	}
+	*rc = HYP_OK;
+	return u;
+}
+
+int hyp_unpack_head(const hyp_unpack *u, unsigned char *buf, unsigned long n)
+{
+	unsigned long i, out;
+	lh5_state *s;
+	int r;
+
+	if (n > u->size)
+		return HYP_ERR_FORMAT;
+	if (u->stored)
+		memcpy(buf, u->packed, n);
+	else
+	{
+		/* the first bytes alone, on a decoder of their own */
+		if ((s = lh5_begin(u->packed, u->packed_size, buf, n)) == NULL)
+			return HYP_ERR_MEMORY;
+		r = lh5_more(s, n, &out);
+		lh5_end(s);
+		if (r != 1)
+			return HYP_ERR_DECODE;
+	}
+	for (i = 0; u->xor && i < n; i++)
+		buf[i] ^= 127;
+	return HYP_OK;
+}
+
+int hyp_unpack_more(hyp_unpack *u, unsigned long budget)
+{
+	unsigned long was = u->ready, i;
+	int r;
+
+	if (u->ready == u->size && u->out != NULL)
+		return 1;
+	if (u->out == NULL)
+	{
+		if (u->stored)
+		{
+			/* the packed bytes are the object */
+			u->out = u->packed;
+			u->packed = NULL;
+			u->ready = u->size;
+			for (i = 0; u->xor && i < u->size; i++)
+				u->out[i] ^= 127;
+			return 1;
+		}
+		if ((u->out = malloc(u->size + 1)) == NULL ||
+		    (u->lh5 = lh5_begin(u->packed, u->packed_size, u->out, u->size)) == NULL)
+			return HYP_ERR_MEMORY;
+	}
+	r = lh5_more(u->lh5, budget, &u->ready);
+	if (r < 0)
+		return HYP_ERR_DECODE;
+	for (i = was; u->xor && i < u->ready; i++)
+		u->out[i] ^= 127;
+	if (r == 1)
+	{
+		lh5_end(u->lh5);
+		u->lh5 = NULL;
+		free(u->packed);
+		u->packed = NULL;
+	}
+	return r;
+}
+
+const unsigned char *hyp_unpack_out(const hyp_unpack *u, unsigned long *ready)
+{
+	*ready = u->out != NULL ? u->ready : 0;
+	return u->out;
+}
+
+unsigned char *hyp_unpack_take(hyp_unpack *u, unsigned long *size)
+{
+	unsigned char *out;
+
+	if (u->out == NULL || u->lh5 != NULL || u->ready < u->size)
+		return NULL;
+	out = u->out;
+	out[u->size] = '\0';
+	*size = u->size;
+	u->out = NULL;
+	hyp_unpack_free(u);
+	return out;
+}

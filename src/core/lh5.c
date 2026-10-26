@@ -17,6 +17,7 @@
  * a canonical walk for the rare longer ones, which keeps the tables
  * small enough for a 68000 machine.
  */
+#include <stdlib.h>
 #include <string.h>
 #include "lh5.h"
 
@@ -44,7 +45,7 @@ typedef struct {
 	unsigned short fast[FASTSIZE];   /* (len << 9) | sym, or SLOW */
 } huff_t;
 
-typedef struct {
+struct lh5_state {
 	const unsigned char *src;
 	unsigned long srclen;
 	unsigned long pos;               /* next byte to load */
@@ -53,8 +54,12 @@ typedef struct {
 	unsigned long consumed;          /* bits consumed so far */
 	int error;
 
+	unsigned char *dst;              /* where it goes, how much, how far */
+	unsigned long dstlen, out;
+	unsigned long blocksize;         /* symbols left in the block */
+
 	huff_t t, c, p;
-} lh5_state;
+};
 
 /* ---------------------------------------------------------------- */
 /* bit input                                                         */
@@ -323,20 +328,18 @@ static int read_c_len(lh5_state *s)
  * code of up to FASTBITS bits (nearly all of them) is one lookup; the
  * table headers, once a block, and longer codes go through the state.
  * Reading past the end gives zeros; it is an error when the bits taken
- * go past it (checked at the end of each block and of the data).
+ * go past it (checked at the end of each block and of the data).  It
+ * stops once `budget` more bytes are out (a match may go a little past):
+ * 1 all of them out, 0 more to come, -1 corrupt.
  */
-int lh5_decode(const unsigned char *src, unsigned long srclen,
-               unsigned char *dst, unsigned long dstlen)
+static int run(lh5_state *s, unsigned long budget)
 {
-	static lh5_state st;             /* ~6 KB: keep it off the TOS stack */
-	lh5_state *s = &st;
-	unsigned long out = 0, blocksize = 0, pos;
+	const unsigned char *src = s->src;
+	unsigned char *dst = s->dst;
+	unsigned long srclen = s->srclen, dstlen = s->dstlen, out = s->out, blocksize = s->blocksize, pos;
+	unsigned long stop = budget < dstlen - out ? out + budget : dstlen;
 	unsigned int bb;                 /* 32 bits, here and on the Atari */
 	int bc;
-
-	memset(s, 0, sizeof(*s));
-	s->src = src;
-	s->srclen = srclen;
 
 /* at least n (up to 24) bits in bb, from its top */
 #define NEED(n) \
@@ -352,15 +355,17 @@ int lh5_decode(const unsigned char *src, unsigned long srclen,
 		s->consumed = pos * 8UL - (unsigned long) bc)
 #define PAST_END() (pos * 8UL - (unsigned long) bc > srclen * 8UL)
 
+	if (s->error)
+		return -1;
 	LOAD();
-	while (out < dstlen)
+	while (out < stop)
 	{
 		unsigned int c, e;
 
 		if (blocksize == 0)
 		{
 			if (PAST_END())
-				return -1;
+				return s->error = 1, -1;
 			SAVE();
 			blocksize = getbits(s, 16);
 			if (blocksize == 0)
@@ -369,7 +374,7 @@ int lh5_decode(const unsigned char *src, unsigned long srclen,
 				read_c_len(s) < 0 ||
 				read_pt_len(s, &s->p, NP, PBIT, -1) < 0 ||
 				s->error)
-				return -1;
+				return s->error = 1, -1;
 			LOAD();
 		}
 		blocksize--;
@@ -442,5 +447,65 @@ int lh5_decode(const unsigned char *src, unsigned long srclen,
 				}
 		}
 	}
-	return PAST_END() ? -1 : 0;
+	SAVE();
+	s->out = out;
+	s->blocksize = blocksize;
+	if (out < dstlen)
+		return 0;
+	if (PAST_END())
+		return s->error = 1, -1;
+	return 1;
+}
+
+static void begin(lh5_state *s, const unsigned char *src, unsigned long srclen,
+                  unsigned char *dst, unsigned long dstlen)
+{
+	memset(s, 0, sizeof(*s));
+	s->src = src;
+	s->srclen = srclen;
+	s->dst = dst;
+	s->dstlen = dstlen;
+}
+
+int lh5_decode(const unsigned char *src, unsigned long srclen,
+               unsigned char *dst, unsigned long dstlen)
+{
+	static lh5_state st;             /* ~6 KB: keep it off the TOS stack */
+
+	begin(&st, src, srclen, dst, dstlen);
+	return run(&st, dstlen) == 1 ? 0 : -1;
+}
+
+/* one decoder kept for the pieces (a page's pictures are unpacked one
+   at a time): no ~11 KB taken from an accessory's heap for each; a
+   second at once gets its own */
+static lh5_state piece_state;
+static int piece_used;
+
+lh5_state *lh5_begin(const unsigned char *src, unsigned long srclen,
+                     unsigned char *dst, unsigned long dstlen)
+{
+	lh5_state *s = piece_used ? malloc(sizeof(lh5_state)) : &piece_state;
+
+	if (s == &piece_state)
+		piece_used = 1;
+	if (s != NULL)
+		begin(s, src, srclen, dst, dstlen);
+	return s;
+}
+
+int lh5_more(lh5_state *s, unsigned long budget, unsigned long *out)
+{
+	int r = run(s, budget);
+
+	*out = s->out;
+	return r;
+}
+
+void lh5_end(lh5_state *s)
+{
+	if (s == &piece_state)
+		piece_used = 0;
+	else
+		free(s);
 }

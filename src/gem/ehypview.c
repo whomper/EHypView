@@ -88,6 +88,7 @@ typedef struct {
 	short icon;                    /* shown as EHypView's icon        */
 	short place[4];                /* where it was before (WM_ICONIFY) */
 	short slider[4];               /* WF_VSLSIZE... as set, plus 1; 0: unknown */
+	short fresh;                   /* opened, its first WM_REDRAW to come */
 	char name[160], info[200];
 	ehv_view view;
 	playout lay;                   /* the page laid out (pagedraw.c)  */
@@ -293,11 +294,23 @@ static void bar(toolbar *t)
 }
 
 /* where the page is: the work area below the toolbar */
+/* a window about to open: its work area as it will be (open_window sets
+   its sliders before the AES draws them) */
+static short planned[4];
+static int planning;
+
 static void work_area(short *x, short *y, short *w, short *h)
 {
 	short th = tb_height(sys_ch);
 
-	wind_get(cur->h, WF_WORKXYWH, x, y, w, h);
+	if (planning)
+	{
+		*x = planned[0];
+		*y = planned[1];
+		*w = planned[2];
+		*h = planned[3];
+	} else
+		wind_get(cur->h, WF_WORKXYWH, x, y, w, h);
 	*y = (short) (*y + th);
 	*h = (short) (*h > th ? *h - th : 0);
 }
@@ -755,7 +768,10 @@ static void page_changed(void)
 		view_title(&cur->view, cur->name, sizeof(cur->name));
 		wind_set_str(cur->h, WF_NAME, cur->name);
 		update_info();
-		redraw_all();
+		if (cur->fresh)
+			set_sliders();             /* the AES's WM_REDRAW draws it, once */
+		else
+			redraw_all();
 	}
 }
 
@@ -822,6 +838,7 @@ static void popup_box(long r)
 
 	memset(&pl, 0, sizeof(pl));
 	layout_make(&pl, cur->view.doc, cur->view.popup);
+	layout_finish(&pl);                 /* its pictures, before it shows */
 	if (pl.pg == NULL)
 	{
 		view_popup_close(&cur->view);
@@ -992,11 +1009,17 @@ static void open_window(void)
 	view_title(&cur->view, cur->name, sizeof(cur->name));
 	wind_set_str(cur->h, WF_NAME, cur->name);
 	update_info();
-	wind_open(cur->h, x, y, w, h);
-	if (is_acc)                        /* the desktop drops files on it */
-		av_window(cur->h, 1);
+	/* the sliders set before it opens: the AES draws them once, with
+	   the frame (each wind_set on an open window draws them again) */
+	wind_calc(WC_WORK, WKIND, x, y, w, h, &planned[0], &planned[1], &planned[2], &planned[3]);
+	planning = 1;
 	clamp_scroll();
 	set_sliders();
+	planning = 0;
+	wind_open(cur->h, x, y, w, h);
+	cur->fresh = 1;
+	if (is_acc)                        /* the desktop drops files on it */
+		av_window(cur->h, 1);
 }
 
 void app_window_closed(void)
@@ -1025,6 +1048,10 @@ static void close_window(void)
 		recent_save();
 	}
 	cur->h = -1;
+	/* the accessory's last window gone: the pictures kept for going back
+	   let go of (its ST RAM is the pages') */
+	if (is_acc && viewer_windows() == 0)
+		layout_forget_kept();
 	cur->icon = 0;
 	if (viewer_windows() > 0)
 	{
@@ -1165,6 +1192,57 @@ static void show_line(long line)
 		scroll_to(line, cur->view.left);
 	else if (line >= cur->view.top + rows)
 		scroll_to(line - rows + 1, cur->view.left);
+}
+
+/*
+ * The viewers' pictures, made a piece at a time between event calls
+ * (pagedraw.c's layout_work; the guidelines' Speed): the page's text is
+ * shown at once, and each picture is drawn in its window when it is
+ * ready, a grey box in its place till then.
+ */
+static int pictures_busy(void)
+{
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+		if (viewers[i].used && layout_busy(&viewers[i].lay))
+			return 1;
+	return 0;
+}
+
+static int pictures_idle(void)
+{
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+	{
+		viewer *v = &viewers[i], *was = cur;
+		long done, px, py;
+		short x, y, w, h, pw, ph;
+
+		if (!v->used || !layout_busy(&v->lay))
+			continue;
+		aes_profile_tag("pictures");
+		layout_work(&v->lay, &done);
+		if (done >= 0 && v->h > 0 && !v->icon)
+		{
+			cur = v;
+			work_area(&x, &y, &w, &h);
+			if (layout_picture_at(&cur->lay, (unsigned short) done, (short) (x + MARGIN - cur->view.left * cw),
+					      y - cur->lay.gfx_y[cur->view.top], page_cols(), &px, &py, &pw, &ph) &&
+			    px < x + w && py < y + h && px + pw > x && py + ph > y)
+			{
+				/* only what of it shows */
+				long l = px > x ? px : x, t = py > y ? py : y;
+				long r = px + pw < x + w ? px + pw : x + w, b = py + ph < y + h ? py + ph : y + h;
+
+				redraw((short) l, (short) t, (short) (r - l), (short) (b - t));
+			}
+			cur = was;
+		}
+		return pictures_busy();
+	}
+	return 0;
 }
 
 /* one line of the page drawn again: a link chosen or left */
@@ -2316,13 +2394,19 @@ static void show_request(const char *args)
 		libwin_open();             /* nothing asked, nothing shown: the library */
 		return;
 	}
-	open_window();
 	if (args != NULL && args[0] != '\0')
 	{
+		int rc;
+
+		/* the page first: the window opens at its size, its sliders
+		   set, and is drawn once */
 		graf_mouse(BUSYBEE, NULL);
-		after(view_request(&cur->view, args));
+		rc = view_request(&cur->view, args);
+		open_window();
+		after(rc);
 		graf_mouse(ARROW, NULL);
-	}
+	} else
+		open_window();
 }
 
 static void viewer_message(short *msg)
@@ -2344,7 +2428,10 @@ static void viewer_message(short *msg)
 		break;
 	case WM_REDRAW:
 		if (msg[3] == cur->h)
+		{
+			cur->fresh = 0;
 			redraw(msg[4], msg[5], msg[6], msg[7]);
+		}
 		break;
 	case WM_TOPPED:
 		if (msg[3] == cur->h)
@@ -3473,6 +3560,7 @@ int main(void)
 		log_event("started", num, "ms");
 	}
 	aes_profile_tag("idle");
+	fts_busy = pictures_busy();         /* the page on the command line's */
 	while (!quit_now)
 	{
 		short flags = MU_MESAG, which;
@@ -3565,17 +3653,18 @@ int main(void)
 				job_step();
 			while (job != NULL && bg_more() && tos_ms() - t1 < 35 && !ehv_libjob_next_is_big(job));
 		}
-		/* the library's search through the names, its full-text
-		   search: a slice in a turn of its own, not after a key or a
-		   click (the guidelines, Speed: a key answered at once) */
-		if (which & (MU_KEYBD | MU_BUTTON))
-			fts_busy = libwin_busy();
-		else if ((which & MU_TIMER) || fts_busy == 0)
+		/* the pages' pictures, the library's search through the
+		   names, its full-text search: a slice in a turn of its own,
+		   not after a key, a click or a message (the guidelines,
+		   Speed: what the user did answered at once) */
+		if (which & (MU_KEYBD | MU_BUTTON | MU_MESAG))
+			fts_busy = libwin_busy() || pictures_busy();
+		else if (which & MU_TIMER)
 		{
 			aes_profile_tag("lib-work");
 			bg_begin();
 			do
-				fts_busy = libwin_idle();
+				fts_busy = pictures_idle() | libwin_idle();
 			while (fts_busy && bg_more());
 		}
 		if (ehv_names_misread != misread && job == NULL)

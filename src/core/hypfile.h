@@ -133,4 +133,24 @@ unsigned short hyp_default_node(const hyp_doc *doc);
  */
 int hyp_load(hyp_doc *doc, unsigned short num, unsigned char **data, unsigned long *size);
 
+/*
+ * The same a piece at a time (a picture unpacked between event calls,
+ * the guidelines' Speed): hyp_unpack_begin() reads the object's packed
+ * bytes (the file closed again) and returns NULL with *rc set when it
+ * can't; hyp_unpack_head() gives the object's first n bytes at once (a
+ * picture's size) without the room for the whole; hyp_unpack_more()
+ * unpacks about `budget` more bytes (the room for the whole taken at the
+ * first): 1 all of them, 0 more to come, else a HYP_ERR_*;
+ * hyp_unpack_out() gives what is unpacked so far (*ready bytes of it);
+ * hyp_unpack_take() hands the whole over when it is all there (as
+ * hyp_load's *data) and frees the rest.
+ */
+typedef struct hyp_unpack hyp_unpack;
+hyp_unpack *hyp_unpack_begin(hyp_doc *doc, unsigned short num, int *rc);
+int hyp_unpack_head(const hyp_unpack *u, unsigned char *buf, unsigned long n);
+int hyp_unpack_more(hyp_unpack *u, unsigned long budget);
+const unsigned char *hyp_unpack_out(const hyp_unpack *u, unsigned long *ready);
+unsigned char *hyp_unpack_take(hyp_unpack *u, unsigned long *size);
+void hyp_unpack_free(hyp_unpack *u);
+
 #endif
