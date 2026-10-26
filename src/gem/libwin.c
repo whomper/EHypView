@@ -608,11 +608,19 @@ static long put(short x, short y, const char *s, long room, short color, short e
 		n = room;
 	if (n <= 0)
 		return 0;
-	vswr_mode(vdi_h, white_ground && color != 0 ? MD_REPLACE : MD_TRANS);
-	vst_color(vdi_h, color);
-	vst_effects(vdi_h, effects);
-	text_at(x, y, s, n);
-	vst_effects(vdi_h, 0);
+	{
+		/* bold and underline on the white ground: drawn the cheap way,
+		   the same pixels (text_fx_after) */
+		short by_hand = white_ground && color != 0 && fast_fx && (effects & ~9) == 0 ? effects : 0;
+
+		vswr_mode(vdi_h, white_ground && color != 0 ? MD_REPLACE : MD_TRANS);
+		vst_color(vdi_h, color);
+		vst_effects(vdi_h, (short) (effects & ~by_hand));
+		text_at(x, y, s, n);
+		vst_effects(vdi_h, 0);
+		if (by_hand)
+			text_fx_after(x, y, n, by_hand, color);
+	}
 	return n;
 }
 
@@ -1082,7 +1090,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	clip[1] = cy;
 	clip[2] = (short) (cx + cw_ - 1);
 	clip[3] = (short) (cy + ch_ - 1);
-	vs_clip(vdi_h, 1, clip);
+	clip_on(clip);
 	/* each part on its own ground, filled just before it is drawn (no
 	   white over the whole window first: it flickered, slowly drawn),
 	   and only the parts in the rectangle */
@@ -1139,7 +1147,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 		lc[3] = (short) (ly + lh - 1 < clip[3] ? ly + lh - 1 : clip[3]);
 		if (lc[0] <= lc[2] && lc[1] <= lc[3])
 		{
-			vs_clip(vdi_h, 1, lc);
+			clip_on(lc);
 			y = ly;
 			for (r = lib.top; (unsigned long) r < lib.nrows && y < ly + lh; r++)
 			{
@@ -1156,7 +1164,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	vst_effects(vdi_h, 0);
 	vst_color(vdi_h, 1);
 	vswr_mode(vdi_h, MD_REPLACE);
-	vs_clip(vdi_h, 0, clip);
+	clip_off();
 }
 
 static void redraw(short x, short y, short w, short h)

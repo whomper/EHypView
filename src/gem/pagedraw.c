@@ -1132,13 +1132,24 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 							fg = 0;            /* black on black: white */
 					}
 				}
-				if (mode != want)
-					vswr_mode(vdi_h, mode = want);
-				if (colour != fg)
-					vst_color(vdi_h, colour = fg);
-				if (effects != fx)
-					vst_effects(vdi_h, effects = fx);
-				text_at((short) x, (short) y, run->text, run->len);
+				{
+					/* bold and underline on the white ground: drawn
+					   the cheap way, the same pixels (text_fx_after) */
+					short by_hand = want == MD_REPLACE && fast_fx && (fx & ~9) == 0 ? fx : 0;
+
+					if (mode != want)
+						vswr_mode(vdi_h, mode = want);
+					if (colour != fg)
+						vst_color(vdi_h, colour = fg);
+					if (effects != (fx & ~by_hand))
+						vst_effects(vdi_h, effects = (short) (fx & ~by_hand));
+					text_at((short) x, (short) y, run->text, run->len);
+					if (by_hand)
+					{
+						text_fx_after((short) x, (short) y, run->len, by_hand, fg);
+						vswr_mode(vdi_h, mode);
+					}
+				}
 			}
 			x += w;
 		}

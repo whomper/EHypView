@@ -416,7 +416,12 @@ void fill(short color, short x1, short y1, short x2, short y2)
 	vr_recfl(vdi_h, pxy);
 }
 
-void text_at(short x, short y, const char *s, long n)
+/* the clip rectangle in force (clip_on): text wholly inside it is drawn
+   with clipping off */
+static short clip_now[4];
+static int clipping;
+
+static void text_run(short x, short y, const char *s, long n)
 {
 	while (n > 0)
 	{
@@ -426,6 +431,111 @@ void text_at(short x, short y, const char *s, long n)
 		x = (short) (x + k * cw);
 		s += k;
 		n -= k;
+	}
+}
+
+void text_at(short x, short y, const char *s, long n)
+{
+	long i0 = 0, m;
+	short xs;
+
+	/* TOS draws text six times slower with clipping on, even text wholly
+	   inside the clip (TOS 1.04: 64.5 ms a line of 80 against 11; TOS
+	   4.04: 17.5 against 6.5): of the system font (its width known), the
+	   characters wholly inside go with clipping off (a pixel more room
+	   for bold and underline, text_fx_after), the one cut at each side
+	   with it on, and none outside */
+	if (!clipping || !fast_fx || y < clip_now[1] || y + ch - 1 > clip_now[3] || n <= 0)
+	{
+		text_run(x, y, s, n);
+		return;
+	}
+	if (x < clip_now[0])
+		i0 = (clip_now[0] - x + cw - 1) / cw;
+	if (i0 > n)
+		i0 = n;
+	xs = (short) (x + i0 * cw);
+	m = xs < clip_now[2] ? (clip_now[2] - xs) / cw : 0;
+	if (m > n - i0)
+		m = n - i0;
+	if (i0 > 0 && xs - cw <= clip_now[2])
+		text_run((short) (xs - cw), y, s + i0 - 1, 1);   /* cut on the left */
+	if (m > 0)
+	{
+		vs_clip(vdi_h, 0, clip_now);
+		text_run(xs, y, s + i0, m);
+		vs_clip(vdi_h, 1, clip_now);
+	}
+	if (i0 + m < n && xs + m * cw <= clip_now[2])
+		text_run((short) (xs + m * cw), y, s + i0 + m, 1);   /* cut on the right */
+}
+
+/* the clip rectangle set, kept for what is clipped by hand: TOS's
+   raster copies aren't clipped (NVDI's are), and text_at() above */
+void clip_on(const short *c)
+{
+	memcpy(clip_now, c, sizeof(clip_now));
+	clipping = 1;
+	vs_clip(vdi_h, 1, clip_now);
+}
+
+void clip_off(void)
+{
+	clipping = 0;
+	vs_clip(vdi_h, 0, clip_now);
+}
+
+int fast_fx;
+
+void text_fx_after(short x, short y, long n, short fx, short colour)
+{
+	short tw = (short) (n * cw);
+
+	if (fx & 1)
+	{
+		/* bold: what is drawn ORed onto itself a pixel to the right */
+		short x1 = (short) (x + 1), x2 = (short) (x + tw), y1 = y, y2 = (short) (y + ch - 1);
+
+		if (clipping)
+		{
+			if (x1 < clip_now[0])
+				x1 = clip_now[0];
+			if (x2 > clip_now[2])
+				x2 = clip_now[2];
+			if (y1 < clip_now[1])
+				y1 = clip_now[1];
+			if (y2 > clip_now[3])
+				y2 = clip_now[3];
+		}
+		if (x1 <= x2 && y1 <= y2)
+		{
+			MFDB scr;
+			short pxy[8];
+
+			memset(&scr, 0, sizeof(scr));
+			pxy[0] = (short) (x1 - 1);
+			pxy[1] = y1;
+			pxy[2] = (short) (x2 - 1);
+			pxy[3] = y2;
+			pxy[4] = x1;
+			pxy[5] = y1;
+			pxy[6] = x2;
+			pxy[7] = y2;
+			vro_cpyfm(vdi_h, 7, pxy, &scr, &scr);       /* S_OR_D */
+		}
+	}
+	if (fx & 8)
+	{
+		/* underline: the cell's last row, a pixel longer than the text */
+		short p[4];
+
+		p[0] = x;
+		p[2] = (short) (x + tw);
+		p[1] = p[3] = (short) (y + ch - 1);
+		vswr_mode(vdi_h, MD_REPLACE);
+		vsl_color(vdi_h, colour);
+		vsl_type(vdi_h, 1);
+		v_pline(vdi_h, 2, p);
 	}
 }
 
@@ -452,7 +562,7 @@ static void draw_page(short cx, short cy, short cw_, short ch_)
 	clip[1] = cy;
 	clip[2] = (short) (cx + cw_ - 1);
 	clip[3] = (short) (cy + ch_ - 1);
-	vs_clip(vdi_h, 1, clip);
+	clip_on(clip);
 	fill(0, clip[0], clip[1], clip[2], clip[3]);
 
 	if (pg == NULL || cur->lay.line_y == NULL)
@@ -466,14 +576,14 @@ static void draw_page(short cx, short cy, short cw_, short ch_)
 		};
 
 		draw_message((short) (wx + MARGIN + cw), (short) (wy + ch), help);
-		vs_clip(vdi_h, 0, clip);
+		clip_off();
 		return;
 	}
 
 	ox = (short) (wx + MARGIN - cur->view.left * cw);
 	oy = wy - cur->lay.gfx_y[cur->view.top];
 	layout_draw(&cur->lay, ox, oy, cur->view.top, cx, cy, cw_, ch_, cur->view.sel, page_cols());
-	vs_clip(vdi_h, 0, clip);
+	clip_off();
 }
 
 /* ---------------------------------------------------------------- */
@@ -951,6 +1061,18 @@ static void after(int rc)
 	}
 }
 
+/* a window's height where its page shows whole lines: TOS draws text
+   cut by the clip the slow way, and a line scrolled in then fills the
+   strip that comes in exactly (the guidelines' Speed) */
+static short lines_h(short x, short y, short w, short h)
+{
+	short wx, wy, ww, wh, page;
+
+	wind_calc(WC_WORK, WKIND, x, y, w, h, &wx, &wy, &ww, &wh);
+	page = (short) (wh - tb_height(sys_ch));
+	return page > ch ? (short) (h - page % ch) : h;
+}
+
 static void open_window(void)
 {
 	short x, y, w, h, cols;
@@ -994,6 +1116,7 @@ static void open_window(void)
 	/* its text on the 8-pixel grid: the VDI draws it far faster (the
 	   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
 	x = wind_x8(WKIND, x, y, w, h);
+	h = lines_h(x, y, w, h);
 	view_title(&cur->view, cur->name, sizeof(cur->name));
 	wind_set_str(cur->h, WF_NAME, cur->name);
 	update_info();
@@ -2462,6 +2585,16 @@ static void viewer_message(short *msg)
 			wind_get(cur->h, WF_FULLXYWH, &fx, &fy, &fw, &fh);
 			if (cx == fx && cy == fy && cw_ == fw && ch_ == fh)
 				wind_get(cur->h, WF_PREVXYWH, &fx, &fy, &fw, &fh);
+			else
+			{
+				/* full: its text on the 8-pixel grid, whole lines */
+				short nx = wind_x8(WKIND, fx, fy, fw, fh);
+
+				if (nx > fx)
+					fw = (short) (fw - (nx - fx));
+				fx = nx;
+				fh = lines_h(fx, fy, fw, fh);
+			}
 			wind_set(cur->h, WF_CURRXYWH, fx, fy, fw, fh);
 			redraw_all();
 		}
@@ -2476,6 +2609,7 @@ static void viewer_message(short *msg)
 			w = msg[6] < 16 * sys_cw ? (short) (16 * sys_cw) : msg[6];
 			w = w < 12 * cw ? (short) (12 * cw) : w;
 			h = msg[7] < 6 * ch + tb_height(sys_ch) ? (short) (6 * ch + tb_height(sys_ch)) : msg[7];
+			h = lines_h(msg[4], msg[5], w, h);
 			wind_set(cur->h, WF_CURRXYWH, wind_x8(WKIND, msg[4], msg[5], w, h), msg[5], w, h);
 			clamp_scroll();
 			set_sliders();

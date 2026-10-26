@@ -77,6 +77,7 @@ static int set_font(short id, short pt)
 	cw = w;
 	ch = h;
 	vst_alignment(vdi_h, 0, 5);
+	fast_fx = id == 1 && get_cookie(0x4E564449L) == 0;	/* the system font, not NVDI */
 	cur_id = id;
 	cur_pt = pt;
 	return 1;
