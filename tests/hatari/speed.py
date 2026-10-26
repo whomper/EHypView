@@ -315,6 +315,7 @@ def page_case(spec, nvdi):
                  run.act(lambda: run.key(ch), "search", settle=2.0, tags=("event",)))
             note("search: started, its rows made", SLICE, spec, run.since(("lib-model",)))
             note("search: the rows found drawn", PAGE, spec, run.since(("lib-rows",)))
+            note("search: the slider and info line set", PAGE, spec, run.since(("lib-frame",)))
             note("search: its slices through the names", SLICE, spec, run.since(("lib-work",)))
         # its slices for 30 s (the whole search takes minutes on an ST);
         # what it finds drawn in turns of their own (lib-rows)

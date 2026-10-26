@@ -252,7 +252,7 @@ static void list_area(short *x, short *y, short *w, short *h)
 	short wx, wy, ww, wh, pw = pane_w();
 
 	work_area(&wx, &wy, &ww, &wh);
-	*x = (short) (wx + (pw > 0 ? pw + 4 : 0));
+	*x = (short) (wx + (pw > 0 ? (pw + 4 + 7) & ~7 : 0));     /* its text on the 8-pixel grid */
 	*y = (short) (wy + header_h() + strip_h() + heading_h());
 	*w = (short) (wx + ww - *x);
 	*h = (short) (wy + wh - detail_h() - *y);
@@ -813,11 +813,11 @@ static void draw_panes(short wx, short wy, short wh, short cx, short cy, short c
 		line_(bx, y, bx, (short) (wy + wh - 1), 1);
 		line_((short) (bx + 3), y, (short) (bx + 3), (short) (wy + wh - 1), 1);
 	}
-	put((short) (wx + MARGIN + cw / 2), (short) (y + 4), "Subjects", PANE_COLS, 1, 1);
+	put((short) (wx + MARGIN), (short) (y + 4), "Subjects", PANE_COLS, 1, 1);
 	for (i = (unsigned long) pane_top; i < lib.npanes && (long) i <= pane_last(); i++)
 	{
 		const lib_pane *p = &lib.panes[i];
-		short color = 1, gx = (short) (wx + MARGIN + cw / 2 + (p->level ? 2 * cw : 0));    /* a part: under its subject */
+		short color = 1, gx = (short) (wx + MARGIN + (p->level ? 2 * cw : 0));    /* a part: under its subject */
 		char n[12];
 		long room;
 
@@ -850,7 +850,7 @@ static void draw_panes(short wx, short wy, short wh, short cx, short cy, short c
 		sprintf(n, "%lu", p->count);
 		room = PANE_COLS - 3 - (long) strlen(n) - 1 - (p->level ? 2 : 0);
 		put((short) (gx + 2 * cw), (short) (y + 3), p->text, room, color, 0);
-		put_right((short) (wx + pw - MARGIN - cw / 2), (short) (y + 3), n, 8, color);
+		put_right((short) ((wx + pw - MARGIN) & ~7), (short) (y + 3), n, 8, color);
 	}
 	bar_place();
 	if (!libbar_draw(cx, cy, cw_, ch_))      /* too low for one: the pane's ground */
@@ -865,7 +865,7 @@ static long nchips_shown;
 static void chips_layout(short wx, short ww)
 {
 	long i, n = chips();
-	short x = (short) (wx + MARGIN + cw / 2 + 10 * cw);
+	short x = (short) (wx + MARGIN + 10 * cw);
 	char t[160];
 
 	nchips_shown = 0;
@@ -893,7 +893,7 @@ static void draw_chips(short wx, short ww, short y)
 	char t[160];
 
 	fill(pane_ground(), wx, y, (short) (wx + ww - 1), (short) (y + h - 3));
-	put((short) (wx + MARGIN + cw / 2), (short) (y + 6), "Continue", 9, 1, 1);
+	put((short) (wx + MARGIN), (short) (y + 6), "Continue", 9, 1, 1);
 	chips_layout(wx, ww);
 	for (i = 0; i < nchips_shown; i++)
 	{
@@ -942,14 +942,14 @@ static void draw_row(long r, short lx, short lw, short y)
 static void draw_row_parts(long r, const lib_row *row, short rh, short lx, short lw, short y,
                            char *text, char *detail, short color, short dcolor, short acolor, int sel)
 {
-	short right = (short) (lx + lw - MARGIN - cw / 2);
+	short right = (short) ((lx + lw - MARGIN) & ~7);    /* text on the 8-pixel grid: TOS draws it 3 times as fast */
 	short gx = (short) (lx + MARGIN + cw), tx = (short) (lx + MARGIN + 3 * cw);
 	long room, tl;
 
 	if (row->kind == LIB_GROUP && (row->flags & LIB_SUB))
 	{
 		/* a part of a subject: under its heading's text, plain */
-		short x = (short) (lx + MARGIN + cw / 2 + (panes() ? 0 : 4 * cw)), ty = (short) (y + 3);
+		short x = (short) (lx + MARGIN + (panes() ? 0 : 4 * cw)), ty = (short) (y + 3);
 		char n[12];
 
 		room = (right - x) / cw;
@@ -967,7 +967,7 @@ static void draw_row_parts(long r, const lib_row *row, short rh, short lx, short
 	}
 	if (row->kind == LIB_GROUP)
 	{
-		short x = (short) (lx + MARGIN + cw / 2), ty = (short) (y + 3);
+		short x = (short) (lx + MARGIN), ty = (short) (y + 3);
 		char n[12];
 
 		if (row->flags & LIB_FOLDS)
@@ -1048,13 +1048,13 @@ static void draw_search(short wx, short wy, short ww)
 	/* the search field: a label (bold, the cheap way on its white
 	   ground: put), then a framed line to type in */
 	white_ground = 1;
-	put((short) (wx + MARGIN + cw / 2), (short) (wy + 6), "Search", 6, 1, 1);
+	put((short) (wx + MARGIN), (short) (wy + 6), "Search", 6, 1, 1);
 	white_ground = 0;
 	fx0 = (short) (wx + MARGIN + 8 * cw);
 	fx1 = (short) (wx + ww - MARGIN - cw / 2);
 	if (fx1 < fx0 + 4 * cw)
 		fx1 = (short) (fx0 + 4 * cw);
-	frame_(fx0, (short) (wy + 4), fx1, (short) (wy + 4 + ch + 3), 1);
+	frame_((short) (fx0 - cw / 2), (short) (wy + 4), fx1, (short) (wy + 4 + ch + 3), 1);  /* its text on the grid */
 	snprintf(text, sizeof(text), "%s_", lib.query);
 	{
 		long n = (long) strlen(text), room = (fx1 - fx0 - cw) / cw;
@@ -1062,7 +1062,7 @@ static void draw_search(short wx, short wy, short ww)
 
 		vswr_mode(vdi_h, MD_TRANS);
 		vst_color(vdi_h, 1);
-		text_at((short) (fx0 + cw / 2), (short) (wy + 6), s, (long) strlen(s));
+		text_at(fx0, (short) (wy + 6), s, (long) strlen(s));
 		if (lib.query[0] == '\0' && ncolors >= 16)
 		{
 			/* what can be typed, in grey (in mono it would be the
@@ -1072,7 +1072,7 @@ static void draw_search(short wx, short wy, short ww)
 			if ((long) sizeof(hint) + 1 < room)
 			{
 				vst_color(vdi_h, grey());
-				text_at((short) (fx0 + cw / 2 + 2 * cw), (short) (wy + 6), hint, (long) sizeof(hint) - 1);
+				text_at((short) (fx0 + 2 * cw), (short) (wy + 6), hint, (long) sizeof(hint) - 1);
 			}
 		}
 	}
@@ -1107,7 +1107,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	if (panes())
 	{
 		const lib_pane *p = lib.pane >= 0 ? &lib.panes[lib.pane] : NULL;
-		short hx = (short) (lx + MARGIN + cw / 2), hy = (short) (wy + header_h() + 4);
+		short hx = (short) (lx + MARGIN), hy = (short) (wy + header_h() + 4);
 
 		if (cx < wx + pane_w() + 4)
 			draw_panes(wx, wy, wh, cx, cy, cw_, ch_);
@@ -1235,6 +1235,11 @@ static void redraw_all(void)
 #define R_LIST   4                     /* Continue, the heading and the rows */
 #define R_DETAIL 8                     /* what the row chosen is */
 
+/* the slider and the info line, set in a timer turn of their own after
+   the rows (libwin_idle): the AES draws each again, 40 ms or more on an
+   ST (the guidelines, Speed; the viewer's sliders the same) */
+static int frame_due;
+
 static void refresh(int what)
 {
 	short wx, wy, ww, wh, lx, ly, lw, lh, top;
@@ -1245,8 +1250,7 @@ static void refresh(int what)
 		return;
 	}
 	clamp();
-	set_slider();
-	update_info();
+	frame_due = 1;
 	work_area(&wx, &wy, &ww, &wh);
 	list_area(&lx, &ly, &lw, &lh);
 	top = (short) (wy + header_h());
@@ -2033,7 +2037,7 @@ int libwin_message(short *msg)
 
 int libwin_busy(void)
 {
-	return lib_ready && (rows_due || lib.query_stale || lib.rows_stale || lib.scanning ||
+	return lib_ready && (rows_due || frame_due || lib.query_stale || lib.rows_stale || lib.scanning ||
 			     (lib.fts != NULL && !ehv_fts_done(lib.fts)));
 }
 
@@ -2111,6 +2115,17 @@ int libwin_idle(void)
 			log_event("fulltext", q, num);
 		}
 		log_due = 0;
+		return libwin_busy() | 2;
+	}
+	if (lib_ready && frame_due)
+	{
+		aes_profile_tag("lib-frame");
+		frame_due = 0;
+		if (lib_h > 0 && !lib_icon)
+		{
+			set_slider();
+			update_info();
+		}
 		return libwin_busy() | 2;
 	}
 	if (lib_ready && lib.scanning)
