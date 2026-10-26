@@ -3601,6 +3601,10 @@ int main(void)
 			}
 	}
 	recent_save();
+	/* the four longest stretches between event calls (gem.c; the
+	   guidelines' Speed): EHypView keeps no log, so for the tests */
+	if (aes_slowest()[0] != '\0')
+		log_event("slowest", aes_slowest(), NULL);
 	log_event("quit", NULL, NULL);
 	if (has_menu)
 		menu_bar(menu.tree, 0);

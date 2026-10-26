@@ -279,7 +279,7 @@ static void under_popup(void)
 {
 	if (dlg_in_window())
 		dlg_draw(tree, 0);
-	else
+	else if (!popup_put_back)          /* else the screen under it is back */
 		objc_draw(tree, 0, 8, popup_area.x, popup_area.y, popup_area.w, popup_area.h);
 }
 

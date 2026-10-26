@@ -818,11 +818,14 @@ static int build_pages(ehv_library *lib)
 		}
 	}
 	lib->npages = lib->found.n;
-	if (lib->found.n > 0 && add_row(lib, LIB_GROUP, 0, "Pages") < 0)
+	if ((lib->found.n > 0 || lib->scanning) && add_row(lib, LIB_GROUP, 0, "Pages") < 0)
 		return -1;
 	for (i = 0; i < lib->found.n; i++)
 		if (add_row(lib, LIB_PAGE, i, NULL) < 0)
 			return -1;
+	/* under the names found so far: more may come (the hub, 26 Oct) */
+	if (lib->scanning)
+		return add_row(lib, LIB_WAIT, 0, NULL);
 	return 0;
 }
 
@@ -1249,6 +1252,9 @@ void lib_row_text(const ehv_library *lib, unsigned long row, char *buf, unsigned
 		break;
 	case LIB_NOTE:
 		snprintf(buf, size, "  %s", lib->note);
+		break;
+	case LIB_WAIT:
+		snprintf(buf, size, "  Searching the names...");
 		break;
 	case LIB_BOOKMARK:
 		if (lib->bm != NULL && r->ref < lib->bm->n)

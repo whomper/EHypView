@@ -1022,7 +1022,7 @@ static void draw_row_parts(long r, const lib_row *row, short rh, short lx, short
 			put_right(right, (short) (y + 3), detail, dl, acolor);
 		return;
 	}
-	if (row->kind != LIB_NOTE)
+	if (row->kind != LIB_NOTE && row->kind != LIB_WAIT)
 		glyph(row->kind, gx, (short) (y + (rh - ch) / 2), 0,
 		      sel ? 0 : row->kind == LIB_ACTION ? link_color() : 1, row->tint);
 	room = (right - tx) / cw;
@@ -1033,7 +1033,8 @@ static void draw_row_parts(long r, const lib_row *row, short rh, short lx, short
 		if (dl > 0 && tl + dl + 3 > room)
 			dl = 0;                        /* no room for both: the text */
 		put(tx, (short) (y + (rh - ch) / 2), text, dl > 0 ? room - dl - 2 : room,
-		    row->kind == LIB_ACTION && !sel ? link_color() : color, row->kind == LIB_NOTE ? 4 : 0);
+		    row->kind == LIB_ACTION && !sel ? link_color() : row->kind == LIB_WAIT ? dcolor : color,
+		    row->kind == LIB_NOTE ? 4 : 0);
 		if (dl > 0)
 			put_right(right, (short) (y + (rh - ch) / 2), detail, dl, panes() ? acolor : dcolor);
 	}

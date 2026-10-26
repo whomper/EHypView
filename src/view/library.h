@@ -40,6 +40,7 @@
 #define LIB_NOTE    5     /* a message                          */
 #define LIB_BOOKMARK 6    /* a bookmark                         */
 #define LIB_RECENT  7     /* a page read lately                 */
+#define LIB_WAIT    8     /* "Searching the names...": more may come */
 
 /* layouts */
 #define LIB_OUTLINE 0

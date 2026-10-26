@@ -311,6 +311,7 @@ static void test_names(const ehv_index *idx)
 	/* at once: the names starting with it (they follow each other in the
 	   index); those containing it, or like it, come in the slices */
 	CHECK(lib_set_query(&lib, "Secnd") == 0 && lib.npages == 0 && lib.scanning);
+	CHECK(lib.nrows >= 2 && lib.rows[1].kind == LIB_WAIT);           /* "Searching the names..." */
 	CHECK(lib_search_step(&lib, 1) >= 0);
 	CHECK(search(&lib, "Secnd") == 0 && lib.npages >= 1 && !lib.scanning);
 	CHECK(lib_set_query(&lib, "sec") == 0 && lib.npages >= 1 && lib.scanning);

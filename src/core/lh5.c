@@ -111,9 +111,13 @@ static unsigned int getbits(lh5_state *s, int n)
 
 static void huff_constant(huff_t *h, unsigned short nsym, unsigned int sym)
 {
+	unsigned int i;
+
 	h->nsym = nsym;
 	h->constant = (int) sym;
 	memset(h->len, 0, sizeof(h->len));
+	for (i = 0; i < FASTSIZE; i++)     /* lh5_decode()'s own lookup: no bits */
+		h->fast[i] = (unsigned short) sym;
 }
 
 /* build lookup structures from h->len[0 .. nsym-1]; -1 if oversubscribed */
@@ -313,24 +317,51 @@ static int read_c_len(lh5_state *s)
 
 /* ---------------------------------------------------------------- */
 
+/*
+ * The symbols, the decoder's whole time (an ST spent 8.7 s on a 640 x
+ * 400 picture): the bit buffer is held here, not in the state, and a
+ * code of up to FASTBITS bits (nearly all of them) is one lookup; the
+ * table headers, once a block, and longer codes go through the state.
+ * Reading past the end gives zeros; it is an error when the bits taken
+ * go past it (checked at the end of each block and of the data).
+ */
 int lh5_decode(const unsigned char *src, unsigned long srclen,
                unsigned char *dst, unsigned long dstlen)
 {
 	static lh5_state st;             /* ~6 KB: keep it off the TOS stack */
 	lh5_state *s = &st;
-	unsigned long out = 0;
-	unsigned long blocksize = 0;
+	unsigned long out = 0, blocksize = 0, pos;
+	unsigned int bb;                 /* 32 bits, here and on the Atari */
+	int bc;
 
 	memset(s, 0, sizeof(*s));
 	s->src = src;
 	s->srclen = srclen;
 
+/* at least n (up to 24) bits in bb, from its top */
+#define NEED(n) \
+	while (bc < (n)) \
+	{ \
+		bb |= (unsigned int) (pos < srclen ? src[pos] : 0) << (24 - bc); \
+		pos++; \
+		bc += 8; \
+	}
+/* the state's bits to and from the locals */
+#define LOAD() (pos = s->pos, bb = (unsigned int) s->bitbuf, bc = s->bitcount)
+#define SAVE() (s->pos = pos, s->bitbuf = bb, s->bitcount = bc, \
+		s->consumed = pos * 8UL - (unsigned long) bc)
+#define PAST_END() (pos * 8UL - (unsigned long) bc > srclen * 8UL)
+
+	LOAD();
 	while (out < dstlen)
 	{
-		unsigned int c;
+		unsigned int c, e;
 
 		if (blocksize == 0)
 		{
+			if (PAST_END())
+				return -1;
+			SAVE();
 			blocksize = getbits(s, 16);
 			if (blocksize == 0)
 				blocksize = 65536UL;
@@ -339,33 +370,77 @@ int lh5_decode(const unsigned char *src, unsigned long srclen,
 				read_pt_len(s, &s->p, NP, PBIT, -1) < 0 ||
 				s->error)
 				return -1;
+			LOAD();
 		}
 		blocksize--;
 
-		c = huff_decode(s, &s->c);
-		if (s->error)
-			return -1;
+		NEED(MAXLEN);
+		e = s->c.fast[bb >> (32 - FASTBITS)];
+		if (e != SLOW)
+		{
+			bb <<= e >> 9;
+			bc -= (int) (e >> 9);
+			c = e & 0x1FF;
+		} else
+		{
+			SAVE();
+			c = huff_decode(s, &s->c);
+			if (s->error)
+				return -1;
+			LOAD();
+		}
 		if (c < 256)
 		{
 			dst[out++] = (unsigned char) c;
-		} else
+			continue;
+		}
 		{
-			unsigned long len = c - (256 - THRESHOLD);
-			unsigned long dist;
-			unsigned int j = huff_decode(s, &s->p);
+			unsigned long len = c - (256 - THRESHOLD), dist;
+			unsigned int j;
 
-			if (j != 0)
-				j = (1U << (j - 1)) + getbits(s, (int) j - 1);
-			if (s->error)
-				return -1;
-			dist = (unsigned long) j + 1;
-			while (len-- > 0 && out < dstlen)
+			NEED(MAXLEN);
+			e = s->p.fast[bb >> (32 - FASTBITS)];
+			if (e != SLOW)
 			{
-				/* LHarc starts with a window full of spaces */
-				dst[out] = out >= dist ? dst[out - dist] : ' ';
-				out++;
+				bb <<= e >> 9;
+				bc -= (int) (e >> 9);
+				j = e & 0x1FF;
+			} else
+			{
+				SAVE();
+				j = huff_decode(s, &s->p);
+				if (s->error)
+					return -1;
+				LOAD();
 			}
+			if (j > 1)
+			{
+				int n = (int) j - 1;      /* at most 13 bits */
+
+				NEED(n);
+				j = (1U << n) + (unsigned int) (bb >> (32 - n));
+				bb <<= n;
+				bc -= n;
+			}
+			dist = (unsigned long) j + 1;
+			if (len > dstlen - out)
+				len = dstlen - out;
+			if (dist <= out)
+			{
+				unsigned char *d = dst + out;
+				const unsigned char *f = d - dist;
+
+				out += len;
+				while (len-- > 0)
+					*d++ = *f++;
+			} else
+				while (len-- > 0)
+				{
+					/* LHarc starts with a window full of spaces */
+					dst[out] = out >= dist ? dst[out - dist] : ' ';
+					out++;
+				}
 		}
 	}
-	return s->error ? -1 : 0;
+	return PAST_END() ? -1 : 0;
 }
