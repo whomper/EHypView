@@ -256,6 +256,8 @@ typedef struct lib_gkey {
 	size_t top;            /* subj_top() */
 	const char *part;      /* subj_part() */
 	const char *title;
+	const char *fold;      /* the title folded once (the compares were half
+	                          of the library's opening on an ST) */
 	const char *path;
 } gkey;
 
@@ -297,9 +299,38 @@ static int cmp_guides(const void *x, const void *y)
 		if (g->part != NULL && (c = atari_casecmp(g->part, h->part)) != 0)
 			return c;
 	}
-	if ((c = atari_casecmp(g->title, h->title)) != 0)
+	if ((c = strcmp(g->fold, h->fold)) != 0)
 		return c;
 	return strcmp(g->path, h->path);
+}
+
+/* the order sorted, merged in runs (common's qsort sifts a heap: twice
+   the compares); qsort when there is no room for the runs */
+static void sort_order(unsigned long *a, unsigned long n)
+{
+	unsigned long *b = n > 1 ? malloc(n * sizeof(unsigned long)) : NULL, w, i;
+
+	if (b == NULL)
+	{
+		qsort(a, n, sizeof(unsigned long), cmp_guides);
+		return;
+	}
+	for (w = 1; w < n; w *= 2)
+	{
+		for (i = 0; i < n; i += 2 * w)
+		{
+			unsigned long l = i, m = i + w < n ? i + w : n, r = i + 2 * w < n ? i + 2 * w : n, k = i, j = m;
+
+			while (l < m && j < r)
+				b[k++] = cmp_guides(&a[j], &a[l]) < 0 ? a[j++] : a[l++];
+			while (l < m)
+				b[k++] = a[l++];
+			while (j < r)
+				b[k++] = a[j++];
+		}
+		memcpy(a, b, n * sizeof(unsigned long));
+	}
+	free(b);
 }
 
 /* the readable hypertexts in the order listed, and their tints: made
@@ -324,11 +355,32 @@ static int make_order(ehv_library *lib)
 	lib->order_of = NULL;
 	if (idx == NULL)
 		return 0;
-	lib->order = malloc((idx->nguides + 1) * sizeof(unsigned long));
-	lib->tint = malloc(idx->nguides + 1);
-	lib->keys = keys = malloc((idx->nguides + 1) * sizeof(gkey));
-	if (lib->order == NULL || lib->tint == NULL || keys == NULL)
-		return -1;
+	{
+		/* the keys, and the folded titles after them in the same block */
+		size_t room = 0;
+
+		for (i = 0; i < idx->nguides; i++)
+			room += strlen(guide_title(&idx->guides[i])) + 1;
+		lib->order = malloc((idx->nguides + 1) * sizeof(unsigned long));
+		lib->tint = malloc(idx->nguides + 1);
+		lib->keys = keys = malloc((idx->nguides + 1) * sizeof(gkey) + room);
+		if (lib->order == NULL || lib->tint == NULL || keys == NULL)
+			return -1;
+	}
+	{
+		const unsigned char *lt = atari_lower_table();
+		char *f = (char *) (keys + idx->nguides + 1);
+
+		for (i = 0; i < idx->nguides; i++)
+		{
+			const unsigned char *p = (const unsigned char *) guide_title(&idx->guides[i]);
+
+			keys[i].fold = f;
+			while (*p != '\0')
+				*f++ = (char) lt[*p++];
+			*f++ = '\0';
+		}
+	}
 	for (i = 0; i < idx->nguides; i++)
 	{
 		const ehv_guide *g = &idx->guides[i];
@@ -348,7 +400,7 @@ static int make_order(ehv_library *lib)
 		k->path = g->path;
 	}
 	cmp_keys = keys;
-	qsort(lib->order, n, sizeof(unsigned long), cmp_guides);
+	sort_order(lib->order, n);
 	for (i = 0; i < n; i++)
 	{
 		const char *subj = keys[lib->order[i]].subj;
