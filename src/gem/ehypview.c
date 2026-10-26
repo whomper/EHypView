@@ -60,7 +60,7 @@
 #define FONT_CHANGED 0x7a18        /* the font protocol */
 #define FONT_ACK     0x7a1a
 
-#define MARGIN       4             /* pixels left of the text */
+#define MARGIN       8             /* pixels left of the text */
 #define WKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | \
                VSLIDE | LFARROW | RTARROW | HSLIDE)
 
@@ -951,20 +951,6 @@ static void after(int rc)
 	}
 }
 
-/* where a window goes so the page's text starts on a 16-pixel boundary:
-   the VDI draws aligned text far faster (TOS 1.04: 65 ms a line on an ST
-   otherwise; EContact's snap_x) */
-static short snap_x(short x, short w)
-{
-	short wx, wy, ww, wh;
-
-	wind_calc(WC_WORK, WKIND, x, desk_y, w, desk_h, &wx, &wy, &ww, &wh);
-	x = (short) (x - ((wx + MARGIN) & 15));
-	if (x < desk_x)
-		x = (short) (x + 16);
-	return x;
-}
-
 static void open_window(void)
 {
 	short x, y, w, h, cols;
@@ -1005,7 +991,9 @@ static void open_window(void)
 		if (y + h + n * step <= desk_y + desk_h)
 			y = (short) (y + n * step);
 	}
-	x = snap_x(x, w);
+	/* its text on the 8-pixel grid: the VDI draws it far faster (the
+	   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
+	x = wind_x8(WKIND, x, y, w, h);
 	view_title(&cur->view, cur->name, sizeof(cur->name));
 	wind_set_str(cur->h, WF_NAME, cur->name);
 	update_info();
@@ -2488,7 +2476,7 @@ static void viewer_message(short *msg)
 			w = msg[6] < 16 * sys_cw ? (short) (16 * sys_cw) : msg[6];
 			w = w < 12 * cw ? (short) (12 * cw) : w;
 			h = msg[7] < 6 * ch + tb_height(sys_ch) ? (short) (6 * ch + tb_height(sys_ch)) : msg[7];
-			wind_set(cur->h, WF_CURRXYWH, snap_x(msg[4], w), msg[5], w, h);
+			wind_set(cur->h, WF_CURRXYWH, wind_x8(WKIND, msg[4], msg[5], w, h), msg[5], w, h);
 			clamp_scroll();
 			set_sliders();
 			if (msg[0] == WM_SIZED)

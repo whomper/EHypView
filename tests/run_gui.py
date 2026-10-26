@@ -536,10 +536,11 @@ def item(title, n):
     return ("menu", title[0], title[1], title[0] + 24, 19 + 16 * n + 8)
 
 
-# the first viewer window's work area starts at x 12: the window is put
-# where its text starts on 16 pixels (the VDI's fast text; it started at
-# 27 before), and what is measured in it below is moved by VX
-VX = -15
+# the first viewer window's work area starts at x 24: the window is put
+# where its work area is on the 8-pixel grid (wind_x8, the guidelines'
+# Speed; it started at 27 before), and what is measured in it below is
+# moved by VX (its text, 8 pixels in now, by one pixel less)
+VX = -3
 
 
 def vx(x):

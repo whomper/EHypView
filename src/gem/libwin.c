@@ -41,7 +41,7 @@
 #include "libbar.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
-#define MARGIN 4
+#define MARGIN 8
 #define PANES_COLS 56                  /* the narrowest window with two panes */
 #define PANE_COLS 22                   /* the Subjects pane */
 #define CHIP_COLS 26                   /* a Continue button's text at most */
@@ -90,19 +90,6 @@ static void ensure_model(void)
 		lib_set_index(&lib, idx);
 		lib_ready = 1;
 	}
-}
-
-/* where the window goes so its text starts on a 16-pixel boundary: the
-   VDI draws aligned text far faster (EContact's snap_x) */
-static short snap_x(short x, short w)
-{
-	short wx, wy, ww, wh;
-
-	wind_calc(WC_WORK, LKIND, x, desk_y, w, desk_h, &wx, &wy, &ww, &wh);
-	x = (short) (x - ((wx + MARGIN) & 15));
-	if (x < desk_x)
-		x = (short) (x + 16);
-	return x;
 }
 
 /* ---------------------------------------------------------------- */
@@ -1367,7 +1354,9 @@ void libwin_open(void)
 			h = desk_h;
 		x = (short) (desk_x + desk_w - w - 8 * cw > desk_x ? desk_x + desk_w - w - 8 * cw : desk_x);
 		y = (short) (desk_y + ch);
-		x = snap_x(x, w);
+		/* its text on the 8-pixel grid: the VDI draws it far faster (the
+		   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
+		x = wind_x8(LKIND, x, y, w, h);
 		wind_set_str(lib_h, WF_NAME, lib_name);
 		info_shown[0] = '\x01';            /* a new window: none yet */
 		slider_shown[0] = slider_shown[1] = -1;
@@ -1941,7 +1930,7 @@ int libwin_message(short *msg)
 		}
 		w = msg[6] < 20 * cw ? (short) (20 * cw) : msg[6];
 		h = msg[7] < 6 * ch ? (short) (6 * ch) : msg[7];
-		wind_set(lib_h, WF_CURRXYWH, snap_x(msg[4], w), msg[5], w, h);
+		wind_set(lib_h, WF_CURRXYWH, wind_x8(LKIND, msg[4], msg[5], w, h), msg[5], w, h);
 		apply_layout();
 		clamp();
 		set_slider();
