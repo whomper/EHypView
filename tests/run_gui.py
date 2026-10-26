@@ -714,7 +714,7 @@ TWIN_STEPS = [
 # accessory, whose ST RAM is reserved at boot
 FASTRAM = ["--ttram", "64", "--addr24", "off"]
 FASTRAM_STEPS = [
-    ([], ["pictures 3 st-ram", "page %s Main" % IMAGES]),    # laid out, then shown
+    ([], ["page %s Main" % IMAGES, "pictures 3 st-ram"]),    # shown, then its pictures made
     ([("ctrl", Q)], ["quit"]),
 ]
 ACC_FASTRAM_STEPS = [
@@ -722,7 +722,7 @@ ACC_FASTRAM_STEPS = [
     # the desktop's Desk menu: the library, read once it is opened
     ([("wait", 6), ("click", 18, 8), ("click", 60, 64)], ["library 0", "index 5 guides"]),
     ([("type", "image")], ['search "image" 1']),
-    ([RETURN], ["pictures 3 st-ram", "page %s Main" % IMAGES]),
+    ([RETURN], ["page %s Main" % IMAGES, "pictures 3 st-ram"]),
 ]
 
 
