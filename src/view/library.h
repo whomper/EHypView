@@ -101,6 +101,12 @@ typedef struct {
 	ehv_hits found;       /* the names the search found (PAGE rows) */
 	char found_q[LIB_QUERY_MAX];     /* for this search, */
 	const ehv_index *found_of;       /* in this index (NULL: none) */
+	/* the names searched through: those starting with the query found
+	   at once, the rest in slices (lib_search_step) */
+	ehv_names scan;
+	int scanning;         /* 1: lib_search_step() has names to go */
+	unsigned long plain;  /* names the same as, starting with or containing it */
+	ehv_hits rank[4];     /* the same, starting with, containing, similar */
 	unsigned long npages, nguides;   /* matches in the last rebuild */
 	char note[80];        /* text of the NOTE row               */
 
@@ -109,6 +115,7 @@ typedef struct {
 	unsigned long *order; /* readable hypertexts, as listed     */
 	unsigned long norder;
 	unsigned char *tint;  /* each hypertext's subject's tint    */
+	struct lib_gkey *keys;           /* each one's subject, worked out once */
 	const ehv_index *order_of;       /* the index order was made for */
 	lib_pane *panes;      /* the Subjects pane                  */
 	unsigned long npanes, cap_panes;
@@ -153,6 +160,10 @@ int lib_selected_bookmark(const ehv_library *lib);
 
 /* change the search text; rebuilds the list */
 int lib_set_query(ehv_library *lib, const char *query);
+/* the search through the names on for at most `budget` names (the
+   rows rebuilt when it found more): 1 done (or none going), 2 more and
+   the rows changed, 0 more, -1 failed */
+int lib_search_step(ehv_library *lib, unsigned int budget);
 
 /* rebuild the list for the current query */
 int lib_rebuild(ehv_library *lib);

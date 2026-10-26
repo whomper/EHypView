@@ -109,7 +109,8 @@ static unsigned long rec_put(unsigned char *r, unsigned long guide, unsigned cha
 
 /* a name read from a file, checked: its size, 0 when it doesn't fit in
    room bytes or isn't right */
-static unsigned long rec_check(const unsigned char *r, unsigned long room, unsigned long nguides)
+static unsigned long rec_check(const unsigned char *r, unsigned long room, unsigned long nguides,
+                               const unsigned char **name_end)
 {
 	const unsigned char *a, *b, *end = r + room;
 
@@ -118,17 +119,21 @@ static unsigned long rec_check(const unsigned char *r, unsigned long room, unsig
 	if ((a = memchr(r + 7, '\0', (size_t) (end - r - 7))) == NULL ||
 	    (b = memchr(a + 1, '\0', (size_t) (end - a - 1))) == NULL)
 		return 0;
+	if (name_end != NULL)
+		*name_end = a;
 	return (unsigned long) (b + 1 - r);
 }
 
-static void rec_get(const unsigned char *r, ehv_sym *s)
+/* name_end: the name's NUL, as rec_check() found it (the library's
+   search goes through every name: once is enough) */
+static void rec_get(const unsigned char *r, const unsigned char *name_end, ehv_sym *s)
 {
 	s->guide = rec_guide(r);
 	s->kind = r[3];
 	s->from_ref = r[4];
 	s->line = (unsigned short) (r[5] << 8 | r[6]);
 	s->name = (const char *) r + 7;
-	s->node = s->name + strlen(s->name) + 1;
+	s->node = (const char *) name_end + 1;
 	if (*s->node == '\0')
 		s->node = s->name;
 }
@@ -289,7 +294,7 @@ int ehv_names_next(ehv_names *nm, ehv_sym *s)
 
 	for (;;)
 	{
-		const unsigned char *blk;
+		const unsigned char *blk, *end;
 
 		if (nm->bi >= nm->nbuf)
 		{
@@ -325,13 +330,13 @@ int ehv_names_next(ehv_names *nm, ehv_sym *s)
 			nm->pos = MARK;
 			continue;
 		}
-		if ((sz = rec_check(blk + nm->pos, EHV_BLOCK - nm->pos, idx->nguides)) == 0)
+		if ((sz = rec_check(blk + nm->pos, EHV_BLOCK - nm->pos, idx->nguides, &end)) == 0)
 		{
 			nm->failed = 1;               /* damaged */
 			nm->bi = nm->nbuf;
 			return -1;
 		}
-		rec_get(blk + nm->pos, s);
+		rec_get(blk + nm->pos, end, s);
 		nm->pos += sz;
 		return 1;
 	}
@@ -362,6 +367,11 @@ static unsigned long start_block(const ehv_index *idx, const char *name)
 			hi = mid;
 	}
 	return lo > 0 ? lo - 1 : 0;
+}
+
+unsigned long ehv_names_start(const ehv_index *idx, const char *name)
+{
+	return idx->nblocks > 0 ? start_block(idx, name) : 0;
 }
 
 unsigned long ehv_index_find_symbol(const ehv_index *idx, const char *name, long guide,
@@ -1040,7 +1050,7 @@ static int refill_old(ehv_build *b, input *in, int h)
 		while (pos < EHV_BLOCK && blk[pos] != 0)
 		{
 			unsigned char *r = blk + pos;
-			unsigned long sz = rec_check(r, EHV_BLOCK - pos, f->nguides), g;
+			unsigned long sz = rec_check(r, EHV_BLOCK - pos, f->nguides, NULL), g;
 
 			if (sz == 0)
 				return -1;                   /* damaged */

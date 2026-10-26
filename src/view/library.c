@@ -15,6 +15,9 @@
 #define MAX_PAGE_ROWS 100
 #define ENOUGH_FOR_NO_SIMILAR 20
 
+static void search_stop(ehv_library *lib);
+static int rebuild(ehv_library *lib, int keep_selection, int want_text);
+
 static const char *guide_title(const ehv_guide *g)
 {
 	return g->database != NULL && g->database[0] != '\0' ? g->database : g->key;
@@ -31,11 +34,12 @@ void lib_init(ehv_library *lib, const ehv_index *idx)
 
 void lib_free(ehv_library *lib)
 {
+	search_stop(lib);
 	ehv_fts_free(lib->fts);
-	ehv_hits_free(&lib->found);
 	free(lib->rows);
 	free(lib->order);
 	free(lib->tint);
+	free(lib->keys);
 	free(lib->panes);
 	memset(lib, 0, sizeof(*lib));
 	lib->sel = -1;
@@ -244,21 +248,55 @@ void lib_subject_text(const char *subj, char *buf, unsigned long size)
 		snprintf(buf, size, "%s", subj);
 }
 
-static const ehv_index *cmp_idx;
+/* each hypertext's sort key, worked out once before the sort (a sort
+   compares each one many times: 2.5 s for 64 on an ST, recomputed) */
+typedef struct lib_gkey {
+	const char *subj;      /* lib_subject(), NULL: none */
+	size_t top;            /* subj_top() */
+	const char *part;      /* subj_part() */
+	const char *title;
+	const char *path;
+} gkey;
+
+static const gkey *cmp_keys;
+
+/* same_top() and same_subject(), from the keys */
+static int key_same_top(const gkey *a, const gkey *b)
+{
+	return a->top == b->top && atari_ncasecmp(a->subj, b->subj, a->top) == 0;
+}
+
+static int key_same_subject(const gkey *a, const gkey *b)
+{
+	return key_same_top(a, b) && (a->part == NULL) == (b->part == NULL) &&
+		(a->part == NULL || atari_casecmp(a->part, b->part) == 0);
+}
 
 static int cmp_guides(const void *x, const void *y)
 {
-	const ehv_guide *g = &cmp_idx->guides[*(const unsigned long *) x];
-	const ehv_guide *h = &cmp_idx->guides[*(const unsigned long *) y];
-	const char *a = lib_subject(g->subject), *b = lib_subject(h->subject);
+	const gkey *g = &cmp_keys[*(const unsigned long *) x], *h = &cmp_keys[*(const unsigned long *) y];
+	const unsigned char *t = atari_lower_table();
 	int c;
 
 	/* hypertexts without a subject come last */
-	if ((a == NULL) != (b == NULL))
-		return a == NULL ? 1 : -1;
-	if (a != NULL && (c = subj_cmp(a, b)) != 0)
-		return c;
-	if ((c = atari_casecmp(guide_title(g), guide_title(h))) != 0)
+	if ((g->subj == NULL) != (h->subj == NULL))
+		return g->subj == NULL ? 1 : -1;
+	if (g->subj != NULL)
+	{
+		/* subj_cmp(), from the keys */
+		size_t i;
+
+		for (i = 0; i < g->top && i < h->top; i++)
+			if ((c = t[(unsigned char) g->subj[i]] - t[(unsigned char) h->subj[i]]) != 0)
+				return c;
+		if (g->top != h->top)
+			return g->top < h->top ? -1 : 1;
+		if ((g->part == NULL) != (h->part == NULL))
+			return g->part == NULL ? -1 : 1;
+		if (g->part != NULL && (c = atari_casecmp(g->part, h->part)) != 0)
+			return c;
+	}
+	if ((c = atari_casecmp(g->title, h->title)) != 0)
 		return c;
 	return strcmp(g->path, h->path);
 }
@@ -271,32 +309,48 @@ static int make_order(ehv_library *lib)
 	unsigned long i, n = 0;
 	unsigned int t = 0;
 	const char *group = NULL;
+	gkey *keys;
 
 	if (idx != NULL && lib->order != NULL && lib->order_of == idx)
 		return 0;
 	free(lib->order);
 	free(lib->tint);
+	free(lib->keys);
 	lib->order = NULL;
 	lib->tint = NULL;
+	lib->keys = NULL;
 	lib->norder = 0;
 	lib->order_of = NULL;
 	if (idx == NULL)
 		return 0;
 	lib->order = malloc((idx->nguides + 1) * sizeof(unsigned long));
 	lib->tint = malloc(idx->nguides + 1);
-	if (lib->order == NULL || lib->tint == NULL)
+	lib->keys = keys = malloc((idx->nguides + 1) * sizeof(gkey));
+	if (lib->order == NULL || lib->tint == NULL || keys == NULL)
 		return -1;
 	for (i = 0; i < idx->nguides; i++)
 	{
+		const ehv_guide *g = &idx->guides[i];
+		gkey *k = &keys[i];
+
 		lib->tint[i] = 0;
-		if (idx->guides[i].error == HYP_OK)
-			lib->order[n++] = i;
+		k->subj = NULL;
+		k->top = 0;
+		k->part = NULL;
+		if (g->error != HYP_OK)
+			continue;
+		lib->order[n++] = i;
+		k->subj = lib_subject(g->subject);
+		k->top = k->subj != NULL ? subj_top(k->subj) : 0;
+		k->part = k->subj != NULL && k->subj[k->top] == '/' ? k->subj + k->top + 1 : NULL;
+		k->title = guide_title(g);
+		k->path = g->path;
 	}
-	cmp_idx = idx;
+	cmp_keys = keys;
 	qsort(lib->order, n, sizeof(unsigned long), cmp_guides);
 	for (i = 0; i < n; i++)
 	{
-		const char *subj = lib_subject(idx->guides[lib->order[i]].subject);
+		const char *subj = keys[lib->order[i]].subj;
 
 		if (subj == NULL)
 			continue;
@@ -310,11 +364,6 @@ static int make_order(ehv_library *lib)
 	lib->norder = n;
 	lib->order_of = idx;
 	return 0;
-}
-
-static int same_group(const char *a, const char *b)
-{
-	return (a == NULL) == (b == NULL) && (a == NULL || same_top(a, b));
 }
 
 /* a hypertext with this subject is in the pane */
@@ -343,22 +392,23 @@ static long next_pane(const ehv_library *lib, long k, unsigned char level)
  */
 static int build_groups(ehv_library *lib, int folds, const lib_pane *only)
 {
-	const ehv_index *idx = lib->idx;
 	unsigned long i, n = 0;
 	long heading = -1, sub = -1, k = -1;
-	const char *group = NULL, *part_of = NULL;
+	const gkey *group = NULL, *part_of = NULL;
 
 	for (i = 0; i < lib->norder; i++)
 	{
 		unsigned long g = lib->order[i];
-		const char *subj = lib_subject(idx->guides[g].subject);
+		const gkey *gk = &lib->keys[g];
+		const char *subj = gk->subj;
 		long under;
 
 		if (only != NULL)
 		{
 			if (!in_pane(only, subj))
 				continue;
-		} else if (heading < 0 || !same_group(subj, group))
+		} else if (heading < 0 || (subj == NULL) != (group->subj == NULL) ||
+			   (subj != NULL && !key_same_top(gk, group)))
 		{
 			const char *text = "Other hypertexts";
 
@@ -374,7 +424,7 @@ static int build_groups(ehv_library *lib, int folds, const lib_pane *only)
 				if (is_folded(lib, lib->rows[heading].text))
 					lib->rows[heading].flags |= LIB_FOLDED;
 			}
-			group = subj;
+			group = gk;
 			sub = -1;
 			part_of = NULL;
 		}
@@ -387,16 +437,16 @@ static int build_groups(ehv_library *lib, int folds, const lib_pane *only)
 		}
 		/* a part of the subject: under a heading of its own */
 		under = -1;
-		if (subj != NULL && subj_part(subj) != NULL && (only == NULL || only->level == 0))
+		if (subj != NULL && gk->part != NULL && (only == NULL || only->level == 0))
 		{
-			if (sub < 0 || part_of == NULL || !same_subject(subj, part_of))
+			if (sub < 0 || part_of == NULL || !key_same_subject(gk, part_of))
 			{
-				if (add_row(lib, LIB_GROUP, 0, subj_part(subj)) < 0)
+				if (add_row(lib, LIB_GROUP, 0, gk->part) < 0)
 					return -1;
 				sub = (long) lib->nrows - 1;
 				lib->rows[sub].flags = LIB_SUB;
 				lib->rows[sub].tint = lib->tint[g];
-				part_of = subj;
+				part_of = gk;
 			}
 			under = sub;
 		}
@@ -464,6 +514,7 @@ static int build_panes(ehv_library *lib)
 	long k;
 
 	long top = -1;
+	const gkey *topk = NULL, *partk = NULL;
 	char key[sizeof(lib->pane_name)];
 
 	lib->npanes = 0;
@@ -476,8 +527,8 @@ static int build_panes(ehv_library *lib)
 		return -1;
 	for (i = 0; i < lib->norder; i++)
 	{
-		const char *subj = lib_subject(idx->guides[lib->order[i]].subject);
-		const char *part;
+		const gkey *gk = &lib->keys[lib->order[i]];
+		const char *subj = gk->subj;
 		lib_pane *last;
 
 		if (subj == NULL)
@@ -486,28 +537,29 @@ static int build_panes(ehv_library *lib)
 			continue;
 		}
 		/* the subject, then its part, if any */
-		if (top >= 0 && same_top(lib->panes[top].subj, subj))
+		if (top >= 0 && key_same_top(topk, gk))
 			lib->panes[top].count++;
 		else
 		{
-			if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, subj,
-				     (int) subj_top(subj)) < 0)
+			if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, subj, (int) gk->top) < 0)
 				return -1;
 			top = (long) lib->npanes - 1;
 			lib->panes[top].subj = subj;
+			topk = gk;
 		}
-		if ((part = subj_part(subj)) == NULL)
+		if (gk->part == NULL)
 			continue;
 		last = &lib->panes[lib->npanes - 1];
-		if (last->level == 1 && same_subject(last->subj, subj))
+		if (last->level == 1 && key_same_subject(partk, gk))
 			last->count++;
 		else
 		{
-			if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, part, LIB_PANE_TEXT) < 0)
+			if (add_pane(lib, PANE_SUBJECT, lib->tint[lib->order[i]], 1, gk->part, LIB_PANE_TEXT) < 0)
 				return -1;
 			last = &lib->panes[lib->npanes - 1];
 			last->level = 1;
 			last->subj = subj;
+			partk = gk;
 		}
 	}
 	if (other > 0 && add_pane(lib, PANE_OTHER, 0, other, "Other hypertexts", LIB_PANE_TEXT) < 0)
@@ -577,82 +629,193 @@ static void fold(const char *s, char *out, size_t size)
 	out[i] = '\0';
 }
 
-/* does `s` contain the folded query `q`? */
+/* does `s` contain the folded query `q`? (every name in the index, a
+   letter at a time: the lower-case table at hand, the first letter
+   looked for before the rest) */
 static int contains(const char *s, const char *q)
 {
-	size_t ql = strlen(q);
+	const unsigned char *t = atari_lower_table(), *p = (const unsigned char *) s;
+	unsigned char q0 = (unsigned char) q[0];
 
-	for (; *s != '\0'; s++)
-	{
-		size_t i = 0;
+	if (q0 == '\0')
+		return 1;
+	for (; *p != '\0'; p++)
+		if (t[*p] == q0)
+		{
+			const unsigned char *a = p + 1, *b = (const unsigned char *) q + 1;
 
-		while (i < ql && s[i] != '\0' && (char) atari_tolower((unsigned char) s[i]) == q[i])
-			i++;
-		if (i == ql)
-			return 1;
-	}
+			while (*b != '\0' && t[*a] == *b)
+				a++, b++;
+			if (*b == '\0')
+				return 1;
+		}
 	return 0;
 }
 
 /*
  * The names found: rank 0 the same name, 1 starting with it, 2
  * containing it, 3 similar (when the others are few), each in the names'
- * order.  The names are read through once, from the index file (a piece
- * at a time, one open), and kept for the search: a list rebuilt for
- * another reason (a full-text hit, a bookmark) doesn't read them again.
+ * order.  The names are sorted ignoring case, so those of ranks 0 and 1
+ * follow each other: they are read at once, from the block they begin
+ * in.  The others take every name, read through in pieces with no file
+ * kept open between them (lib_search_step), a slice at a time: a key
+ * typed is answered at once on an 8 MHz ST too (the guidelines, Speed).
+ * What was found is kept for the search: a list rebuilt for another
+ * reason (a full-text hit, a bookmark) doesn't read the names again.
  */
-static int build_pages(ehv_library *lib, const char *folded)
+/* the rows' names: the ranks' own, not copies (found.s is ours, the
+   strings in it the ranks') */
+static void found_clear(ehv_library *lib)
+{
+	free(lib->found.s);
+	ehv_hits_init(&lib->found);
+}
+
+static void search_stop(ehv_library *lib)
+{
+	int k;
+
+	if (lib->scanning)
+		ehv_names_close(&lib->scan);
+	lib->scanning = 0;
+	found_clear(lib);                 /* it holds the ranks' names */
+	lib->found_of = NULL;
+	for (k = 0; k < 4; k++)
+		ehv_hits_free(&lib->rank[k]);
+}
+
+/* the ranks, in order, as the rows' names; similar ones only when the
+   others are few */
+static int gather(ehv_library *lib)
+{
+	unsigned long i, n = 0;
+	int k;
+
+	found_clear(lib);
+	for (k = 0; k < 4; k++)
+		if (k < 3 || lib->plain < ENOUGH_FOR_NO_SIMILAR)
+			n += lib->rank[k].n;
+	if (n > MAX_PAGE_ROWS)
+		n = MAX_PAGE_ROWS;
+	if (n == 0)
+		return 0;
+	if ((lib->found.s = malloc(n * sizeof(ehv_sym))) == NULL)
+		return -1;
+	lib->found.cap = n;
+	for (k = 0; k < 4; k++)
+		for (i = 0; i < lib->rank[k].n && lib->found.n < n; i++)
+			if (k < 3 || lib->plain < ENOUGH_FOR_NO_SIMILAR)
+				lib->found.s[lib->found.n++] = lib->rank[k].s[i];
+	return 0;
+}
+
+static int search_start(ehv_library *lib)
 {
 	const ehv_index *idx = lib->idx;
-	size_t ql = strlen(folded);
-	unsigned int limit = ql <= 4 ? 1 : ql <= 8 ? 2 : 3;
-	unsigned long plain = 0, i;
-	ehv_hits rank[4];
+	size_t ql = strlen(lib->query);
 	ehv_names nm;
 	ehv_sym s;
 	int k, rc = 0;
 
-	if (lib->found_of != idx || strcmp(lib->found_q, lib->query) != 0)
+	search_stop(lib);
+	for (k = 0; k < 4; k++)
+		ehv_hits_init(&lib->rank[k]);
+	lib->plain = 0;
+	lib->found_of = idx;
+	strcpy(lib->found_q, lib->query);
+	if (idx->nblocks == 0)
+		return 0;
+	if (ehv_names_open(&nm, idx, 2, 1) < 0)
+		return -1;
+	ehv_names_seek(&nm, ehv_names_start(idx, lib->query));
+	while (rc == 0 && ehv_names_next(&nm, &s) == 1)
 	{
-		ehv_hits_free(&lib->found);
-		lib->found_of = NULL;
-		for (k = 0; k < 4; k++)
-			ehv_hits_init(&rank[k]);
-		if (ehv_names_open(&nm, idx, ehv_names_piece(), 1) < 0)
+		int c = atari_ncasecmp(s.name, lib->query, ql);
+
+		if (c < 0)
+			continue;
+		if (c > 0)
+			break;
+		k = s.name[ql] == '\0' ? 0 : 1;
+		lib->plain++;
+		if (lib->rank[k].n < MAX_PAGE_ROWS && ehv_hits_add(&lib->rank[k], &s) < 0)
+			rc = -1;
+		/* the rows full, and enough for no similar ones: the rest are
+		   longer names (after the same one), which can't come in */
+		if (lib->rank[1].n >= MAX_PAGE_ROWS && lib->plain >= ENOUGH_FOR_NO_SIMILAR)
+			break;
+	}
+	ehv_names_close(&nm);
+	if (rc == 0 && ehv_names_open(&lib->scan, idx, ehv_names_piece(), 0) < 0)
+		rc = -1;
+	lib->scanning = rc == 0;
+	return rc < 0 ? -1 : gather(lib);
+}
+
+int lib_search_step(ehv_library *lib, unsigned int budget)
+{
+	char folded[LIB_QUERY_MAX];
+	size_t ql = strlen(lib->query);
+	unsigned int limit = ql <= 4 ? 1 : ql <= 8 ? 2 : 3, n;
+	unsigned long before = lib->rank[2].n + lib->rank[3].n;
+	ehv_sym s;
+	int r = 1, full = 0;
+
+	if (!lib->scanning)
+		return 1;
+	fold(lib->query, folded, sizeof(folded));
+	for (n = 0; n < budget && !full; n++)
+	{
+		int k;
+
+		if ((r = ehv_names_next(&lib->scan, &s)) != 1)
+			break;
+		if (atari_ncasecmp(s.name, lib->query, ql) == 0)
+			continue;                     /* found at once */
+		if (contains(s.name, folded))
+			k = 2;
+		else if (lib->plain < ENOUGH_FOR_NO_SIMILAR && ql >= 3 && ehv_similarity(lib->query, s.name, limit) <= limit)
+			k = 3;
+		else
+			continue;
+		if (k == 2)
+			lib->plain++;
+		if (lib->rank[k].n < MAX_PAGE_ROWS && ehv_hits_add(&lib->rank[k], &s) < 0)
+		{
+			r = -1;
+			break;
+		}
+		/* the rows full, in the names' order: no other can come in */
+		full = lib->rank[2].n >= MAX_PAGE_ROWS && lib->plain >= ENOUGH_FOR_NO_SIMILAR;
+	}
+	if (r < 0)
+	{
+		search_stop(lib);
+		return -1;
+	}
+	if (r == 1 && !full)
+	{
+		/* names to go: the rows again only when it found more */
+		if (lib->rank[2].n + lib->rank[3].n == before)
+			return 0;
+		return gather(lib) < 0 || rebuild(lib, 1, 0) < 0 ? -1 : 2;
+	}
+	ehv_names_close(&lib->scan);
+	lib->scanning = 0;
+	return gather(lib) < 0 || rebuild(lib, 1, 0) < 0 ? -1 : 1;
+}
+
+static int build_pages(ehv_library *lib)
+{
+	unsigned long i;
+
+	if (lib->found_of != lib->idx || strcmp(lib->found_q, lib->query) != 0)
+	{
+		if (search_start(lib) < 0)
+		{
+			search_stop(lib);
 			return -1;
-		while (rc == 0 && ehv_names_next(&nm, &s) == 1)
-		{
-			if (atari_casecmp(s.name, lib->query) == 0)
-				k = 0;
-			else if (atari_ncasecmp(s.name, lib->query, ql) == 0)
-				k = 1;
-			else if (contains(s.name, folded))
-				k = 2;
-			else if (plain < ENOUGH_FOR_NO_SIMILAR && ql >= 3 && ehv_similarity(lib->query, s.name, limit) <= limit)
-				k = 3;
-			else
-				continue;
-			if (k < 3)
-				plain++;
-			if (rank[k].n < MAX_PAGE_ROWS && ehv_hits_add(&rank[k], &s) < 0)
-				rc = -1;
 		}
-		ehv_names_close(&nm);
-		/* similar names only when the plain matches are few */
-		for (k = 0; k < 4; k++)
-		{
-			for (i = 0; i < rank[k].n; i++)
-				if (rc == 0 && lib->found.n < MAX_PAGE_ROWS && (k < 3 || plain < ENOUGH_FOR_NO_SIMILAR))
-					rc = ehv_hits_add(&lib->found, &rank[k].s[i]);
-			ehv_hits_free(&rank[k]);
-		}
-		if (rc < 0)
-		{
-			ehv_hits_free(&lib->found);
-			return -1;
-		}
-		lib->found_of = idx;
-		strcpy(lib->found_q, lib->query);
 	}
 	lib->npages = lib->found.n;
 	if (lib->found.n > 0 && add_row(lib, LIB_GROUP, 0, "Pages") < 0)
@@ -671,7 +834,7 @@ static int build_query(ehv_library *lib)
 	int heading = 0;
 
 	fold(lib->query, folded, sizeof(folded));
-	if (build_pages(lib, folded) < 0)
+	if (build_pages(lib) < 0)
 		return -1;
 	for (i = 0; i < idx->nguides; i++)
 	{
@@ -806,8 +969,7 @@ int lib_set_index(ehv_library *lib, const ehv_index *idx)
 	lib->fts = NULL;
 	lib->idx = idx;
 	lib->order_of = NULL;             /* made again, even at the same address */
-	lib->found_of = NULL;
-	ehv_hits_free(&lib->found);
+	search_stop(lib);                 /* it reads the old index */
 	return rebuild(lib, 0, 0);
 }
 
@@ -923,6 +1085,8 @@ int lib_set_query(ehv_library *lib, const char *query)
 	strncpy(lib->query, query, sizeof(lib->query) - 1);
 	lib->query[sizeof(lib->query) - 1] = '\0';
 	lib->top = 0;
+	if (query[0] == '\0')
+		search_stop(lib);
 	return rebuild(lib, 0, 0);
 }
 

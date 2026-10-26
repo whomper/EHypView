@@ -87,6 +87,7 @@ typedef struct {
 	short used;                    /* the slot holds a viewer         */
 	short icon;                    /* shown as EHypView's icon        */
 	short place[4];                /* where it was before (WM_ICONIFY) */
+	short slider[4];               /* WF_VSLSIZE... as set, plus 1; 0: unknown */
 	char name[160], info[200];
 	ehv_view view;
 	playout lay;                   /* the page laid out (pagedraw.c)  */
@@ -360,12 +361,23 @@ static void set_sliders(void)
 	long c = page_cols(), cols = visible_cols();
 	long mt = max_top(), ml = max_left();
 
+	short v[4];
+	static const short what[4] = { WF_VSLSIZE, WF_VSLIDE, WF_HSLSIZE, WF_HSLIDE };
+	int i;
+
 	if (cur->icon)
 		return;
-	wind_set(cur->h, WF_VSLSIZE, (short) (n > rows ? rows * 1000L / n : 1000), 0, 0, 0);
-	wind_set(cur->h, WF_VSLIDE, (short) (mt > 0 ? cur->view.top * 1000L / mt : 0), 0, 0, 0);
-	wind_set(cur->h, WF_HSLSIZE, (short) (c > cols ? cols * 1000L / c : 1000), 0, 0, 0);
-	wind_set(cur->h, WF_HSLIDE, (short) (ml > 0 ? cur->view.left * 1000L / ml : 0), 0, 0, 0);
+	v[0] = (short) (n > rows ? rows * 1000L / n : 1000);
+	v[1] = (short) (mt > 0 ? cur->view.top * 1000L / mt : 0);
+	v[2] = (short) (c > cols ? cols * 1000L / c : 1000);
+	v[3] = (short) (ml > 0 ? cur->view.left * 1000L / ml : 0);
+	/* only what changed: the AES draws the slider again for each */
+	for (i = 0; i < 4; i++)
+		if (cur->slider[i] != v[i] + 1)
+		{
+			wind_set(cur->h, what[i], v[i], 0, 0, 0);
+			cur->slider[i] = (short) (v[i] + 1);
+		}
 }
 
 /* ---------------------------------------------------------------- */
@@ -922,6 +934,20 @@ static void after(int rc)
 	}
 }
 
+/* where a window goes so the page's text starts on a 16-pixel boundary:
+   the VDI draws aligned text far faster (TOS 1.04: 65 ms a line on an ST
+   otherwise; EContact's snap_x) */
+static short snap_x(short x, short w)
+{
+	short wx, wy, ww, wh;
+
+	wind_calc(WC_WORK, WKIND, x, desk_y, w, desk_h, &wx, &wy, &ww, &wh);
+	x = (short) (x - ((wx + MARGIN) & 15));
+	if (x < desk_x)
+		x = (short) (x + 16);
+	return x;
+}
+
 static void open_window(void)
 {
 	short x, y, w, h, cols;
@@ -933,6 +959,7 @@ static void open_window(void)
 		return;
 	}
 	cur->h = wind_create(icon_kind(WKIND), desk_x, desk_y, desk_w, desk_h);
+	memset(cur->slider, 0, sizeof(cur->slider));
 	cur->icon = 0;
 	if (cur->h <= 0)
 	{
@@ -961,6 +988,7 @@ static void open_window(void)
 		if (y + h + n * step <= desk_y + desk_h)
 			y = (short) (y + n * step);
 	}
+	x = snap_x(x, w);
 	view_title(&cur->view, cur->name, sizeof(cur->name));
 	wind_set_str(cur->h, WF_NAME, cur->name);
 	update_info();
@@ -1053,6 +1081,60 @@ void viewer_show(const char *path, const char *node, unsigned short line)
 /* ---------------------------------------------------------------- */
 /* scrolling and navigation                                          */
 
+/*
+ * The page moved up by dy pixels (down when dy < 0): what stays in view
+ * is copied on the screen (vro_cpyfm) when the whole work area shows,
+ * and only the strip that comes in is drawn (EContact's win_scroll);
+ * otherwise the area is drawn again.
+ */
+static void scroll_area(short x, short y, short w, short h, long dy)
+{
+	short rx, ry, rw, rh, ady;
+	int whole = 0;
+
+	if (dy == 0)
+		return;
+	if (dy >= h || dy <= -h || cur->icon)
+	{
+		redraw(x, y, w, h);
+		return;
+	}
+	ady = (short) (dy < 0 ? -dy : dy);
+	wind_update(BEG_UPDATE);
+	wind_get(cur->h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
+	if (rx <= x && ry <= y && rx + rw >= x + w && ry + rh >= y + h &&
+		x >= desk_x && y >= desk_y && x + w <= desk_x + desk_w && y + h <= desk_y + desk_h)
+	{
+		MFDB scr;
+		short pxy[8], clip[4];
+
+		memset(&scr, 0, sizeof(scr));
+		pxy[0] = pxy[4] = x;
+		pxy[2] = pxy[6] = (short) (x + w - 1);
+		pxy[1] = (short) (y + (dy > 0 ? ady : 0));
+		pxy[3] = (short) (pxy[1] + h - ady - 1);
+		pxy[5] = (short) (y + (dy > 0 ? 0 : ady));
+		pxy[7] = (short) (pxy[5] + h - ady - 1);
+		clip[0] = x;
+		clip[1] = y;
+		clip[2] = (short) (x + w - 1);
+		clip[3] = (short) (y + h - 1);
+		graf_mouse(M_OFF, NULL);
+		vs_clip(vdi_h, 1, clip);           /* NVDI clips raster copies */
+		vro_cpyfm(vdi_h, 3, pxy, &scr, &scr);
+		vs_clip(vdi_h, 0, clip);
+		graf_mouse(M_ON, NULL);
+		whole = 1;
+	}
+	wind_update(END_UPDATE);
+	if (!whole)
+		redraw(x, y, w, h);
+	else if (dy > 0)
+		redraw(x, (short) (y + h - ady), w, ady);
+	else
+		redraw(x, y, w, ady);
+}
+
 static void scroll_to(long top, long left)
 {
 	long ot = cur->view.top, ol = cur->view.left;
@@ -1066,7 +1148,10 @@ static void scroll_to(long top, long left)
 
 		set_sliders();
 		work_area(&x, &y, &w, &h);
-		redraw(x, y, w, h);
+		if (cur->view.left == ol && cur->lay.gfx_y != NULL)
+			scroll_area(x, y, w, h, cur->lay.gfx_y[cur->view.top] - cur->lay.gfx_y[ot]);
+		else
+			redraw(x, y, w, h);
 	}
 }
 
@@ -1082,9 +1167,26 @@ static void show_line(long line)
 		scroll_to(line - rows + 1, cur->view.left);
 }
 
+/* one line of the page drawn again: a link chosen or left */
+static void redraw_line(long line)
+{
+	short x, y, w, h;
+	long ly;
+
+	if (line < cur->view.top || cur->lay.line_y == NULL || cur->icon)
+		return;
+	work_area(&x, &y, &w, &h);
+	ly = y + cur->lay.line_y[line] - cur->lay.gfx_y[cur->view.top];
+	if (ly >= y + h)
+		return;
+	redraw(x, (short) ly, w, (short) (ly + ch > y + h ? y + h - ly : ch));
+}
+
+/* the next or previous link chosen: only its line and the one it left
+   drawn again (the guidelines, Speed) */
 static void select_link(int dir)
 {
-	long rows = visible_lines();
+	long rows = visible_lines(), old = view_run_line(&cur->view, cur->view.sel);
 	long line = view_select_link(&cur->view, dir, cur->view.top, cur->view.top + rows - 1);
 
 	if (line >= 0)
@@ -1094,8 +1196,10 @@ static void select_link(int dir)
 		sprintf(num, "%ld", line);
 		log_event("select", num, NULL);
 		show_line(line);
+		redraw_line(old);
+		if (line != old)
+			redraw_line(line);
 	}
-	redraw_all();
 }
 
 static void open_file_selector(void)
@@ -2297,7 +2401,7 @@ static void viewer_message(short *msg)
 			w = msg[6] < 16 * sys_cw ? (short) (16 * sys_cw) : msg[6];
 			w = w < 12 * cw ? (short) (12 * cw) : w;
 			h = msg[7] < 6 * ch + tb_height(sys_ch) ? (short) (6 * ch + tb_height(sys_ch)) : msg[7];
-			wind_set(cur->h, WF_CURRXYWH, msg[4], msg[5], w, h);
+			wind_set(cur->h, WF_CURRXYWH, snap_x(msg[4], w), msg[5], w, h);
 			clamp_scroll();
 			set_sliders();
 			if (msg[0] == WM_SIZED)
@@ -3461,8 +3565,14 @@ int main(void)
 				job_step();
 			while (job != NULL && bg_more() && tos_ms() - t1 < 35 && !ehv_libjob_next_is_big(job));
 		}
-		if ((which & MU_TIMER) || fts_busy == 0)
+		/* the library's search through the names, its full-text
+		   search: a slice in a turn of its own, not after a key or a
+		   click (the guidelines, Speed: a key answered at once) */
+		if (which & (MU_KEYBD | MU_BUTTON))
+			fts_busy = libwin_busy();
+		else if ((which & MU_TIMER) || fts_busy == 0)
 		{
+			aes_profile_tag("lib-work");
 			bg_begin();
 			do
 				fts_busy = libwin_idle();

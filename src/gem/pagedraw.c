@@ -804,10 +804,12 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 {
 	const hyp_page *pg = L->pg;
 	long l;
+	int plain;
+	short mode, colour, effects;
 
 	if (pg == NULL)
 		return;
-	/* graphics first, text on top (all drawn transparently) */
+	/* graphics first, text on top */
 	{
 		unsigned short i;
 
@@ -815,7 +817,12 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 			draw_gfx(L, &pg->gfx[i], &L->images[i], ox, oy, cy, (long) cy + ch_, cols);
 	}
 
-	vswr_mode(vdi_h, MD_TRANS);
+	/* the text over the white ground: drawn replacing it, the VDI's fast
+	   way (transparent text is many times slower on an ST), unless a
+	   picture is under it; the VDI told a mode, colour or effect only
+	   when it changes */
+	plain = pg->ngfx == 0;
+	mode = colour = effects = -1;
 	for (l = top; l < pg->nlines; l++)
 	{
 		const hyp_line *ln = &pg->lines[l];
@@ -831,7 +838,7 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 		{
 			const hyp_run *run = &pg->runs[ln->first_run + r];
 			long w = (long) run->len * cw;
-			short fx = run->attr & 0x3f;
+			short fx = run->attr & 0x3f, fg, want = plain ? MD_REPLACE : MD_TRANS;
 
 			if (x + w > cx && x < cx + cw_)
 			{
@@ -839,28 +846,34 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 				{
 					/* the selected link: reverse video */
 					fill(link_color(), (short) x, (short) y, (short) (x + w - 1), (short) (y + ch - 1));
-					vswr_mode(vdi_h, MD_TRANS);
-					vst_color(vdi_h, 0);
+					mode = MD_REPLACE;
+					want = MD_TRANS;
+					fg = 0;
 				} else if (run->kind == HYP_RUN_LINK)
 				{
-					vst_color(vdi_h, link_color());
+					fg = link_color();
 					fx |= 8 | (ncolors >= 16 ? 0 : 1);   /* underlined (and bold in mono) */
 				} else
 				{
 					/* hcp's @{fg n} and @{bg n} */
-					short fg = run->fg != HYP_COLOR_DEFAULT ? text_colour(run->fg, 0) : 1;
 					short bg = run->bg != HYP_COLOR_DEFAULT ? text_colour(run->bg, 1) : -1;
 
+					fg = run->fg != HYP_COLOR_DEFAULT ? text_colour(run->fg, 0) : 1;
 					if (bg >= 0)
 					{
 						fill(bg, (short) x, (short) y, (short) (x + w - 1), (short) (y + ch - 1));
-						vswr_mode(vdi_h, MD_TRANS);
+						mode = MD_REPLACE;
+						want = MD_TRANS;
 						if (planes == 1 && fg == 1)
 							fg = 0;            /* black on black: white */
 					}
-					vst_color(vdi_h, fg);
 				}
-				vst_effects(vdi_h, fx);
+				if (mode != want)
+					vswr_mode(vdi_h, mode = want);
+				if (colour != fg)
+					vst_color(vdi_h, colour = fg);
+				if (effects != fx)
+					vst_effects(vdi_h, effects = fx);
 				text_at((short) x, (short) y, run->text, run->len);
 			}
 			x += w;
@@ -868,6 +881,7 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 	}
 	vst_effects(vdi_h, 0);
 	vst_color(vdi_h, 1);
+	vswr_mode(vdi_h, MD_TRANS);
 }
 
 long layout_line_at(const playout *L, long py, long top)

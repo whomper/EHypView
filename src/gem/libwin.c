@@ -73,16 +73,36 @@ static const ehv_bookmarks *lib_bm;   /* the program's, shown first */
 
 static const ehv_bookmarks *lib_recent;  /* the pages read last */
 
+/* the rows still to be drawn for the search typed (R_LIST...): in the
+   next turn, so that the key itself is answered at once (the
+   guidelines, Speed); keys typed meanwhile draw them once */
+static int rows_due;
+
 static void ensure_model(void)
 {
 	if (!lib_ready)
 	{
-		lib_init(&lib, idx);
+		/* everything in place first: the list made once */
+		lib_init(&lib, NULL);
 		lib.layout = want_layout;
-		lib_set_bookmarks(&lib, lib_bm);
-		lib_set_recent(&lib, lib_recent);
+		lib.bm = lib_bm;
+		lib.recent = lib_recent;
+		lib_set_index(&lib, idx);
 		lib_ready = 1;
 	}
+}
+
+/* where the window goes so its text starts on a 16-pixel boundary: the
+   VDI draws aligned text far faster (EContact's snap_x) */
+static short snap_x(short x, short w)
+{
+	short wx, wy, ww, wh;
+
+	wind_calc(WC_WORK, LKIND, x, desk_y, w, desk_h, &wx, &wy, &ww, &wh);
+	x = (short) (x - ((wx + MARGIN) & 15));
+	if (x < desk_x)
+		x = (short) (x + 16);
+	return x;
 }
 
 /* ---------------------------------------------------------------- */
@@ -586,6 +606,10 @@ static void triangle(short x, short y, int folded, short color)
 }
 
 /* text in `room` characters, its first blanks left out; the characters used */
+/* the ground under put()'s text is white (a row not chosen): the text
+   drawn replacing it, the VDI's fast way */
+static int white_ground;
+
 static long put(short x, short y, const char *s, long room, short color, short effects)
 {
 	long n;
@@ -597,7 +621,7 @@ static long put(short x, short y, const char *s, long room, short color, short e
 		n = room;
 	if (n <= 0)
 		return 0;
-	vswr_mode(vdi_h, MD_TRANS);
+	vswr_mode(vdi_h, white_ground && color != 0 ? MD_REPLACE : MD_TRANS);
 	vst_color(vdi_h, color);
 	vst_effects(vdi_h, effects);
 	text_at(x, y, s, n);
@@ -890,14 +914,14 @@ static void draw_chips(short wx, short ww, short y)
 }
 
 /* one row of the list, at y */
+static void draw_row_parts(long r, const lib_row *row, short rh, short lx, short lw, short y,
+                           char *text, char *detail, short color, short dcolor, short acolor, int sel);
+
 static void draw_row(long r, short lx, short lw, short y)
 {
 	const lib_row *row = &lib.rows[r];
 	short rh = row_h(r), color = 1, dcolor = grey(), acolor = about_color();
-	short right = (short) (lx + lw - MARGIN - cw / 2);
-	short gx = (short) (lx + MARGIN + cw), tx = (short) (lx + MARGIN + 3 * cw);
 	char text[160], detail[64];
-	long room, tl;
 	int sel = r == lib.sel;
 
 	lib_row_text(&lib, (unsigned long) r, text, sizeof(text));
@@ -913,6 +937,18 @@ static void draw_row(long r, short lx, short lw, short y)
 	} else
 		fill(0, lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
 	sel = sel && !(panes() && focus_left && ncolors < 16);
+	white_ground = !sel;
+	draw_row_parts(r, row, rh, lx, lw, y, text, detail, color, dcolor, acolor, sel);
+	white_ground = 0;
+}
+
+static void draw_row_parts(long r, const lib_row *row, short rh, short lx, short lw, short y,
+                           char *text, char *detail, short color, short dcolor, short acolor, int sel)
+{
+	short right = (short) (lx + lw - MARGIN - cw / 2);
+	short gx = (short) (lx + MARGIN + cw), tx = (short) (lx + MARGIN + 3 * cw);
+	long room, tl;
+
 	if (row->kind == LIB_GROUP && (row->flags & LIB_SUB))
 	{
 		/* a part of a subject: under its heading's text, plain */
@@ -1330,6 +1366,7 @@ void libwin_open(void)
 			h = desk_h;
 		x = (short) (desk_x + desk_w - w - 8 * cw > desk_x ? desk_x + desk_w - w - 8 * cw : desk_x);
 		y = (short) (desk_y + ch);
+		x = snap_x(x, w);
 		wind_set_str(lib_h, WF_NAME, lib_name);
 		info_shown[0] = '\x01';            /* a new window: none yet */
 		slider_shown[0] = slider_shown[1] = -1;
@@ -1393,6 +1430,7 @@ void libwin_free(void)
 	if (lib_ready)
 		lib_free(&lib);
 	lib_ready = 0;
+	rows_due = 0;
 }
 
 void libwin_font_changed(void)
@@ -1519,9 +1557,11 @@ static void set_query(const char *q)
 	lib_set_query(&lib, q);
 	if (q[0] != '\0')
 		focus_left = 0;                /* the rows found have the keys */
-	log_search();
+	if (!lib.scanning)
+		log_search();                  /* else when its slices end (libwin_idle) */
+	refresh(R_HEAD);
 	/* the pane's line chosen is shown otherwise while searching */
-	refresh(R_HEAD | R_LIST | R_DETAIL | (had != (q[0] != '\0') ? R_PANE : 0));
+	rows_due |= R_LIST | R_DETAIL | (had != (q[0] != '\0') ? R_PANE : 0);
 }
 
 /* Two panes: the Subjects pane takes the keys, or gives them back */
@@ -1900,7 +1940,7 @@ int libwin_message(short *msg)
 		}
 		w = msg[6] < 20 * cw ? (short) (20 * cw) : msg[6];
 		h = msg[7] < 6 * ch ? (short) (6 * ch) : msg[7];
-		wind_set(lib_h, WF_CURRXYWH, msg[4], msg[5], w, h);
+		wind_set(lib_h, WF_CURRXYWH, snap_x(msg[4], w), msg[5], w, h);
 		apply_layout();
 		clamp();
 		set_slider();
@@ -1950,11 +1990,51 @@ int libwin_message(short *msg)
 	return 1;
 }
 
+int libwin_busy(void)
+{
+	return lib_ready && (rows_due || lib.scanning || (lib.fts != NULL && !ehv_fts_done(lib.fts)));
+}
+
+/* the rows drawn again for names the search found, at most this often
+   while it goes on (drawing them takes longer than finding them) */
+#define FOUND_DRAWN_EVERY 250
+
 int libwin_idle(void)
 {
+	static unsigned long drawn;
 	unsigned long before, after;
 	int r;
 
+	if (lib_ready && rows_due)
+	{
+		int what = rows_due;
+
+		aes_profile_tag("lib-rows");      /* for the AESGAP lines */
+		rows_due = 0;
+		refresh(what);
+		drawn = tos_ms();
+		return libwin_busy();
+	}
+	if (lib_ready && lib.scanning)
+	{
+		static int waiting;           /* rows found, not drawn yet */
+
+		r = lib_search_step(&lib, 32);
+		waiting |= r == 2;
+		if (r != 0 && r != 2)
+		{
+			waiting = 0;
+			refresh(R_LIST | R_DETAIL);
+			log_search();
+			drawn = tos_ms();
+		} else if (waiting && tos_ms() - drawn >= FOUND_DRAWN_EVERY)
+		{
+			waiting = 0;
+			refresh(R_LIST | R_DETAIL);
+			drawn = tos_ms();
+		}
+		return lib.scanning;
+	}
 	if (!lib_ready || lib.fts == NULL || ehv_fts_done(lib.fts))
 		return 0;
 	ehv_fts_hits(lib.fts, &before);
