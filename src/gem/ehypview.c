@@ -417,127 +417,27 @@ void fill(short color, short x1, short y1, short x2, short y2)
 	vr_recfl(vdi_h, pxy);
 }
 
-/* the clip rectangle in force (clip_on): text wholly inside it is drawn
-   with clipping off */
-static short clip_now[4];
-static int clipping;
-
-static void text_run(short x, short y, const char *s, long n)
-{
-	while (n > 0)
-	{
-		short k = n > 120 ? 120 : (short) n;
-
-		v_gtext_n(vdi_h, x, y, s, k);
-		x = (short) (x + k * cw);
-		s += k;
-		n -= k;
-	}
-}
-
+/* text through common's text.c (the guidelines' Speed, "Text through
+   text_n"): the characters wholly inside the clip drawn with clipping
+   off, bold and underline drawn on plain text, the same pixels as TOS's */
 void text_at(short x, short y, const char *s, long n)
 {
-	long i0 = 0, m;
-	short xs;
-
-	/* TOS draws text six times slower with clipping on, even text wholly
-	   inside the clip (TOS 1.04: 64.5 ms a line of 80 against 11; TOS
-	   4.04: 17.5 against 6.5): of the system font (its width known), the
-	   characters wholly inside go with clipping off (a pixel more room
-	   for bold and underline, text_fx_after), the one cut at each side
-	   with it on, and none outside */
-	if (!clipping || !fast_fx || y < clip_now[1] || y + ch - 1 > clip_now[3] || n <= 0)
-	{
-		text_run(x, y, s, n);
-		return;
-	}
-	if (x < clip_now[0])
-		i0 = (clip_now[0] - x + cw - 1) / cw;
-	if (i0 > n)
-		i0 = n;
-	xs = (short) (x + i0 * cw);
-	m = xs < clip_now[2] ? (clip_now[2] - xs) / cw : 0;
-	if (m > n - i0)
-		m = n - i0;
-	if (i0 > 0 && xs - cw <= clip_now[2])
-		text_run((short) (xs - cw), y, s + i0 - 1, 1);   /* cut on the left */
-	if (m > 0)
-	{
-		vs_clip(vdi_h, 0, clip_now);
-		text_run(xs, y, s + i0, m);
-		vs_clip(vdi_h, 1, clip_now);
-	}
-	if (i0 + m < n && xs + m * cw <= clip_now[2])
-		text_run((short) (xs + m * cw), y, s + i0 + m, 1);   /* cut on the right */
+	text_n(vdi_h, x, y, s, n);
 }
 
-/* the clip rectangle set, kept for what is clipped by hand: TOS's
-   raster copies aren't clipped (NVDI's are), and text_at() above */
 void clip_on(const short *c)
 {
-	memcpy(clip_now, c, sizeof(clip_now));
-	clipping = 1;
-	vs_clip(vdi_h, 1, clip_now);
+	text_clip(vdi_h, c);
 }
 
 void clip_off(void)
 {
-	clipping = 0;
-	vs_clip(vdi_h, 0, clip_now);
+	text_noclip(vdi_h);
 }
 
-int fast_fx;
-
-void text_fx_after(short x, short y, long n, short fx, short colour)
+void text_fx_after(short x, short y, const char *s, long n, short fx, short colour)
 {
-	short tw = (short) (n * cw);
-
-	if (fx & 1)
-	{
-		/* bold: what is drawn ORed onto itself a pixel to the right */
-		short x1 = (short) (x + 1), x2 = (short) (x + tw), y1 = y, y2 = (short) (y + ch - 1);
-
-		if (clipping)
-		{
-			if (x1 < clip_now[0])
-				x1 = clip_now[0];
-			if (x2 > clip_now[2])
-				x2 = clip_now[2];
-			if (y1 < clip_now[1])
-				y1 = clip_now[1];
-			if (y2 > clip_now[3])
-				y2 = clip_now[3];
-		}
-		if (x1 <= x2 && y1 <= y2)
-		{
-			MFDB scr;
-			short pxy[8];
-
-			memset(&scr, 0, sizeof(scr));
-			pxy[0] = (short) (x1 - 1);
-			pxy[1] = y1;
-			pxy[2] = (short) (x2 - 1);
-			pxy[3] = y2;
-			pxy[4] = x1;
-			pxy[5] = y1;
-			pxy[6] = x2;
-			pxy[7] = y2;
-			vro_cpyfm(vdi_h, 7, pxy, &scr, &scr);       /* S_OR_D */
-		}
-	}
-	if (fx & 8)
-	{
-		/* underline: the cell's last row, a pixel longer than the text */
-		short p[4];
-
-		p[0] = x;
-		p[2] = (short) (x + tw);
-		p[1] = p[3] = (short) (y + ch - 1);
-		vswr_mode(vdi_h, MD_REPLACE);
-		vsl_color(vdi_h, colour);
-		vsl_type(vdi_h, 1);
-		v_pline(vdi_h, 2, p);
-	}
+	text_fx(vdi_h, x, y, s, n, fx, colour);
 }
 
 static void draw_message(short x, short y, const char *const *lines)
@@ -725,7 +625,7 @@ static void draw_bar(short cx, short cy, short cw_, short ch_)
 	clip[1] = cy;
 	clip[2] = (short) (cx + cw_ - 1);
 	clip[3] = (short) (cy + ch_ - 1);
-	vs_clip(vdi_h, 1, clip);
+	text_clip(vdi_h, clip);
 	fill(0, t.x, t.y, (short) (t.x + t.w - 1), (short) (t.y + t.h - 1));
 	font_sys_push();
 	for (b = 0; b < TB_COUNT; b++)
@@ -738,7 +638,7 @@ static void draw_bar(short cx, short cy, short cw_, short ch_)
 	p[2] = (short) (t.x + t.w - 1);
 	p[1] = p[3] = (short) (t.y + t.h - 1);
 	v_pline(vdi_h, 2, p);
-	vs_clip(vdi_h, 0, clip);
+	text_noclip(vdi_h);
 }
 
 /* the work area within one rectangle: the toolbar, the page */
@@ -984,7 +884,7 @@ static void popup_box(long r)
 	clip[1] = by;
 	clip[2] = (short) (bx + bw + 2);
 	clip[3] = (short) (by + bh + 2);
-	vs_clip(vdi_h, 1, clip);
+	text_clip(vdi_h, clip);
 	fill(1, (short) (bx + 3), (short) (by + 3), (short) (bx + bw + 2), (short) (by + bh + 2));  /* shadow */
 	fill(1, bx, by, (short) (bx + bw - 1), (short) (by + bh - 1));                          /* frame */
 	fill(0, (short) (bx + 1), (short) (by + 1), (short) (bx + bw - 2), (short) (by + bh - 2));
@@ -992,10 +892,10 @@ static void popup_box(long r)
 	clip[1] = (short) (by + 1);
 	clip[2] = (short) (bx + bw - 2);
 	clip[3] = (short) (by + bh - 2);
-	vs_clip(vdi_h, 1, clip);
+	text_clip(vdi_h, clip);
 	layout_draw(&pl, (short) (bx + 1 + POP_PAD), by + 1 + POP_PAD, 0,
 		clip[0], clip[1], (short) (bw - 2), (short) (bh - 2), -1, cols);
-	vs_clip(vdi_h, 0, clip);
+	text_noclip(vdi_h);
 	graf_mouse(M_ON, NULL);
 	graf_mouse(ARROW, NULL);                   /* a link click left the busy bee */
 	log_event("popup", name, NULL);
@@ -1259,9 +1159,9 @@ static void scroll_area(short x, short y, short w, short h, long dy)
 		clip[2] = (short) (x + w - 1);
 		clip[3] = (short) (y + h - 1);
 		graf_mouse(M_OFF, NULL);
-		vs_clip(vdi_h, 1, clip);           /* NVDI clips raster copies */
+		text_clip(vdi_h, clip);           /* NVDI clips raster copies */
 		vro_cpyfm(vdi_h, 3, pxy, &scr, &scr);
-		vs_clip(vdi_h, 0, clip);
+		text_noclip(vdi_h);
 		graf_mouse(M_ON, NULL);
 		whole = 1;
 	}
@@ -2292,14 +2192,14 @@ static void tip_show(const toolbar *t, int b)
 	clip[1] = wy;
 	clip[2] = (short) (wx + ww - 1);
 	clip[3] = (short) (wy + wh - 1);
-	vs_clip(vdi_h, 1, clip);
+	text_clip(vdi_h, clip);
 	fill(1, tip.x, tip.y, (short) (tip.x + tip.w - 1), (short) (tip.y + tip.h - 1));
 	fill(0, (short) (tip.x + 1), (short) (tip.y + 1), (short) (tip.x + tip.w - 2), (short) (tip.y + tip.h - 2));
 	vswr_mode(vdi_h, MD_TRANS);
 	vst_color(vdi_h, 1);
 	vst_effects(vdi_h, 0);
 	text_at((short) (tip.x + cw), (short) (tip.y + 2), text, n);
-	vs_clip(vdi_h, 0, clip);
+	text_noclip(vdi_h);
 	graf_mouse(M_ON, NULL);
 	wind_update(END_UPDATE);
 	font_sys_pop();

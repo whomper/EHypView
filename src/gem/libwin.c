@@ -613,7 +613,7 @@ static long put(short x, short y, const char *s, long room, short color, short e
 	{
 		/* bold and underline on the white ground: drawn the cheap way,
 		   the same pixels (text_fx_after) */
-		short by_hand = white_ground && color != 0 && fast_fx && (effects & ~9) == 0 ? effects : 0;
+		short by_hand = white_ground && color != 0 && text_fx_fast(effects, MD_REPLACE) ? effects : 0;
 
 		vswr_mode(vdi_h, white_ground && color != 0 ? MD_REPLACE : MD_TRANS);
 		vst_color(vdi_h, color);
@@ -621,7 +621,7 @@ static long put(short x, short y, const char *s, long room, short color, short e
 		text_at(x, y, s, n);
 		vst_effects(vdi_h, 0);
 		if (by_hand)
-			text_fx_after(x, y, n, by_hand, color);
+			text_fx_after(x, y, s, n, by_hand, color);
 	}
 	return n;
 }
@@ -2061,7 +2061,7 @@ static int fast_cpu(void)
 
 static int piece_room(void)
 {
-	return bg_room(fast_cpu() ? 10 : 40);
+	return bg_piece();                 /* bgwork: 40 ms left on a 68000, 10 on a 68030 */
 }
 
 static int name_room(void)

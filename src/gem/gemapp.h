@@ -10,6 +10,7 @@
 #include "plat.h"
 #include "index.h"
 #include "bookmark.h"
+#include "text.h"
 
 #define KEY_SCAN(k)  (((unsigned short) (k)) >> 8)
 #define KEY_ASCII(k) ((k) & 0xff)
@@ -28,21 +29,14 @@ void log_event(const char *what, const char *a, const char *b);
 short link_color(void);
 short ui_colour(unsigned short n);        /* pagedraw.c: TOS's VDI colour n among 0-15 now */
 void fill(short color, short x1, short y1, short x2, short y2);
+/* common's text.c (text.h) on vdi_h: text_n, text_clip/text_noclip
+   (every clip set where text is drawn goes through them), and bold and
+   underline on plain text just drawn in MD_REPLACE on a white ground,
+   where text_fx_fast(fx, mode) says so */
 void text_at(short x, short y, const char *s, long n);
-/* the clip rectangle set (vs_clip), and kept for what clips by hand */
 void clip_on(const short *c);
 void clip_off(void);
-/* after plain text at (x, y), n characters drawn replacing a white
-   ground: bold (1) as TOS thickens it, an OR copy of what is drawn one
-   pixel to the right, and underline (8) as TOS puts it, a line on the
-   cell's last row a pixel longer than the text; TOS draws effects the
-   slow way (EContact's way, the hub, 26 Oct; the same pixels as
-   vst_effects on TOS 1.04, TOS 4.04 and EmuTOS, ST high and medium and
-   Falcon 16 colours, black and blue). fast_fx: it may be used (TOS's
-   or EmuTOS's own VDI, the system font: not NVDI, where effects cost
-   little, nor a GDOS font) */
-extern int fast_fx;
-void text_fx_after(short x, short y, long n, short fx, short colour);
+void text_fx_after(short x, short y, const char *s, long n, short fx, short colour);
 int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short w2, short h2);
 int scanning(void);                       /* the index is being rebuilt */
 unsigned long scan_found(void);           /* hypertexts found so far    */

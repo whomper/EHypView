@@ -50,7 +50,6 @@ static unsigned char from1000(short v)
    the screen and read back, the pixel put back as it was (once) */
 static void probe(void)
 {
-	static const short none[4] = { 0, 0, 0, 0 };
 	short pxy[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	MFDB screen, keep, got;
 	unsigned char *mem = st_alloc(4L * planes);
@@ -70,7 +69,7 @@ static void probe(void)
 	got.fd_addr = mem + 2L * planes;
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, NULL);
-	vs_clip(vdi_h, 0, none);
+	text_noclip(vdi_h);
 	vro_cpyfm(vdi_h, 3, pxy, &screen, &keep);
 	for (i = 0; i < 256; i++)
 	{
@@ -1135,7 +1134,7 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 				{
 					/* bold and underline on the white ground: drawn
 					   the cheap way, the same pixels (text_fx_after) */
-					short by_hand = want == MD_REPLACE && fast_fx && (fx & ~9) == 0 ? fx : 0;
+					short by_hand = want == MD_REPLACE && text_fx_fast(fx, want) ? fx : 0;
 
 					if (mode != want)
 						vswr_mode(vdi_h, mode = want);
@@ -1146,7 +1145,7 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 					text_at((short) x, (short) y, run->text, run->len);
 					if (by_hand)
 					{
-						text_fx_after((short) x, (short) y, run->len, by_hand, fg);
+						text_fx_after((short) x, (short) y, run->text, run->len, by_hand, fg);
 						vswr_mode(vdi_h, mode);
 					}
 				}

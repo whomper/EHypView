@@ -259,7 +259,7 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/settings.o \
            $(ATARI)/aboutbox.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
-           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/colour.o \
+           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/text.o $(ATARI)/colour.o \
            $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o $(ATARI)/panebar.o $(ATARI)/libbar.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
