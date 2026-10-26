@@ -89,6 +89,7 @@ typedef struct {
 	short place[4];                /* where it was before (WM_ICONIFY) */
 	short slider[4];               /* WF_VSLSIZE... as set, plus 1; 0: unknown */
 	short fresh;                   /* opened, its first WM_REDRAW to come */
+	short sliders_due;             /* scrolled: the sliders set in a turn of their own */
 	char name[160], info[200];
 	ehv_view view;
 	playout lay;                   /* the page laid out (pagedraw.c)  */
@@ -1284,13 +1285,43 @@ static void scroll_to(long top, long left)
 	{
 		short x, y, w, h;
 
-		set_sliders();
+		cur->sliders_due = 1;          /* sliders_now(), when no key waits */
 		work_area(&x, &y, &w, &h);
 		if (cur->view.left == ol && cur->lay.gfx_y != NULL)
 			scroll_area(x, y, w, h, cur->lay.gfx_y[cur->view.top] - cur->lay.gfx_y[ot]);
 		else
 			redraw(x, y, w, h);
 	}
+}
+
+/* the sliders of the windows scrolled, set in a timer turn of their
+   own: the AES draws each again, as long as the scroll itself on an ST
+   (the guidelines, Speed; EUpdate's way), and a held key's repeats go
+   on without them */
+static int sliders_waiting(void)
+{
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+		if (viewers[i].used && viewers[i].sliders_due)
+			return 1;
+	return 0;
+}
+
+static void sliders_now(void)
+{
+	viewer *was = cur;
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+		if (viewers[i].used && viewers[i].sliders_due)
+		{
+			viewers[i].sliders_due = 0;
+			cur = &viewers[i];
+			if (cur->h > 0)
+				set_sliders();
+		}
+	cur = was;
 }
 
 static void show_line(long line)
@@ -1321,9 +1352,10 @@ static int pictures_busy(void)
 	return 0;
 }
 
+/* a piece of a picture: 1 more to do, | 2 when it drew (the slice ends) */
 static int pictures_idle(void)
 {
-	int i;
+	int i, drew = 0;
 
 	for (i = 0; i < MAX_VIEWERS; i++)
 	{
@@ -1348,10 +1380,11 @@ static int pictures_idle(void)
 				long r = px + pw < x + w ? px + pw : x + w, b = py + ph < y + h ? py + ph : y + h;
 
 				redraw((short) l, (short) t, (short) (r - l), (short) (b - t));
+				drew = 2;
 			}
 			cur = was;
 		}
-		return pictures_busy();
+		return pictures_busy() | drew;
 	}
 	return 0;
 }
@@ -3693,6 +3726,7 @@ int main(void)
 		/* a viewer in front: the mouse is looked at for tooltips */
 		int hover = viewer_of(top_window()) != NULL;
 		unsigned long t;
+		int slid = 0;
 
 		if (viewer_windows() > 0 || libwin_handle() > 0 || has_menu)
 			flags |= MU_KEYBD | MU_BUTTON;
@@ -3704,7 +3738,9 @@ int main(void)
 			t = BG_PACE;
 		else if (fts_busy)
 			t = 0;
-		if (pending || hover || fts_busy || index_news)
+		if (sliders_waiting())
+			t = 0;                        /* once: the sliders' turn */
+		if (pending || hover || fts_busy || index_news || t == 0)
 			flags |= MU_TIMER;
 		pf_forget();
 		hyp_forget();
@@ -3754,7 +3790,14 @@ int main(void)
 		}
 		/* the index, in a slice (bgwork.h): not while the user works, nor
 		   while EHYPVIEW.PRG runs (it has the index to itself) */
-		if (index_news && which == MU_TIMER)
+		if (which == MU_TIMER && sliders_waiting())
+		{
+			/* the sliders, alone in the turn */
+			aes_profile_tag("sliders");
+			sliders_now();
+			slid = 1;
+			fts_busy = libwin_busy() || pictures_busy();
+		} else if (index_news && which == MU_TIMER)
 		{
 			/* the windows show the new index (or progress): a turn of
 			   its own, the job's slice in the next */
@@ -3781,13 +3824,17 @@ int main(void)
 		   Speed: what the user did answered at once) */
 		if (which & (MU_KEYBD | MU_BUTTON | MU_MESAG))
 			fts_busy = libwin_busy() || pictures_busy();
-		else if (which & MU_TIMER)
+		else if ((which & MU_TIMER) && !slid)
 		{
+			/* work, or drawing what it found: never both in a turn */
+			int r;
+
 			aes_profile_tag("lib-work");
 			bg_begin();
 			do
-				fts_busy = pictures_idle() | libwin_idle();
-			while (fts_busy && bg_more());
+				r = pictures_idle() | libwin_idle();
+			while (r == 1 && bg_more());
+			fts_busy = r & 1;
 		}
 		if (ehv_names_misread != misread && job == NULL)
 		{

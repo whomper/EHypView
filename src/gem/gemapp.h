@@ -71,7 +71,7 @@ int libwin_message(short *msg);           /* 1 when the message was for it */
 void libwin_key(short kstate, short kreturn);
 void libwin_click(short mx, short my);
 void libwin_clip(int what);               /* ^C ^X ^V: CLIP_COPY, ... (clip.h) */
-int libwin_idle(void);                    /* 1 while the search or full-text search runs */
+int libwin_idle(void);                    /* 1 while the search or full-text search runs, | 2 when the slice ends (it drew, has drawing due, or had the slice) */
 int libwin_busy(void);                    /* the same, without working */
 void libwin_index_changed(void);          /* a new index (or progress) */
 void libwin_free(void);

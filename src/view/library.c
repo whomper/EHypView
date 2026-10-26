@@ -17,6 +17,7 @@
 
 static void search_stop(ehv_library *lib);
 static int rebuild(ehv_library *lib, int keep_selection, int want_text);
+static void fts_note(ehv_library *lib);
 
 static const char *guide_title(const ehv_guide *g)
 {
@@ -869,13 +870,7 @@ static int build_query(ehv_library *lib)
 		for (h = 0; h < nh; h++)
 			if (add_row(lib, LIB_TEXT, h, NULL) < 0)
 				return -1;
-		if (!ehv_fts_done(lib->fts))
-			snprintf(lib->note, sizeof(lib->note), "Searching... %lu pages", ehv_fts_pages(lib->fts));
-		else if (nh == 0)
-			snprintf(lib->note, sizeof(lib->note), "Not found in %lu pages", ehv_fts_pages(lib->fts));
-		else
-			snprintf(lib->note, sizeof(lib->note), "Found on %lu of %lu pages%s", nh,
-				ehv_fts_pages(lib->fts), nh >= EHV_FTS_MAX_HITS ? " (stopped)" : "");
+		fts_note(lib);
 		return add_row(lib, LIB_NOTE, 0, NULL);
 	}
 }
@@ -902,6 +897,43 @@ static long first_choice(const ehv_library *lib)
 		if (selectable(&lib->rows[i]) && lib->rows[i].kind != LIB_GROUP && lib->rows[i].kind != LIB_RECENT)
 			return (long) i;
 	return first_selectable(lib, 0, -1);
+}
+
+/* the full-text search's line under its rows */
+static void fts_note(ehv_library *lib)
+{
+	unsigned long nh;
+
+	ehv_fts_hits(lib->fts, &nh);
+	if (!ehv_fts_done(lib->fts))
+		snprintf(lib->note, sizeof(lib->note), "Searching... %lu pages", ehv_fts_pages(lib->fts));
+	else if (nh == 0)
+		snprintf(lib->note, sizeof(lib->note), "Not found in %lu pages", ehv_fts_pages(lib->fts));
+	else
+		snprintf(lib->note, sizeof(lib->note), "Found on %lu of %lu pages%s", nh,
+			ehv_fts_pages(lib->fts), nh >= EHV_FTS_MAX_HITS ? " (stopped)" : "");
+}
+
+/* the hits that came added to the rows as they are, the full-text rows
+   being the last: not all the rows made again for each hit */
+static int add_hits(ehv_library *lib, unsigned long before, unsigned long after, int want_text)
+{
+	const lib_row *last = lib->nrows >= 2 ? &lib->rows[lib->nrows - 2] : NULL;
+	unsigned long h;
+
+	if (last == NULL || last[1].kind != LIB_NOTE ||
+	    !(before == 0 ? last->kind == LIB_GROUP : last->kind == LIB_TEXT && last->ref == before - 1))
+		return rebuild(lib, 1, want_text);
+	lib->nrows--;
+	for (h = before; h < after; h++)
+		if (add_row(lib, LIB_TEXT, h, NULL) < 0)
+			return -1;
+	fts_note(lib);
+	if (add_row(lib, LIB_NOTE, 0, NULL) < 0)
+		return -1;
+	if (want_text && after > before)
+		lib->sel = first_selectable(lib, 0, LIB_TEXT);
+	return 0;
 }
 
 static int rebuild(ehv_library *lib, int keep_selection, int want_text)
@@ -1182,7 +1214,7 @@ int lib_fulltext_start(ehv_library *lib)
 	return rebuild(lib, 0, 0);
 }
 
-int lib_fulltext_step(ehv_library *lib, unsigned int budget)
+int lib_fulltext_step(ehv_library *lib, unsigned int budget, int (*more)(void))
 {
 	unsigned long before, after;
 	int r;
@@ -1190,7 +1222,7 @@ int lib_fulltext_step(ehv_library *lib, unsigned int budget)
 	if (lib->fts == NULL || ehv_fts_done(lib->fts))
 		return 1;
 	ehv_fts_hits(lib->fts, &before);
-	r = ehv_fts_step(lib->fts, budget);
+	r = ehv_fts_step(lib->fts, budget, more);
 	if (r < 0)
 		return -1;
 	ehv_fts_hits(lib->fts, &after);
@@ -1199,11 +1231,11 @@ int lib_fulltext_step(ehv_library *lib, unsigned int budget)
 		/* jump to the first hit when it arrives, unless the user moved */
 		int want_text = before == 0 && (lib->sel < 0 || lib->rows[lib->sel].kind != LIB_PAGE);
 
-		if (rebuild(lib, 1, want_text) < 0)
+		if (add_hits(lib, before, after, want_text) < 0)
 			return -1;
 	} else
 	{
-		snprintf(lib->note, sizeof(lib->note), "Searching... %lu pages", ehv_fts_pages(lib->fts));
+		fts_note(lib);
 	}
 	return r;
 }

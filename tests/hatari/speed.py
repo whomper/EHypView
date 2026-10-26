@@ -314,9 +314,12 @@ def page_case(spec, nvdi):
                  run.act(lambda: run.key(ch), "search", settle=2.0, tags=("event",)))
             note("search: the rows found drawn", PAGE, spec, run.since(("lib-rows",)))
             note("search: its slices through the names", SLICE, spec, run.since(("lib-work",)))
-        # its slices for 30 s (the whole search takes minutes on an ST)
-        note("full-text search (Return): its longest slice", SLICE, spec,
-             run.act(lambda: run.key(RETURN), "fulltext-start", settle=30.0))
+        # its slices for 30 s (the whole search takes minutes on an ST);
+        # what it finds drawn in turns of their own (lib-rows)
+        note("full-text search (Return): the key", KEY, spec,
+             run.act(lambda: run.key(RETURN), "fulltext-start", settle=30.0, tags=("event",)))
+        note("full-text search: its slices", SLICE, spec, run.since(("lib-work",)))
+        note("full-text search: what it found drawn", PAGE, spec, run.since(("lib-rows",)))
         note("library closed (^W): the page uncovered", WHOLE, spec,
              run.act(lambda: run.key(W, [CTRL]), "closed library"))
     finally:

@@ -39,6 +39,7 @@
 #include "clip.h"
 #include "fsys.h"
 #include "libbar.h"
+#include "bgwork.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
 #define MARGIN 8
@@ -1993,13 +1994,28 @@ int libwin_busy(void)
 	return lib_ready && (rows_due || lib.scanning || (lib.fts != NULL && !ehv_fts_done(lib.fts)));
 }
 
-/* the rows drawn again for names the search found, at most this often
-   while it goes on (drawing them takes longer than finding them) */
+/* what the searches found drawn, at most this often while they go on
+   (drawing it takes longer than finding it), and in a turn of its own:
+   the next timer turn's, before any more work */
 #define FOUND_DRAWN_EVERY 250
+#define R_INFO 16                      /* the info line alone (rows_due) */
+
+/* while the slice has room for another of the full-text search's
+   pieces: up to 45 ms on an ST (a block's tables, then 1 KB unpacked),
+   10 on a 68030 */
+static int fts_more(void)
+{
+	static unsigned long piece;
+
+	if (piece == 0)
+		piece = get_cookie(0x5F435055L) >= 20 ? 10 : 40;	/* '_CPU' */
+	return bg_room(piece);
+}
 
 int libwin_idle(void)
 {
 	static unsigned long drawn;
+	static int waiting, log_due;  /* found, not drawn yet; 1 log the search, 2 the full text */
 	unsigned long before, after;
 	int r;
 
@@ -2009,49 +2025,64 @@ int libwin_idle(void)
 
 		aes_profile_tag("lib-rows");      /* for the AESGAP lines */
 		rows_due = 0;
-		refresh(what);
+		if (what == R_INFO)
+			update_info();
+		else
+			refresh(what & ~R_INFO);
 		drawn = tos_ms();
-		return libwin_busy();
+		if (log_due == 1)
+			log_search();
+		else if (log_due == 2 && lib.fts != NULL)
+		{
+			char q[LIB_QUERY_MAX + 2], num[16];
+
+			ehv_fts_hits(lib.fts, &after);
+			snprintf(q, sizeof(q), "\"%s\"", lib.query);
+			sprintf(num, "%lu", after);
+			log_event("fulltext", q, num);
+		}
+		log_due = 0;
+		return libwin_busy() | 2;
 	}
 	if (lib_ready && lib.scanning)
 	{
-		static int waiting;           /* rows found, not drawn yet */
-
 		r = lib_search_step(&lib, 32);
 		waiting |= r == 2;
 		if (r != 0 && r != 2)
 		{
 			waiting = 0;
-			refresh(R_LIST | R_DETAIL);
-			log_search();
-			drawn = tos_ms();
-		} else if (waiting && tos_ms() - drawn >= FOUND_DRAWN_EVERY)
+			rows_due |= R_LIST | R_DETAIL;
+			log_due = 1;
+			return 3;
+		}
+		if (waiting && tos_ms() - drawn >= FOUND_DRAWN_EVERY)
 		{
 			waiting = 0;
-			refresh(R_LIST | R_DETAIL);
-			drawn = tos_ms();
+			rows_due |= R_LIST | R_DETAIL;
+			return 3;
 		}
 		return lib.scanning;
 	}
 	if (!lib_ready || lib.fts == NULL || ehv_fts_done(lib.fts))
 		return 0;
 	ehv_fts_hits(lib.fts, &before);
-	r = lib_fulltext_step(&lib, 1);       /* a page: the caller goes on for a slice */
+	/* on for the slice (bgwork.h), a piece at a time (1 KB of a page,
+	   or 16 of its lines), its hypertext opened once for them */
+	r = lib_fulltext_step(&lib, (unsigned int) -1, fts_more);
 	ehv_fts_hits(lib.fts, &after);
-	if (r != 0 || after != before)
+	waiting |= after != before;
+	if (r != 0)
 	{
-		refresh(R_LIST | R_DETAIL);
-		if (r != 0)
-		{
-			char q[LIB_QUERY_MAX + 2], num[16];
-
-			snprintf(q, sizeof(q), "\"%s\"", lib.query);
-			sprintf(num, "%lu", after);
-			log_event("fulltext", q, num);
-		}
-	} else
-	{
-		update_info();
+		waiting = 0;
+		rows_due |= R_LIST | R_DETAIL;
+		log_due = 2;
+		return 3;
 	}
-	return r == 0;
+	if (tos_ms() - drawn >= FOUND_DRAWN_EVERY)
+	{
+		/* the rows found so far, else the pages counted in the info line */
+		rows_due |= waiting ? R_LIST | R_DETAIL : R_INFO;
+		waiting = 0;
+	}
+	return 3;                             /* it had the slice: no second call to open its file again */
 }

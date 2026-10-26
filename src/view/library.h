@@ -184,8 +184,9 @@ int lib_activate(ehv_library *lib, const char **path, const char **node, unsigne
 /* start the full-text search for the current query */
 int lib_fulltext_start(ehv_library *lib);
 
-/* continue it; 1 = finished (or none running), 0 = more, -1 = out of memory */
-int lib_fulltext_step(ehv_library *lib, unsigned int budget);
+/* continue it for `budget` pieces, while more() says so (NULL: no
+   limit); 1 = finished (or none running), 0 = more, -1 = out of memory */
+int lib_fulltext_step(ehv_library *lib, unsigned int budget, int (*more)(void));
 
 /* text of a row for display */
 void lib_row_text(const ehv_library *lib, unsigned long row, char *buf, unsigned long size);

@@ -102,6 +102,9 @@ void hyp_close(hyp_doc *doc);
    hyp_close()), which must come before the caller's next event call */
 hyp_doc *hyp_open_held(const char *path, int *err);
 void hyp_let_go(hyp_doc *doc);
+/* held again (a slice's pages read with one open): 0, or -1 when it
+   can't be opened; hyp_let_go() before the next event call */
+int hyp_hold(hyp_doc *doc);
 
 /*
  * The last hypertext closed, kept for the rest of an event's work: a

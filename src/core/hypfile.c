@@ -346,6 +346,13 @@ void hyp_let_go(hyp_doc *doc)
 	}
 }
 
+int hyp_hold(hyp_doc *doc)
+{
+	if (doc->h < 0)
+		doc->h = pf_open(doc->path, PF_READ);
+	return doc->h >= 0 ? 0 : -1;
+}
+
 void hyp_keep(hyp_doc *doc)
 {
 	if (doc == NULL)

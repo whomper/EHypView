@@ -17,6 +17,7 @@
  * a canonical walk for the rare longer ones, which keeps the tables
  * small enough for a 68000 machine.
  */
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include "lh5.h"
@@ -78,15 +79,16 @@ static void fill(lh5_state *s)
 	}
 }
 
-/* peek n (1..16) bits without consuming them */
-static unsigned int peek(lh5_state *s, int n)
+/* peek n (1..16) bits without consuming them; these two inline, a
+   block's tables read with them (read_c_len: up to 510 codes) */
+static inline unsigned int peek(lh5_state *s, int n)
 {
 	if (s->bitcount < n)
 		fill(s);
 	return (unsigned int) (s->bitbuf >> (32 - n));
 }
 
-static void skip(lh5_state *s, int n)
+static inline void skip(lh5_state *s, int n)
 {
 	if (n <= 0)
 		return;
@@ -129,14 +131,18 @@ static void huff_constant(huff_t *h, unsigned short nsym, unsigned int sym)
 static int huff_build(huff_t *h, unsigned short nsym)
 {
 	unsigned short offs[MAXLEN + 2];
-	unsigned long code, left;
+	unsigned long left;
 	unsigned int i, l;
 
 	h->nsym = nsym;
 	h->constant = -1;
 	memset(h->count, 0, sizeof(h->count));
-	for (i = 0; i < nsym; i++)
-		h->count[h->len[i]]++;
+	{
+		const unsigned char *lp = h->len, *le = h->len + nsym;
+
+		while (lp < le)
+			h->count[*lp++]++;
+	}
 	h->count[0] = 0;
 
 	/* reject over-subscribed codes; incomplete codes are tolerated */
@@ -152,33 +158,36 @@ static int huff_build(huff_t *h, unsigned short nsym)
 	offs[1] = 0;
 	for (l = 1; l <= MAXLEN; l++)
 		offs[l + 1] = (unsigned short) (offs[l] + h->count[l]);
-	for (i = 0; i < nsym; i++)
-		if (h->len[i] != 0)
-			h->sorted[offs[h->len[i]]++] = (unsigned short) i;
-
-	/* fast table: walk symbols in canonical order, assigning codes */
-	for (i = 0; i < FASTSIZE; i++)
-		h->fast[i] = SLOW;
-	code = 0;
-	i = 0;
-	for (l = 1; l <= MAXLEN; l++)
 	{
-		unsigned int n;
+		const unsigned char *lp = h->len;
+		unsigned short sym;
 
-		for (n = 0; n < h->count[l]; n++, i++)
+		for (sym = 0; sym < nsym; sym++, lp++)
+			if (*lp != 0)
+				h->sorted[offs[*lp]++] = sym;
+	}
+
+	/* fast table: walk symbols in canonical order, assigning codes; they
+	   fill it from the front, the rest is SLOW.  Once a block, three
+	   tables: 16-bit counts and a pointer (an ST took 55 ms a block) */
+	{
+		unsigned short *f = h->fast, *end = h->fast + FASTSIZE;
+
+		i = 0;
+		for (l = 1; l <= FASTBITS; l++)
 		{
-			if (l <= FASTBITS)
-			{
-				unsigned long first = code << (FASTBITS - l);
-				unsigned long cnt = 1UL << (FASTBITS - l);
-				unsigned long k;
+			unsigned short n, cnt = (unsigned short) (1U << (FASTBITS - l));
 
-				for (k = 0; k < cnt; k++)
-					h->fast[first + k] = (unsigned short) ((l << 9) | h->sorted[i]);
+			for (n = 0; n < h->count[l]; n++, i++)
+			{
+				unsigned short v = (unsigned short) ((l << 9) | h->sorted[i]), k;
+
+				for (k = cnt; k > 0; k--)
+					*f++ = v;
 			}
-			code++;
 		}
-		code <<= 1;
+		while (f < end)
+			*f++ = SLOW;
 	}
 	return 0;
 }
@@ -460,7 +469,9 @@ static int run(lh5_state *s, unsigned long budget)
 static void begin(lh5_state *s, const unsigned char *src, unsigned long srclen,
                   unsigned char *dst, unsigned long dstlen)
 {
-	memset(s, 0, sizeof(*s));
+	/* not the tables, made at each block's start: 11 KB cleared took
+	   7 ms a page on an ST */
+	memset(s, 0, offsetof(lh5_state, t));
 	s->src = src;
 	s->srclen = srclen;
 	s->dst = dst;

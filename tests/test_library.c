@@ -485,9 +485,26 @@ static int run_fulltext(ehv_library *lib)
 	int r, steps = 0;
 
 	CHECK(lib_fulltext_start(lib) == 0);
-	while ((r = lib_fulltext_step(lib, 1)) == 0)
+	while ((r = lib_fulltext_step(lib, 1, NULL)) == 0)
 		steps++;
 	CHECK(r == 1);
+	{
+		/* the rows the hits were added to as they came: as made anew */
+		unsigned long n = lib->nrows, i;
+		lib_row *was = malloc(n * sizeof(lib_row));
+		char note[sizeof(lib->note)];
+
+		CHECK(was != NULL);
+		if (was != NULL)
+		{
+			memcpy(was, lib->rows, n * sizeof(lib_row));
+			strcpy(note, lib->note);
+			CHECK(lib_rebuild(lib) == 0 && lib->nrows == n && strcmp(note, lib->note) == 0);
+			for (i = 0; i < n && i < lib->nrows; i++)
+				CHECK(was[i].kind == lib->rows[i].kind && was[i].ref == lib->rows[i].ref);
+			free(was);
+		}
+	}
 	return steps;
 }
 
@@ -545,13 +562,40 @@ static void test_fulltext(const ehv_index *idx)
 		const ehv_fts_hit *h;
 
 		CHECK(s != NULL && strcmp(ehv_fts_query(s), "PAGE") == 0);
-		while (ehv_fts_step(s, 3) == 0)
+		while (ehv_fts_step(s, 3, NULL) == 0)
 			;
 		h = ehv_fts_hits(s, &n);
 		CHECK(n >= 3 && ehv_fts_done(s));       /* ignoring case */
 		CHECK(h[0].count >= 1);
 		ehv_fts_free(s);
 		CHECK(ehv_fts_begin(idx, "") == NULL);
+		CHECK(ehv_fts_begin(NULL, "x") == NULL);
+	}
+
+	/* a piece at a time (1 KB of a page, or 16 of its lines): the same
+	   hits as all at once, BIG.HYP's long page taking many pieces */
+	{
+		ehv_fts *a = ehv_fts_begin(idx, "firebee"), *b = ehv_fts_begin(idx, "firebee");
+		unsigned long na = 0, nb = 0, i, steps = 0;
+		const ehv_fts_hit *ha, *hb;
+
+		CHECK(a != NULL && b != NULL);
+		while (ehv_fts_step(a, 1, NULL) == 0)
+			steps++;
+		CHECK(ehv_fts_step(b, 100000, NULL) == 1);
+		ha = ehv_fts_hits(a, &na);
+		hb = ehv_fts_hits(b, &nb);
+		CHECK(na >= 1 && na == nb && ehv_fts_pages(a) == ehv_fts_pages(b));
+		CHECK(steps > ehv_fts_pages(a) * 2);    /* each page read in a step, then its lines */
+		for (i = 0; i < na && i < nb; i++)
+			CHECK(ha[i].guide == hb[i].guide && ha[i].line == hb[i].line && ha[i].count == hb[i].count &&
+			      strcmp(ha[i].node, hb[i].node) == 0 && strcmp(ha[i].context, hb[i].context) == 0);
+		for (i = 0; i < na; i++)
+			if (ha[i].count > 16)
+				break;
+		CHECK(i < na);                          /* a page with its hits in more than one piece */
+		ehv_fts_free(a);
+		ehv_fts_free(b);
 		CHECK(ehv_fts_begin(NULL, "x") == NULL);
 	}
 }
