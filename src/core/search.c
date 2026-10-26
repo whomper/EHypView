@@ -26,7 +26,18 @@ struct ehv_fts {
 	unsigned long nhits, cap;
 	char *line;                   /* buffer for one folded line   */
 	size_t line_cap;
+	/* the page being searched, a piece at a time: read and unpacked
+	   PAGE_STEP bytes a step, then LINES_STEP lines (a big page took
+	   2 s on an ST, more than a second on a Falcon) */
+	hyp_page_job *job;
+	hyp_page *pg;
+	unsigned short l, first, count;
+	size_t first_at, first_len;
+	char *first_text;
 };
+
+#define LINES_STEP 16
+#define PAGE_STEP 1024
 
 ehv_fts *ehv_fts_begin(const ehv_index *idx, const char *query)
 {
@@ -54,6 +65,9 @@ void ehv_fts_free(ehv_fts *s)
 
 	if (s == NULL)
 		return;
+	hyp_page_job_free(s->job);
+	hyp_page_free(s->pg);
+	free(s->first_text);
 	hyp_close(s->doc);
 	for (i = 0; i < s->nhits; i++)
 		free(s->hits[i].node);
@@ -100,8 +114,12 @@ static long line_text(ehv_fts *s, const hyp_page *pg, unsigned short l)
 		n += run->len;
 	}
 	s->line[n] = '\0';
-	for (i = 0; i < n; i++)
-		s->line[n + 1 + i] = (char) atari_tolower((unsigned char) s->line[i]);
+	{
+		const unsigned char *t = atari_lower_table();
+
+		for (i = 0; i < n; i++)
+			s->line[n + 1 + i] = (char) t[(unsigned char) s->line[i]];
+	}
 	s->line[2 * n + 1] = '\0';
 	return (long) n;
 }
@@ -156,21 +174,40 @@ static int add_hit(ehv_fts *s, unsigned short line, unsigned short count, const 
 	return 0;
 }
 
-/* search one text page; -1 when out of memory */
+/* the next piece of the page being searched (read, unpacked and parsed
+   first, PAGE_STEP bytes a step; then LINES_STEP lines a step): 1 the
+   page done, 0 more of it, -1 out of memory */
 static int search_page(ehv_fts *s)
 {
-	hyp_page *pg = hyp_page_load(s->doc, s->entry, NULL);
-	unsigned short l, first = 0, count = 0;
-	size_t first_at = 0;
-	char *first_text = NULL;
-	size_t first_len = 0;
+	unsigned short end;
 	int rc = 0;
 
-	if (pg == NULL)
-		return 0;                    /* damaged page: skip it */
-	for (l = 0; l < pg->nlines; l++)
+	if (s->pg == NULL)
 	{
-		long n = line_text(s, pg, l);
+		int r;
+
+		if (s->job == NULL)
+		{
+			hyp_hold(s->doc);            /* one open for the step's pages */
+			return (s->job = hyp_page_begin(s->doc, s->entry, NULL)) == NULL;    /* damaged: skipped */
+		}
+		if ((r = hyp_page_more(s->job, PAGE_STEP)) == 0)
+			return 0;
+		if (r < 0)
+		{
+			hyp_page_job_free(s->job);   /* damaged page: skip it */
+			s->job = NULL;
+			return 1;
+		}
+		s->pg = hyp_page_take(s->job);
+		s->job = NULL;
+		s->l = s->count = 0;
+		return s->pg->nlines == 0 ? (hyp_page_free(s->pg), s->pg = NULL, 1) : 0;
+	}
+	end = (unsigned short) (s->pg->nlines - s->l > LINES_STEP ? s->l + LINES_STEP : s->pg->nlines);
+	for (; s->l < end; s->l++)
+	{
+		long n = line_text(s, s->pg, s->l);
 		const char *m;
 
 		if (n < 0)
@@ -181,33 +218,40 @@ static int search_page(ehv_fts *s)
 		m = find(s->line + n + 1, (size_t) n, s->folded, s->qlen);
 		if (m == NULL)
 			continue;
-		if (count == 0)
+		if (s->count == 0)
 		{
-			first = l;
-			first_at = (size_t) (m - (s->line + n + 1));
-			first_len = (size_t) n;
-			first_text = malloc((size_t) n + 1);
-			if (first_text == NULL)
+			s->first = s->l;
+			s->first_at = (size_t) (m - (s->line + n + 1));
+			s->first_len = (size_t) n;
+			s->first_text = malloc((size_t) n + 1);
+			if (s->first_text == NULL)
 			{
 				rc = -1;
 				break;
 			}
-			memcpy(first_text, s->line, (size_t) n + 1);
+			memcpy(s->first_text, s->line, (size_t) n + 1);
 		}
-		if (count < 0xFFFF)
-			count++;
+		if (s->count < 0xFFFF)
+			s->count++;
 	}
-	if (rc == 0 && count > 0 && s->nhits < EHV_FTS_MAX_HITS)
-		rc = add_hit(s, first, count, first_text, first_len, first_at);
-	free(first_text);
-	hyp_page_free(pg);
-	return rc;
+	if (rc == 0 && s->l < s->pg->nlines)
+		return 0;
+	if (rc == 0 && s->count > 0 && s->nhits < EHV_FTS_MAX_HITS)
+		rc = add_hit(s, s->first, s->count, s->first_text, s->first_len, s->first_at);
+	free(s->first_text);
+	s->first_text = NULL;
+	hyp_page_free(s->pg);
+	s->pg = NULL;
+	return rc < 0 ? -1 : 1;
 }
 
-int ehv_fts_step(ehv_fts *s, unsigned int budget)
+int ehv_fts_step(ehv_fts *s, unsigned int budget, int (*more)(void))
 {
-	while (budget > 0 && !s->done)
+	int first = 1;
+
+	while (budget > 0 && !s->done && (first || more == NULL || more()))
 	{
+		first = 0;
 		if (s->doc == NULL)
 		{
 			/* next readable hypertext */
@@ -218,7 +262,7 @@ int ehv_fts_step(ehv_fts *s, unsigned int budget)
 				s->done = 1;
 				break;
 			}
-			s->doc = hyp_open(s->idx->guides[s->guide].path, NULL);
+			s->doc = hyp_open_held(s->idx->guides[s->guide].path, NULL);
 			s->entry = 0;
 			if (s->doc == NULL)
 			{
@@ -235,12 +279,20 @@ int ehv_fts_step(ehv_fts *s, unsigned int budget)
 		}
 		if (HYP_IS_TEXT(s->doc->entries[s->entry].type))
 		{
-			if (search_page(s) < 0)
+			int r = search_page(s);
+
+			if (r < 0)
+			{
+				hyp_let_go(s->doc);
 				return -1;
-			s->pages++;
+			}
 			budget--;
+			if (r == 0)
+				continue;                /* more of this page */
+			s->pages++;
 		}
 		s->entry++;
 	}
+	hyp_let_go(s->doc);                  /* no file kept open across an event call */
 	return s->done ? 1 : 0;
 }

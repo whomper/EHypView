@@ -10,6 +10,7 @@
 #include "plat.h"
 #include "index.h"
 #include "bookmark.h"
+#include "text.h"
 
 #define KEY_SCAN(k)  (((unsigned short) (k)) >> 8)
 #define KEY_ASCII(k) ((k) & 0xff)
@@ -28,7 +29,14 @@ void log_event(const char *what, const char *a, const char *b);
 short link_color(void);
 short ui_colour(unsigned short n);        /* pagedraw.c: TOS's VDI colour n among 0-15 now */
 void fill(short color, short x1, short y1, short x2, short y2);
+/* common's text.c (text.h) on vdi_h: text_n, text_clip/text_noclip
+   (every clip set where text is drawn goes through them), and bold and
+   underline on plain text just drawn in MD_REPLACE on a white ground,
+   where text_fx_fast(fx, mode) says so */
 void text_at(short x, short y, const char *s, long n);
+void clip_on(const short *c);
+void clip_off(void);
+void text_fx_after(short x, short y, const char *s, long n, short fx, short colour);
 int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short w2, short h2);
 int scanning(void);                       /* the index is being rebuilt */
 unsigned long scan_found(void);           /* hypertexts found so far    */
@@ -57,7 +65,8 @@ int libwin_message(short *msg);           /* 1 when the message was for it */
 void libwin_key(short kstate, short kreturn);
 void libwin_click(short mx, short my);
 void libwin_clip(int what);               /* ^C ^X ^V: CLIP_COPY, ... (clip.h) */
-int libwin_idle(void);                    /* 1 while the full-text search runs */
+int libwin_idle(void);                    /* 1 while the search or full-text search runs, | 2 when the slice ends (it drew, has drawing due, or had the slice) */
+int libwin_busy(void);                    /* the same, without working */
 void libwin_index_changed(void);          /* a new index (or progress) */
 void libwin_free(void);
 void libwin_font_changed(void);

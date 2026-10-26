@@ -40,6 +40,7 @@
 #define LIB_NOTE    5     /* a message                          */
 #define LIB_BOOKMARK 6    /* a bookmark                         */
 #define LIB_RECENT  7     /* a page read lately                 */
+#define LIB_WAIT    8     /* "Searching the names...": more may come */
 
 /* layouts */
 #define LIB_OUTLINE 0
@@ -101,6 +102,15 @@ typedef struct {
 	ehv_hits found;       /* the names the search found (PAGE rows) */
 	char found_q[LIB_QUERY_MAX];     /* for this search, */
 	const ehv_index *found_of;       /* in this index (NULL: none) */
+	/* the names searched through: those starting with the query found
+	   at once, the rest in slices (lib_search_step) */
+	ehv_names scan;
+	int scanning;         /* 1: lib_search_step() has names to go */
+	int defer_rows;       /* set: the names found made rows by lib_rows_update() */
+	int rows_stale;       /* found since: lib_rows_update() to do */
+	int query_stale;      /* lib_set_query_later(): lib_rows_update() to do */
+	unsigned long plain;  /* names the same as, starting with or containing it */
+	ehv_hits rank[4];     /* the same, starting with, containing, similar */
 	unsigned long npages, nguides;   /* matches in the last rebuild */
 	char note[80];        /* text of the NOTE row               */
 
@@ -109,6 +119,7 @@ typedef struct {
 	unsigned long *order; /* readable hypertexts, as listed     */
 	unsigned long norder;
 	unsigned char *tint;  /* each hypertext's subject's tint    */
+	struct lib_gkey *keys;           /* each one's subject, worked out once */
 	const ehv_index *order_of;       /* the index order was made for */
 	lib_pane *panes;      /* the Subjects pane                  */
 	unsigned long npanes, cap_panes;
@@ -153,6 +164,18 @@ int lib_selected_bookmark(const ehv_library *lib);
 
 /* change the search text; rebuilds the list */
 int lib_set_query(ehv_library *lib, const char *query);
+/* the text now, the search and the rows by lib_rows_update() (a key
+   typed answered at once: the rows in the program's next turn) */
+int lib_set_query_later(ehv_library *lib, const char *query);
+/* the search through the names on for at most `budget` names, while
+   more() says so (NULL: no limit), the index read with one open (the
+   rows rebuilt when it found more): 1 done (or none going), 2 more and
+   the rows changed, 0 more, -1 failed */
+int lib_search_step(ehv_library *lib, unsigned int budget, int (*more)(void));
+/* the rows made here, in a turn of their own (80 ms on an ST): after
+   lib_set_query_later(), or with defer_rows when the steps found more
+   names: 0, -1 failed */
+int lib_rows_update(ehv_library *lib);
 
 /* rebuild the list for the current query */
 int lib_rebuild(ehv_library *lib);
@@ -172,8 +195,9 @@ int lib_activate(ehv_library *lib, const char **path, const char **node, unsigne
 /* start the full-text search for the current query */
 int lib_fulltext_start(ehv_library *lib);
 
-/* continue it; 1 = finished (or none running), 0 = more, -1 = out of memory */
-int lib_fulltext_step(ehv_library *lib, unsigned int budget);
+/* continue it for `budget` pieces, while more() says so (NULL: no
+   limit); 1 = finished (or none running), 0 = more, -1 = out of memory */
+int lib_fulltext_step(ehv_library *lib, unsigned int budget, int (*more)(void));
 
 /* text of a row for display */
 void lib_row_text(const ehv_library *lib, unsigned long row, char *buf, unsigned long size);

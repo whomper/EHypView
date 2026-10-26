@@ -60,7 +60,7 @@
 #define FONT_CHANGED 0x7a18        /* the font protocol */
 #define FONT_ACK     0x7a1a
 
-#define MARGIN       4             /* pixels left of the text */
+#define MARGIN       8             /* pixels left of the text */
 #define WKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | \
                VSLIDE | LFARROW | RTARROW | HSLIDE)
 
@@ -87,6 +87,9 @@ typedef struct {
 	short used;                    /* the slot holds a viewer         */
 	short icon;                    /* shown as EHypView's icon        */
 	short place[4];                /* where it was before (WM_ICONIFY) */
+	short slider[4];               /* WF_VSLSIZE... as set, plus 1; 0: unknown */
+	short fresh;                   /* opened, its first WM_REDRAW to come */
+	short sliders_due;             /* scrolled: the sliders set in a turn of their own */
 	char name[160], info[200];
 	ehv_view view;
 	playout lay;                   /* the page laid out (pagedraw.c)  */
@@ -292,11 +295,23 @@ static void bar(toolbar *t)
 }
 
 /* where the page is: the work area below the toolbar */
+/* a window about to open: its work area as it will be (open_window sets
+   its sliders before the AES draws them) */
+static short planned[4];
+static int planning;
+
 static void work_area(short *x, short *y, short *w, short *h)
 {
 	short th = tb_height(sys_ch);
 
-	wind_get(cur->h, WF_WORKXYWH, x, y, w, h);
+	if (planning)
+	{
+		*x = planned[0];
+		*y = planned[1];
+		*w = planned[2];
+		*h = planned[3];
+	} else
+		wind_get(cur->h, WF_WORKXYWH, x, y, w, h);
 	*y = (short) (*y + th);
 	*h = (short) (*h > th ? *h - th : 0);
 }
@@ -360,12 +375,23 @@ static void set_sliders(void)
 	long c = page_cols(), cols = visible_cols();
 	long mt = max_top(), ml = max_left();
 
+	short v[4];
+	static const short what[4] = { WF_VSLSIZE, WF_VSLIDE, WF_HSLSIZE, WF_HSLIDE };
+	int i;
+
 	if (cur->icon)
 		return;
-	wind_set(cur->h, WF_VSLSIZE, (short) (n > rows ? rows * 1000L / n : 1000), 0, 0, 0);
-	wind_set(cur->h, WF_VSLIDE, (short) (mt > 0 ? cur->view.top * 1000L / mt : 0), 0, 0, 0);
-	wind_set(cur->h, WF_HSLSIZE, (short) (c > cols ? cols * 1000L / c : 1000), 0, 0, 0);
-	wind_set(cur->h, WF_HSLIDE, (short) (ml > 0 ? cur->view.left * 1000L / ml : 0), 0, 0, 0);
+	v[0] = (short) (n > rows ? rows * 1000L / n : 1000);
+	v[1] = (short) (mt > 0 ? cur->view.top * 1000L / mt : 0);
+	v[2] = (short) (c > cols ? cols * 1000L / c : 1000);
+	v[3] = (short) (ml > 0 ? cur->view.left * 1000L / ml : 0);
+	/* only what changed: the AES draws the slider again for each */
+	for (i = 0; i < 4; i++)
+		if (cur->slider[i] != v[i] + 1)
+		{
+			wind_set(cur->h, what[i], v[i], 0, 0, 0);
+			cur->slider[i] = (short) (v[i] + 1);
+		}
 }
 
 /* ---------------------------------------------------------------- */
@@ -391,17 +417,27 @@ void fill(short color, short x1, short y1, short x2, short y2)
 	vr_recfl(vdi_h, pxy);
 }
 
+/* text through common's text.c (the guidelines' Speed, "Text through
+   text_n"): the characters wholly inside the clip drawn with clipping
+   off, bold and underline drawn on plain text, the same pixels as TOS's */
 void text_at(short x, short y, const char *s, long n)
 {
-	while (n > 0)
-	{
-		short k = n > 120 ? 120 : (short) n;
+	text_n(vdi_h, x, y, s, n);
+}
 
-		v_gtext_n(vdi_h, x, y, s, k);
-		x = (short) (x + k * cw);
-		s += k;
-		n -= k;
-	}
+void clip_on(const short *c)
+{
+	text_clip(vdi_h, c);
+}
+
+void clip_off(void)
+{
+	text_noclip(vdi_h);
+}
+
+void text_fx_after(short x, short y, const char *s, long n, short fx, short colour)
+{
+	text_fx(vdi_h, x, y, s, n, fx, colour);
 }
 
 static void draw_message(short x, short y, const char *const *lines)
@@ -427,7 +463,7 @@ static void draw_page(short cx, short cy, short cw_, short ch_)
 	clip[1] = cy;
 	clip[2] = (short) (cx + cw_ - 1);
 	clip[3] = (short) (cy + ch_ - 1);
-	vs_clip(vdi_h, 1, clip);
+	clip_on(clip);
 	fill(0, clip[0], clip[1], clip[2], clip[3]);
 
 	if (pg == NULL || cur->lay.line_y == NULL)
@@ -441,14 +477,14 @@ static void draw_page(short cx, short cy, short cw_, short ch_)
 		};
 
 		draw_message((short) (wx + MARGIN + cw), (short) (wy + ch), help);
-		vs_clip(vdi_h, 0, clip);
+		clip_off();
 		return;
 	}
 
 	ox = (short) (wx + MARGIN - cur->view.left * cw);
 	oy = wy - cur->lay.gfx_y[cur->view.top];
 	layout_draw(&cur->lay, ox, oy, cur->view.top, cx, cy, cw_, ch_, cur->view.sel, page_cols());
-	vs_clip(vdi_h, 0, clip);
+	clip_off();
 }
 
 /* ---------------------------------------------------------------- */
@@ -589,7 +625,7 @@ static void draw_bar(short cx, short cy, short cw_, short ch_)
 	clip[1] = cy;
 	clip[2] = (short) (cx + cw_ - 1);
 	clip[3] = (short) (cy + ch_ - 1);
-	vs_clip(vdi_h, 1, clip);
+	text_clip(vdi_h, clip);
 	fill(0, t.x, t.y, (short) (t.x + t.w - 1), (short) (t.y + t.h - 1));
 	font_sys_push();
 	for (b = 0; b < TB_COUNT; b++)
@@ -602,7 +638,7 @@ static void draw_bar(short cx, short cy, short cw_, short ch_)
 	p[2] = (short) (t.x + t.w - 1);
 	p[1] = p[3] = (short) (t.y + t.h - 1);
 	v_pline(vdi_h, 2, p);
-	vs_clip(vdi_h, 0, clip);
+	text_noclip(vdi_h);
 }
 
 /* the work area within one rectangle: the toolbar, the page */
@@ -743,7 +779,10 @@ static void page_changed(void)
 		view_title(&cur->view, cur->name, sizeof(cur->name));
 		wind_set_str(cur->h, WF_NAME, cur->name);
 		update_info();
-		redraw_all();
+		if (cur->fresh)
+			set_sliders();             /* the AES's WM_REDRAW draws it, once */
+		else
+			redraw_all();
 	}
 }
 
@@ -810,6 +849,7 @@ static void popup_box(long r)
 
 	memset(&pl, 0, sizeof(pl));
 	layout_make(&pl, cur->view.doc, cur->view.popup);
+	layout_finish(&pl);                 /* its pictures, before it shows */
 	if (pl.pg == NULL)
 	{
 		view_popup_close(&cur->view);
@@ -844,7 +884,7 @@ static void popup_box(long r)
 	clip[1] = by;
 	clip[2] = (short) (bx + bw + 2);
 	clip[3] = (short) (by + bh + 2);
-	vs_clip(vdi_h, 1, clip);
+	text_clip(vdi_h, clip);
 	fill(1, (short) (bx + 3), (short) (by + 3), (short) (bx + bw + 2), (short) (by + bh + 2));  /* shadow */
 	fill(1, bx, by, (short) (bx + bw - 1), (short) (by + bh - 1));                          /* frame */
 	fill(0, (short) (bx + 1), (short) (by + 1), (short) (bx + bw - 2), (short) (by + bh - 2));
@@ -852,10 +892,10 @@ static void popup_box(long r)
 	clip[1] = (short) (by + 1);
 	clip[2] = (short) (bx + bw - 2);
 	clip[3] = (short) (by + bh - 2);
-	vs_clip(vdi_h, 1, clip);
+	text_clip(vdi_h, clip);
 	layout_draw(&pl, (short) (bx + 1 + POP_PAD), by + 1 + POP_PAD, 0,
 		clip[0], clip[1], (short) (bw - 2), (short) (bh - 2), -1, cols);
-	vs_clip(vdi_h, 0, clip);
+	text_noclip(vdi_h);
 	graf_mouse(M_ON, NULL);
 	graf_mouse(ARROW, NULL);                   /* a link click left the busy bee */
 	log_event("popup", name, NULL);
@@ -922,6 +962,18 @@ static void after(int rc)
 	}
 }
 
+/* a window's height where its page shows whole lines: TOS draws text
+   cut by the clip the slow way, and a line scrolled in then fills the
+   strip that comes in exactly (the guidelines' Speed) */
+static short lines_h(short x, short y, short w, short h)
+{
+	short wx, wy, ww, wh, page;
+
+	wind_calc(WC_WORK, WKIND, x, y, w, h, &wx, &wy, &ww, &wh);
+	page = (short) (wh - tb_height(sys_ch));
+	return page > ch ? (short) (h - page % ch) : h;
+}
+
 static void open_window(void)
 {
 	short x, y, w, h, cols;
@@ -933,6 +985,7 @@ static void open_window(void)
 		return;
 	}
 	cur->h = wind_create(icon_kind(WKIND), desk_x, desk_y, desk_w, desk_h);
+	memset(cur->slider, 0, sizeof(cur->slider));
 	cur->icon = 0;
 	if (cur->h <= 0)
 	{
@@ -961,14 +1014,24 @@ static void open_window(void)
 		if (y + h + n * step <= desk_y + desk_h)
 			y = (short) (y + n * step);
 	}
+	/* its text on the 8-pixel grid: the VDI draws it far faster (the
+	   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
+	x = wind_x8(WKIND, x, y, w, h);
+	h = lines_h(x, y, w, h);
 	view_title(&cur->view, cur->name, sizeof(cur->name));
 	wind_set_str(cur->h, WF_NAME, cur->name);
 	update_info();
-	wind_open(cur->h, x, y, w, h);
-	if (is_acc)                        /* the desktop drops files on it */
-		av_window(cur->h, 1);
+	/* the sliders set before it opens: the AES draws them once, with
+	   the frame (each wind_set on an open window draws them again) */
+	wind_calc(WC_WORK, WKIND, x, y, w, h, &planned[0], &planned[1], &planned[2], &planned[3]);
+	planning = 1;
 	clamp_scroll();
 	set_sliders();
+	planning = 0;
+	wind_open(cur->h, x, y, w, h);
+	cur->fresh = 1;
+	if (is_acc)                        /* the desktop drops files on it */
+		av_window(cur->h, 1);
 }
 
 void app_window_closed(void)
@@ -997,6 +1060,10 @@ static void close_window(void)
 		recent_save();
 	}
 	cur->h = -1;
+	/* the accessory's last window gone: the pictures kept for going back
+	   let go of (its ST RAM is the pages') */
+	if (is_acc && viewer_windows() == 0)
+		layout_forget_kept();
 	cur->icon = 0;
 	if (viewer_windows() > 0)
 	{
@@ -1053,6 +1120,60 @@ void viewer_show(const char *path, const char *node, unsigned short line)
 /* ---------------------------------------------------------------- */
 /* scrolling and navigation                                          */
 
+/*
+ * The page moved up by dy pixels (down when dy < 0): what stays in view
+ * is copied on the screen (vro_cpyfm) when the whole work area shows,
+ * and only the strip that comes in is drawn (EContact's win_scroll);
+ * otherwise the area is drawn again.
+ */
+static void scroll_area(short x, short y, short w, short h, long dy)
+{
+	short rx, ry, rw, rh, ady;
+	int whole = 0;
+
+	if (dy == 0)
+		return;
+	if (dy >= h || dy <= -h || cur->icon)
+	{
+		redraw(x, y, w, h);
+		return;
+	}
+	ady = (short) (dy < 0 ? -dy : dy);
+	wind_update(BEG_UPDATE);
+	wind_get(cur->h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
+	if (rx <= x && ry <= y && rx + rw >= x + w && ry + rh >= y + h &&
+		x >= desk_x && y >= desk_y && x + w <= desk_x + desk_w && y + h <= desk_y + desk_h)
+	{
+		MFDB scr;
+		short pxy[8], clip[4];
+
+		memset(&scr, 0, sizeof(scr));
+		pxy[0] = pxy[4] = x;
+		pxy[2] = pxy[6] = (short) (x + w - 1);
+		pxy[1] = (short) (y + (dy > 0 ? ady : 0));
+		pxy[3] = (short) (pxy[1] + h - ady - 1);
+		pxy[5] = (short) (y + (dy > 0 ? 0 : ady));
+		pxy[7] = (short) (pxy[5] + h - ady - 1);
+		clip[0] = x;
+		clip[1] = y;
+		clip[2] = (short) (x + w - 1);
+		clip[3] = (short) (y + h - 1);
+		graf_mouse(M_OFF, NULL);
+		text_clip(vdi_h, clip);           /* NVDI clips raster copies */
+		vro_cpyfm(vdi_h, 3, pxy, &scr, &scr);
+		text_noclip(vdi_h);
+		graf_mouse(M_ON, NULL);
+		whole = 1;
+	}
+	wind_update(END_UPDATE);
+	if (!whole)
+		redraw(x, y, w, h);
+	else if (dy > 0)
+		redraw(x, (short) (y + h - ady), w, ady);
+	else
+		redraw(x, y, w, ady);
+}
+
 static void scroll_to(long top, long left)
 {
 	long ot = cur->view.top, ol = cur->view.left;
@@ -1064,10 +1185,43 @@ static void scroll_to(long top, long left)
 	{
 		short x, y, w, h;
 
-		set_sliders();
+		cur->sliders_due = 1;          /* sliders_now(), when no key waits */
 		work_area(&x, &y, &w, &h);
-		redraw(x, y, w, h);
+		if (cur->view.left == ol && cur->lay.gfx_y != NULL)
+			scroll_area(x, y, w, h, cur->lay.gfx_y[cur->view.top] - cur->lay.gfx_y[ot]);
+		else
+			redraw(x, y, w, h);
 	}
+}
+
+/* the sliders of the windows scrolled, set in a timer turn of their
+   own: the AES draws each again, as long as the scroll itself on an ST
+   (the guidelines, Speed; EUpdate's way), and a held key's repeats go
+   on without them */
+static int sliders_waiting(void)
+{
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+		if (viewers[i].used && viewers[i].sliders_due)
+			return 1;
+	return 0;
+}
+
+static void sliders_now(void)
+{
+	viewer *was = cur;
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+		if (viewers[i].used && viewers[i].sliders_due)
+		{
+			viewers[i].sliders_due = 0;
+			cur = &viewers[i];
+			if (cur->h > 0)
+				set_sliders();
+		}
+	cur = was;
 }
 
 static void show_line(long line)
@@ -1082,9 +1236,79 @@ static void show_line(long line)
 		scroll_to(line - rows + 1, cur->view.left);
 }
 
+/*
+ * The viewers' pictures, made a piece at a time between event calls
+ * (pagedraw.c's layout_work; the guidelines' Speed): the page's text is
+ * shown at once, and each picture is drawn in its window when it is
+ * ready, a grey box in its place till then.
+ */
+static int pictures_busy(void)
+{
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+		if (viewers[i].used && layout_busy(&viewers[i].lay))
+			return 1;
+	return 0;
+}
+
+/* a piece of a picture: 1 more to do, | 2 when it drew (the slice ends) */
+static int pictures_idle(void)
+{
+	int i, drew = 0;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+	{
+		viewer *v = &viewers[i], *was = cur;
+		long done, px, py;
+		short x, y, w, h, pw, ph;
+
+		if (!v->used || !layout_busy(&v->lay))
+			continue;
+		aes_profile_tag("pictures");
+		layout_work(&v->lay, &done);
+		if (done >= 0 && v->h > 0 && !v->icon)
+		{
+			cur = v;
+			work_area(&x, &y, &w, &h);
+			if (layout_picture_at(&cur->lay, (unsigned short) done, (short) (x + MARGIN - cur->view.left * cw),
+					      y - cur->lay.gfx_y[cur->view.top], page_cols(), &px, &py, &pw, &ph) &&
+			    px < x + w && py < y + h && px + pw > x && py + ph > y)
+			{
+				/* only what of it shows */
+				long l = px > x ? px : x, t = py > y ? py : y;
+				long r = px + pw < x + w ? px + pw : x + w, b = py + ph < y + h ? py + ph : y + h;
+
+				redraw((short) l, (short) t, (short) (r - l), (short) (b - t));
+				drew = 2;
+			}
+			cur = was;
+		}
+		return pictures_busy() | drew;
+	}
+	return 0;
+}
+
+/* one line of the page drawn again: a link chosen or left */
+static void redraw_line(long line)
+{
+	short x, y, w, h;
+	long ly;
+
+	if (line < cur->view.top || cur->lay.line_y == NULL || cur->icon)
+		return;
+	work_area(&x, &y, &w, &h);
+	ly = y + cur->lay.line_y[line] - cur->lay.gfx_y[cur->view.top];
+	if (ly >= y + h)
+		return;
+	redraw(x, (short) ly, w, (short) (ly + ch > y + h ? y + h - ly : ch));
+}
+
+/* the next or previous link chosen: only its line and the one it left
+   drawn again (the guidelines, Speed) */
 static void select_link(int dir)
 {
-	long rows = visible_lines();
+	long rows = visible_lines(), old = view_run_line(&cur->view, cur->view.sel);
 	long line = view_select_link(&cur->view, dir, cur->view.top, cur->view.top + rows - 1);
 
 	if (line >= 0)
@@ -1094,8 +1318,10 @@ static void select_link(int dir)
 		sprintf(num, "%ld", line);
 		log_event("select", num, NULL);
 		show_line(line);
+		redraw_line(old);
+		if (line != old)
+			redraw_line(line);
 	}
-	redraw_all();
 }
 
 static void open_file_selector(void)
@@ -1966,14 +2192,14 @@ static void tip_show(const toolbar *t, int b)
 	clip[1] = wy;
 	clip[2] = (short) (wx + ww - 1);
 	clip[3] = (short) (wy + wh - 1);
-	vs_clip(vdi_h, 1, clip);
+	text_clip(vdi_h, clip);
 	fill(1, tip.x, tip.y, (short) (tip.x + tip.w - 1), (short) (tip.y + tip.h - 1));
 	fill(0, (short) (tip.x + 1), (short) (tip.y + 1), (short) (tip.x + tip.w - 2), (short) (tip.y + tip.h - 2));
 	vswr_mode(vdi_h, MD_TRANS);
 	vst_color(vdi_h, 1);
 	vst_effects(vdi_h, 0);
 	text_at((short) (tip.x + cw), (short) (tip.y + 2), text, n);
-	vs_clip(vdi_h, 0, clip);
+	text_noclip(vdi_h);
 	graf_mouse(M_ON, NULL);
 	wind_update(END_UPDATE);
 	font_sys_pop();
@@ -2212,13 +2438,19 @@ static void show_request(const char *args)
 		libwin_open();             /* nothing asked, nothing shown: the library */
 		return;
 	}
-	open_window();
 	if (args != NULL && args[0] != '\0')
 	{
+		int rc;
+
+		/* the page first: the window opens at its size, its sliders
+		   set, and is drawn once */
 		graf_mouse(BUSYBEE, NULL);
-		after(view_request(&cur->view, args));
+		rc = view_request(&cur->view, args);
+		open_window();
+		after(rc);
 		graf_mouse(ARROW, NULL);
-	}
+	} else
+		open_window();
 }
 
 static void viewer_message(short *msg)
@@ -2240,7 +2472,10 @@ static void viewer_message(short *msg)
 		break;
 	case WM_REDRAW:
 		if (msg[3] == cur->h)
+		{
+			cur->fresh = 0;
 			redraw(msg[4], msg[5], msg[6], msg[7]);
+		}
 		break;
 	case WM_TOPPED:
 		if (msg[3] == cur->h)
@@ -2283,6 +2518,16 @@ static void viewer_message(short *msg)
 			wind_get(cur->h, WF_FULLXYWH, &fx, &fy, &fw, &fh);
 			if (cx == fx && cy == fy && cw_ == fw && ch_ == fh)
 				wind_get(cur->h, WF_PREVXYWH, &fx, &fy, &fw, &fh);
+			else
+			{
+				/* full: its text on the 8-pixel grid, whole lines */
+				short nx = wind_x8(WKIND, fx, fy, fw, fh);
+
+				if (nx > fx)
+					fw = (short) (fw - (nx - fx));
+				fx = nx;
+				fh = lines_h(fx, fy, fw, fh);
+			}
 			wind_set(cur->h, WF_CURRXYWH, fx, fy, fw, fh);
 			redraw_all();
 		}
@@ -2297,7 +2542,8 @@ static void viewer_message(short *msg)
 			w = msg[6] < 16 * sys_cw ? (short) (16 * sys_cw) : msg[6];
 			w = w < 12 * cw ? (short) (12 * cw) : w;
 			h = msg[7] < 6 * ch + tb_height(sys_ch) ? (short) (6 * ch + tb_height(sys_ch)) : msg[7];
-			wind_set(cur->h, WF_CURRXYWH, msg[4], msg[5], w, h);
+			h = lines_h(msg[4], msg[5], w, h);
+			wind_set(cur->h, WF_CURRXYWH, wind_x8(WKIND, msg[4], msg[5], w, h), msg[5], w, h);
 			clamp_scroll();
 			set_sliders();
 			if (msg[0] == WM_SIZED)
@@ -3369,6 +3615,7 @@ int main(void)
 		log_event("started", num, "ms");
 	}
 	aes_profile_tag("idle");
+	fts_busy = pictures_busy();         /* the page on the command line's */
 	while (!quit_now)
 	{
 		short flags = MU_MESAG, which;
@@ -3379,6 +3626,7 @@ int main(void)
 		/* a viewer in front: the mouse is looked at for tooltips */
 		int hover = viewer_of(top_window()) != NULL;
 		unsigned long t;
+		int slid = 0;
 
 		if (viewer_windows() > 0 || libwin_handle() > 0 || has_menu)
 			flags |= MU_KEYBD | MU_BUTTON;
@@ -3390,7 +3638,9 @@ int main(void)
 			t = BG_PACE;
 		else if (fts_busy)
 			t = 0;
-		if (pending || hover || fts_busy || index_news)
+		if (sliders_waiting())
+			t = 0;                        /* once: the sliders' turn */
+		if (pending || hover || fts_busy || index_news || t == 0)
 			flags |= MU_TIMER;
 		pf_forget();
 		hyp_forget();
@@ -3440,7 +3690,14 @@ int main(void)
 		}
 		/* the index, in a slice (bgwork.h): not while the user works, nor
 		   while EHYPVIEW.PRG runs (it has the index to itself) */
-		if (index_news && which == MU_TIMER)
+		if (which == MU_TIMER && sliders_waiting())
+		{
+			/* the sliders, alone in the turn */
+			aes_profile_tag("sliders");
+			sliders_now();
+			slid = 1;
+			fts_busy = libwin_busy() || pictures_busy();
+		} else if (index_news && which == MU_TIMER)
 		{
 			/* the windows show the new index (or progress): a turn of
 			   its own, the job's slice in the next */
@@ -3461,12 +3718,23 @@ int main(void)
 				job_step();
 			while (job != NULL && bg_more() && tos_ms() - t1 < 35 && !ehv_libjob_next_is_big(job));
 		}
-		if ((which & MU_TIMER) || fts_busy == 0)
+		/* the pages' pictures, the library's search through the
+		   names, its full-text search: a slice in a turn of its own,
+		   not after a key, a click or a message (the guidelines,
+		   Speed: what the user did answered at once) */
+		if (which & (MU_KEYBD | MU_BUTTON | MU_MESAG))
+			fts_busy = libwin_busy() || pictures_busy();
+		else if ((which & MU_TIMER) && !slid)
 		{
+			/* work, or drawing what it found: never both in a turn */
+			int r;
+
+			aes_profile_tag("lib-work");
 			bg_begin();
 			do
-				fts_busy = libwin_idle();
-			while (fts_busy && bg_more());
+				r = pictures_idle() | libwin_idle();
+			while (r == 1 && bg_more());
+			fts_busy = r & 1;
 		}
 		if (ehv_names_misread != misread && job == NULL)
 		{
@@ -3491,6 +3759,10 @@ int main(void)
 			}
 	}
 	recent_save();
+	/* the four longest stretches between event calls (gem.c; the
+	   guidelines' Speed): EHypView keeps no log, so for the tests */
+	if (aes_slowest()[0] != '\0')
+		log_event("slowest", aes_slowest(), NULL);
 	log_event("quit", NULL, NULL);
 	if (has_menu)
 		menu_bar(menu.tree, 0);

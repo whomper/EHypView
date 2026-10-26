@@ -342,11 +342,152 @@ static unsigned long do_command(parser *ps, const unsigned char *p, unsigned lon
 	}
 }
 
+/*
+ * A page loaded a piece at a time (page.h): its object unpacked, then
+ * its text parsed, `budget` bytes a call.  The parse stops between two
+ * commands; what it has made stays in the page, the text it points into
+ * staying put.
+ */
+struct hyp_page_job {
+	hyp_doc *doc;
+	hyp_unpack *u;                 /* NULL once unpacked */
+	hyp_page *pg;
+	parser ps;
+	unsigned long at, text;        /* where the parse is; its text run's start */
+	int err;
+};
+
+void hyp_page_job_free(hyp_page_job *j)
+{
+	if (j == NULL)
+		return;
+	hyp_unpack_free(j->u);
+	hyp_page_free(j->pg);
+	free(j);
+}
+
+hyp_page_job *hyp_page_begin(hyp_doc *doc, unsigned short num, int *err)
+{
+	hyp_page_job *j;
+	int rc = HYP_OK;
+
+	if (num >= doc->num_entries || !HYP_IS_TEXT(doc->entries[num].type))
+		rc = HYP_ERR_RANGE;
+	else if ((j = calloc(1, sizeof(*j))) == NULL || (j->pg = calloc(1, sizeof(*j->pg))) == NULL)
+	{
+		free(j);
+		rc = HYP_ERR_MEMORY;
+	} else if ((j->u = hyp_unpack_begin(doc, num, &rc)) == NULL)
+	{
+		hyp_page_job_free(j);
+		if (rc == HYP_OK)
+			rc = HYP_ERR_MEMORY;
+	} else
+	{
+		j->doc = doc;
+		j->pg->num = num;
+		j->ps.page = j->pg;
+		j->ps.doc = doc;
+		j->ps.fg = j->ps.bg = HYP_COLOR_DEFAULT;
+		if (err != NULL)
+			*err = HYP_OK;
+		return j;
+	}
+	if (err != NULL)
+		*err = rc;
+	return NULL;
+}
+
+int hyp_page_job_error(const hyp_page_job *j)
+{
+	return j->err;
+}
+
+/* the text parsed on for about `budget` bytes: 1 the page done, 0 more */
+static int parse(hyp_page_job *j, unsigned long budget)
+{
+	parser *ps = &j->ps;
+	hyp_page *pg = j->pg;
+	const unsigned char *p = pg->data + j->at, *end = pg->data + pg->size, *text = pg->data + j->text;
+	const unsigned char *stop = (unsigned long) (end - p) > budget ? p + budget : end;
+
+	while (p < end)
+	{
+		if (*p == ESC || *p == '\0')
+		{
+			if (add_run(ps, HYP_RUN_TEXT, (const char *) text, (unsigned long) (p - text), 0, 0, 0) < 0)
+				return -1;
+			if (*p == '\0')
+			{
+				if (end_line(ps) < 0)
+					return -1;
+				p++;
+			} else
+			{
+				unsigned long n = do_command(ps, p, (unsigned long) (end - p));
+
+				if (n == 0)
+					return -1;
+				p += n;
+			}
+			text = p;
+			if (p >= stop && p < end)
+			{
+				j->at = (unsigned long) (p - pg->data);
+				j->text = (unsigned long) (text - pg->data);
+				return 0;
+			}
+		} else
+		{
+			p++;
+		}
+	}
+	if (add_run(ps, HYP_RUN_TEXT, (const char *) text, (unsigned long) (p - text), 0, 0, 0) < 0)
+		return -1;
+	if (pg->nruns > ps->line_first && end_line(ps) < 0)
+		return -1;
+	return 1;
+}
+
+int hyp_page_more(hyp_page_job *j, unsigned long budget)
+{
+	int r;
+
+	if (j->err != HYP_OK)
+		return -1;
+	if (j->u != NULL)
+	{
+		/* unpacked first */
+		r = hyp_unpack_more(j->u, budget);
+		if (r < 0)
+			return j->err = r, -1;
+		if (r == 0)
+			return 0;
+		j->pg->data = hyp_unpack_take(j->u, &j->pg->size);
+		j->u = NULL;
+		if (j->pg->data == NULL)
+			return j->err = HYP_ERR_MEMORY, -1;
+		return 0;
+	}
+	r = parse(j, budget);
+	if (r < 0)
+		return j->err = HYP_ERR_MEMORY, -1;
+	return r;
+}
+
+hyp_page *hyp_page_take(hyp_page_job *j)
+{
+	hyp_page *pg = j->pg;
+
+	j->pg = NULL;
+	hyp_page_job_free(j);
+	return pg;
+}
+
+/* at once: hyp_load's decoder, kept for it (no room taken for the pieces') */
 hyp_page *hyp_page_load(hyp_doc *doc, unsigned short num, int *err)
 {
-	parser ps;
-	hyp_page *pg;
-	const unsigned char *p, *end, *text;
+	hyp_page_job j;
 	int rc;
 
 	if (err != NULL)
@@ -357,67 +498,22 @@ hyp_page *hyp_page_load(hyp_doc *doc, unsigned short num, int *err)
 			*err = HYP_ERR_RANGE;
 		return NULL;
 	}
-
-	pg = calloc(1, sizeof(*pg));
-	if (pg == NULL)
+	memset(&j, 0, sizeof(j));
+	if ((j.pg = calloc(1, sizeof(*j.pg))) == NULL)
+		rc = HYP_ERR_MEMORY;
+	else if ((rc = hyp_load(doc, num, &j.pg->data, &j.pg->size)) == HYP_OK)
 	{
-		if (err != NULL)
-			*err = HYP_ERR_MEMORY;
-		return NULL;
+		j.pg->num = num;
+		j.ps.page = j.pg;
+		j.ps.doc = doc;
+		j.ps.fg = j.ps.bg = HYP_COLOR_DEFAULT;
+		if (parse(&j, (unsigned long) -1) == 1)
+			return j.pg;
+		rc = HYP_ERR_MEMORY;
 	}
-	pg->num = num;
-	rc = hyp_load(doc, num, &pg->data, &pg->size);
-	if (rc != HYP_OK)
-	{
-		free(pg);
-		if (err != NULL)
-			*err = rc;
-		return NULL;
-	}
-
-	memset(&ps, 0, sizeof(ps));
-	ps.page = pg;
-	ps.doc = doc;
-	ps.fg = ps.bg = HYP_COLOR_DEFAULT;
-
-	p = pg->data;
-	end = p + pg->size;
-	text = p;
-	while (p < end)
-	{
-		if (*p == ESC || *p == '\0')
-		{
-			if (add_run(&ps, HYP_RUN_TEXT, (const char *) text, (unsigned long) (p - text), 0, 0, 0) < 0)
-				goto nomem;
-			if (*p == '\0')
-			{
-				if (end_line(&ps) < 0)
-					goto nomem;
-				p++;
-			} else
-			{
-				unsigned long n = do_command(&ps, p, (unsigned long) (end - p));
-
-				if (n == 0)
-					goto nomem;
-				p += n;
-			}
-			text = p;
-		} else
-		{
-			p++;
-		}
-	}
-	if (add_run(&ps, HYP_RUN_TEXT, (const char *) text, (unsigned long) (p - text), 0, 0, 0) < 0)
-		goto nomem;
-	if (pg->nruns > ps.line_first && end_line(&ps) < 0)
-		goto nomem;
-	return pg;
-
-nomem:
-	hyp_page_free(pg);
+	hyp_page_free(j.pg);
 	if (err != NULL)
-		*err = HYP_ERR_MEMORY;
+		*err = rc;
 	return NULL;
 }
 

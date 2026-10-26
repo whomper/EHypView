@@ -39,9 +39,10 @@
 #include "clip.h"
 #include "fsys.h"
 #include "libbar.h"
+#include "bgwork.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
-#define MARGIN 4
+#define MARGIN 8
 #define PANES_COLS 56                  /* the narrowest window with two panes */
 #define PANE_COLS 22                   /* the Subjects pane */
 #define CHIP_COLS 26                   /* a Continue button's text at most */
@@ -73,14 +74,22 @@ static const ehv_bookmarks *lib_bm;   /* the program's, shown first */
 
 static const ehv_bookmarks *lib_recent;  /* the pages read last */
 
+/* the rows still to be drawn for the search typed (R_LIST...): in the
+   next turn, so that the key itself is answered at once (the
+   guidelines, Speed); keys typed meanwhile draw them once */
+static int rows_due;
+
 static void ensure_model(void)
 {
 	if (!lib_ready)
 	{
-		lib_init(&lib, idx);
+		/* everything in place first: the list made once */
+		lib_init(&lib, NULL);
+		lib.defer_rows = 1;            /* the rows made in a turn of their own */
 		lib.layout = want_layout;
-		lib_set_bookmarks(&lib, lib_bm);
-		lib_set_recent(&lib, lib_recent);
+		lib.bm = lib_bm;
+		lib.recent = lib_recent;
+		lib_set_index(&lib, idx);
 		lib_ready = 1;
 	}
 }
@@ -243,7 +252,7 @@ static void list_area(short *x, short *y, short *w, short *h)
 	short wx, wy, ww, wh, pw = pane_w();
 
 	work_area(&wx, &wy, &ww, &wh);
-	*x = (short) (wx + (pw > 0 ? pw + 4 : 0));
+	*x = (short) (wx + (pw > 0 ? (pw + 4 + 7) & ~7 : 0));     /* its text on the 8-pixel grid */
 	*y = (short) (wy + header_h() + strip_h() + heading_h());
 	*w = (short) (wx + ww - *x);
 	*h = (short) (wy + wh - detail_h() - *y);
@@ -586,6 +595,10 @@ static void triangle(short x, short y, int folded, short color)
 }
 
 /* text in `room` characters, its first blanks left out; the characters used */
+/* the ground under put()'s text is white (a row not chosen): the text
+   drawn replacing it, the VDI's fast way */
+static int white_ground;
+
 static long put(short x, short y, const char *s, long room, short color, short effects)
 {
 	long n;
@@ -597,11 +610,19 @@ static long put(short x, short y, const char *s, long room, short color, short e
 		n = room;
 	if (n <= 0)
 		return 0;
-	vswr_mode(vdi_h, MD_TRANS);
-	vst_color(vdi_h, color);
-	vst_effects(vdi_h, effects);
-	text_at(x, y, s, n);
-	vst_effects(vdi_h, 0);
+	{
+		/* bold and underline on the white ground: drawn the cheap way,
+		   the same pixels (text_fx_after) */
+		short by_hand = white_ground && color != 0 && text_fx_fast(effects, MD_REPLACE) ? effects : 0;
+
+		vswr_mode(vdi_h, white_ground && color != 0 ? MD_REPLACE : MD_TRANS);
+		vst_color(vdi_h, color);
+		vst_effects(vdi_h, (short) (effects & ~by_hand));
+		text_at(x, y, s, n);
+		vst_effects(vdi_h, 0);
+		if (by_hand)
+			text_fx_after(x, y, s, n, by_hand, color);
+	}
 	return n;
 }
 
@@ -792,11 +813,11 @@ static void draw_panes(short wx, short wy, short wh, short cx, short cy, short c
 		line_(bx, y, bx, (short) (wy + wh - 1), 1);
 		line_((short) (bx + 3), y, (short) (bx + 3), (short) (wy + wh - 1), 1);
 	}
-	put((short) (wx + MARGIN + cw / 2), (short) (y + 4), "Subjects", PANE_COLS, 1, 1);
+	put((short) (wx + MARGIN), (short) (y + 4), "Subjects", PANE_COLS, 1, 1);
 	for (i = (unsigned long) pane_top; i < lib.npanes && (long) i <= pane_last(); i++)
 	{
 		const lib_pane *p = &lib.panes[i];
-		short color = 1, gx = (short) (wx + MARGIN + cw / 2 + (p->level ? 2 * cw : 0));    /* a part: under its subject */
+		short color = 1, gx = (short) (wx + MARGIN + (p->level ? 2 * cw : 0));    /* a part: under its subject */
 		char n[12];
 		long room;
 
@@ -829,7 +850,7 @@ static void draw_panes(short wx, short wy, short wh, short cx, short cy, short c
 		sprintf(n, "%lu", p->count);
 		room = PANE_COLS - 3 - (long) strlen(n) - 1 - (p->level ? 2 : 0);
 		put((short) (gx + 2 * cw), (short) (y + 3), p->text, room, color, 0);
-		put_right((short) (wx + pw - MARGIN - cw / 2), (short) (y + 3), n, 8, color);
+		put_right((short) ((wx + pw - MARGIN) & ~7), (short) (y + 3), n, 8, color);
 	}
 	bar_place();
 	if (!libbar_draw(cx, cy, cw_, ch_))      /* too low for one: the pane's ground */
@@ -844,7 +865,7 @@ static long nchips_shown;
 static void chips_layout(short wx, short ww)
 {
 	long i, n = chips();
-	short x = (short) (wx + MARGIN + cw / 2 + 10 * cw);
+	short x = (short) (wx + MARGIN + 10 * cw);
 	char t[160];
 
 	nchips_shown = 0;
@@ -872,7 +893,7 @@ static void draw_chips(short wx, short ww, short y)
 	char t[160];
 
 	fill(pane_ground(), wx, y, (short) (wx + ww - 1), (short) (y + h - 3));
-	put((short) (wx + MARGIN + cw / 2), (short) (y + 6), "Continue", 9, 1, 1);
+	put((short) (wx + MARGIN), (short) (y + 6), "Continue", 9, 1, 1);
 	chips_layout(wx, ww);
 	for (i = 0; i < nchips_shown; i++)
 	{
@@ -890,14 +911,14 @@ static void draw_chips(short wx, short ww, short y)
 }
 
 /* one row of the list, at y */
+static void draw_row_parts(long r, const lib_row *row, short rh, short lx, short lw, short y,
+                           char *text, char *detail, short color, short dcolor, short acolor, int sel);
+
 static void draw_row(long r, short lx, short lw, short y)
 {
 	const lib_row *row = &lib.rows[r];
 	short rh = row_h(r), color = 1, dcolor = grey(), acolor = about_color();
-	short right = (short) (lx + lw - MARGIN - cw / 2);
-	short gx = (short) (lx + MARGIN + cw), tx = (short) (lx + MARGIN + 3 * cw);
 	char text[160], detail[64];
-	long room, tl;
 	int sel = r == lib.sel;
 
 	lib_row_text(&lib, (unsigned long) r, text, sizeof(text));
@@ -913,10 +934,22 @@ static void draw_row(long r, short lx, short lw, short y)
 	} else
 		fill(0, lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
 	sel = sel && !(panes() && focus_left && ncolors < 16);
+	white_ground = !sel;
+	draw_row_parts(r, row, rh, lx, lw, y, text, detail, color, dcolor, acolor, sel);
+	white_ground = 0;
+}
+
+static void draw_row_parts(long r, const lib_row *row, short rh, short lx, short lw, short y,
+                           char *text, char *detail, short color, short dcolor, short acolor, int sel)
+{
+	short right = (short) ((lx + lw - MARGIN) & ~7);    /* text on the 8-pixel grid: TOS draws it 3 times as fast */
+	short gx = (short) (lx + MARGIN + cw), tx = (short) (lx + MARGIN + 3 * cw);
+	long room, tl;
+
 	if (row->kind == LIB_GROUP && (row->flags & LIB_SUB))
 	{
 		/* a part of a subject: under its heading's text, plain */
-		short x = (short) (lx + MARGIN + cw / 2 + (panes() ? 0 : 4 * cw)), ty = (short) (y + 3);
+		short x = (short) (lx + MARGIN + (panes() ? 0 : 4 * cw)), ty = (short) (y + 3);
 		char n[12];
 
 		room = (right - x) / cw;
@@ -934,7 +967,7 @@ static void draw_row(long r, short lx, short lw, short y)
 	}
 	if (row->kind == LIB_GROUP)
 	{
-		short x = (short) (lx + MARGIN + cw / 2), ty = (short) (y + 3);
+		short x = (short) (lx + MARGIN), ty = (short) (y + 3);
 		char n[12];
 
 		if (row->flags & LIB_FOLDS)
@@ -986,7 +1019,7 @@ static void draw_row(long r, short lx, short lw, short y)
 			put_right(right, (short) (y + 3), detail, dl, acolor);
 		return;
 	}
-	if (row->kind != LIB_NOTE)
+	if (row->kind != LIB_NOTE && row->kind != LIB_WAIT)
 		glyph(row->kind, gx, (short) (y + (rh - ch) / 2), 0,
 		      sel ? 0 : row->kind == LIB_ACTION ? link_color() : 1, row->tint);
 	room = (right - tx) / cw;
@@ -997,7 +1030,8 @@ static void draw_row(long r, short lx, short lw, short y)
 		if (dl > 0 && tl + dl + 3 > room)
 			dl = 0;                        /* no room for both: the text */
 		put(tx, (short) (y + (rh - ch) / 2), text, dl > 0 ? room - dl - 2 : room,
-		    row->kind == LIB_ACTION && !sel ? link_color() : color, row->kind == LIB_NOTE ? 4 : 0);
+		    row->kind == LIB_ACTION && !sel ? link_color() : row->kind == LIB_WAIT ? dcolor : color,
+		    row->kind == LIB_NOTE ? 4 : 0);
 		if (dl > 0)
 			put_right(right, (short) (y + (rh - ch) / 2), detail, dl, panes() ? acolor : dcolor);
 	}
@@ -1011,17 +1045,16 @@ static void draw_search(short wx, short wy, short ww)
 
 	fill(0, wx, wy, (short) (wx + ww - 1), (short) (wy + header_h() - 1));
 
-	/* the search field: a label, then a framed line to type in */
-	vswr_mode(vdi_h, MD_TRANS);
-	vst_color(vdi_h, 1);
-	vst_effects(vdi_h, 1);
-	text_at((short) (wx + MARGIN + cw / 2), (short) (wy + 6), "Search", 6);
-	vst_effects(vdi_h, 0);
+	/* the search field: a label (bold, the cheap way on its white
+	   ground: put), then a framed line to type in */
+	white_ground = 1;
+	put((short) (wx + MARGIN), (short) (wy + 6), "Search", 6, 1, 1);
+	white_ground = 0;
 	fx0 = (short) (wx + MARGIN + 8 * cw);
 	fx1 = (short) (wx + ww - MARGIN - cw / 2);
 	if (fx1 < fx0 + 4 * cw)
 		fx1 = (short) (fx0 + 4 * cw);
-	frame_(fx0, (short) (wy + 4), fx1, (short) (wy + 4 + ch + 3), 1);
+	frame_((short) (fx0 - cw / 2), (short) (wy + 4), fx1, (short) (wy + 4 + ch + 3), 1);  /* its text on the grid */
 	snprintf(text, sizeof(text), "%s_", lib.query);
 	{
 		long n = (long) strlen(text), room = (fx1 - fx0 - cw) / cw;
@@ -1029,7 +1062,7 @@ static void draw_search(short wx, short wy, short ww)
 
 		vswr_mode(vdi_h, MD_TRANS);
 		vst_color(vdi_h, 1);
-		text_at((short) (fx0 + cw / 2), (short) (wy + 6), s, (long) strlen(s));
+		text_at(fx0, (short) (wy + 6), s, (long) strlen(s));
 		if (lib.query[0] == '\0' && ncolors >= 16)
 		{
 			/* what can be typed, in grey (in mono it would be the
@@ -1039,7 +1072,7 @@ static void draw_search(short wx, short wy, short ww)
 			if ((long) sizeof(hint) + 1 < room)
 			{
 				vst_color(vdi_h, grey());
-				text_at((short) (fx0 + cw / 2 + 2 * cw), (short) (wy + 6), hint, (long) sizeof(hint) - 1);
+				text_at((short) (fx0 + 2 * cw), (short) (wy + 6), hint, (long) sizeof(hint) - 1);
 			}
 		}
 	}
@@ -1058,7 +1091,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	clip[1] = cy;
 	clip[2] = (short) (cx + cw_ - 1);
 	clip[3] = (short) (cy + ch_ - 1);
-	vs_clip(vdi_h, 1, clip);
+	clip_on(clip);
 	/* each part on its own ground, filled just before it is drawn (no
 	   white over the whole window first: it flickered, slowly drawn),
 	   and only the parts in the rectangle */
@@ -1074,7 +1107,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	if (panes())
 	{
 		const lib_pane *p = lib.pane >= 0 ? &lib.panes[lib.pane] : NULL;
-		short hx = (short) (lx + MARGIN + cw / 2), hy = (short) (wy + header_h() + 4);
+		short hx = (short) (lx + MARGIN), hy = (short) (wy + header_h() + 4);
 
 		if (cx < wx + pane_w() + 4)
 			draw_panes(wx, wy, wh, cx, cy, cw_, ch_);
@@ -1115,7 +1148,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 		lc[3] = (short) (ly + lh - 1 < clip[3] ? ly + lh - 1 : clip[3]);
 		if (lc[0] <= lc[2] && lc[1] <= lc[3])
 		{
-			vs_clip(vdi_h, 1, lc);
+			clip_on(lc);
 			y = ly;
 			for (r = lib.top; (unsigned long) r < lib.nrows && y < ly + lh; r++)
 			{
@@ -1132,7 +1165,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	vst_effects(vdi_h, 0);
 	vst_color(vdi_h, 1);
 	vswr_mode(vdi_h, MD_REPLACE);
-	vs_clip(vdi_h, 0, clip);
+	clip_off();
 }
 
 static void redraw(short x, short y, short w, short h)
@@ -1202,6 +1235,11 @@ static void redraw_all(void)
 #define R_LIST   4                     /* Continue, the heading and the rows */
 #define R_DETAIL 8                     /* what the row chosen is */
 
+/* the slider and the info line, set in a timer turn of their own after
+   the rows (libwin_idle): the AES draws each again, 40 ms or more on an
+   ST (the guidelines, Speed; the viewer's sliders the same) */
+static int frame_due;
+
 static void refresh(int what)
 {
 	short wx, wy, ww, wh, lx, ly, lw, lh, top;
@@ -1212,8 +1250,7 @@ static void refresh(int what)
 		return;
 	}
 	clamp();
-	set_slider();
-	update_info();
+	frame_due = 1;
 	work_area(&wx, &wy, &ww, &wh);
 	list_area(&lx, &ly, &lw, &lh);
 	top = (short) (wy + header_h());
@@ -1225,6 +1262,22 @@ static void refresh(int what)
 		redraw(lx, top, lw, (short) (ly + lh - top));
 	if ((what & R_DETAIL) && panes())
 		redraw(lx, (short) (ly + lh), lw, (short) (wy + wh - ly - lh));
+}
+
+/* the search field alone: a key typed, nothing else drawn in its turn
+   (the sliders and the info line with the rows, in a later one) */
+static void refresh_head(void)
+{
+	short wx, wy, ww, wh, fx0;
+
+	if (lib_h <= 0 || lib_icon)
+	{
+		refresh(R_HEAD);
+		return;
+	}
+	work_area(&wx, &wy, &ww, &wh);
+	fx0 = (short) (wx + MARGIN + 8 * cw);
+	redraw(fx0, wy, (short) (wx + ww - fx0), header_h());
 }
 
 /* the rows' part only, as it is (scrolled: the selection not followed) */
@@ -1330,6 +1383,9 @@ void libwin_open(void)
 			h = desk_h;
 		x = (short) (desk_x + desk_w - w - 8 * cw > desk_x ? desk_x + desk_w - w - 8 * cw : desk_x);
 		y = (short) (desk_y + ch);
+		/* its text on the 8-pixel grid: the VDI draws it far faster (the
+		   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
+		x = wind_x8(LKIND, x, y, w, h);
 		wind_set_str(lib_h, WF_NAME, lib_name);
 		info_shown[0] = '\x01';            /* a new window: none yet */
 		slider_shown[0] = slider_shown[1] = -1;
@@ -1393,6 +1449,7 @@ void libwin_free(void)
 	if (lib_ready)
 		lib_free(&lib);
 	lib_ready = 0;
+	rows_due = 0;
 }
 
 void libwin_font_changed(void)
@@ -1512,16 +1569,34 @@ static void activate(void)
 	}
 }
 
+/* the search's EHV line due: 1 the names, 2 the full text (logged when
+   what it found is drawn, libwin_idle) */
+static int log_due;
+
+/* a key typed answered at once: the text drawn now, the search and its
+   rows in the next timer turns (libwin_idle) */
 static void set_query(const char *q)
 {
 	int had = lib.query[0] != '\0';
 
-	lib_set_query(&lib, q);
+	lib_set_query_later(&lib, q);
 	if (q[0] != '\0')
 		focus_left = 0;                /* the rows found have the keys */
-	log_search();
+	refresh_head();
 	/* the pane's line chosen is shown otherwise while searching */
-	refresh(R_HEAD | R_LIST | R_DETAIL | (had != (q[0] != '\0') ? R_PANE : 0));
+	rows_due |= R_LIST | R_DETAIL | (had != (q[0] != '\0') ? R_PANE : 0);
+}
+
+/* the rows of the text typed made now: for a key or a click that acts
+   on them */
+static void rows_now(void)
+{
+	if (!lib.query_stale)
+		return;
+	lib_rows_update(&lib);
+	if (!lib.scanning)
+		log_due = 1;
+	rows_due |= R_LIST | R_DETAIL;
 }
 
 /* Two panes: the Subjects pane takes the keys, or gives them back */
@@ -1635,6 +1710,15 @@ void libwin_key(short kstate, short kreturn)
 	char q[LIB_QUERY_MAX];
 	size_t n = strlen(lib.query);
 
+	if (ctrl || ascii < 32 || ascii == 127)
+	{
+		if (scan != 0x0e)
+		{
+			rows_now();                    /* a key for the rows, not the text */
+			old_sel = lib.sel;
+			old_top = lib.top;
+		}
+	}
 	if (ctrl)
 	{
 		if (ascii == 0x0c && scan != 0x33 && viewer_handle() > 0)
@@ -1737,6 +1821,7 @@ void libwin_click(short mx, short my)
 
 	if (lib_icon)
 		return;
+	rows_now();
 	work_area(&x, &y, &w, &h);
 	if (mx < x || mx >= x + w || my < y + header_h() || my >= y + h)
 		return;
@@ -1900,7 +1985,7 @@ int libwin_message(short *msg)
 		}
 		w = msg[6] < 20 * cw ? (short) (20 * cw) : msg[6];
 		h = msg[7] < 6 * ch ? (short) (6 * ch) : msg[7];
-		wind_set(lib_h, WF_CURRXYWH, msg[4], msg[5], w, h);
+		wind_set(lib_h, WF_CURRXYWH, wind_x8(LKIND, msg[4], msg[5], w, h), msg[5], w, h);
 		apply_layout();
 		clamp();
 		set_slider();
@@ -1950,30 +2035,138 @@ int libwin_message(short *msg)
 	return 1;
 }
 
+int libwin_busy(void)
+{
+	return lib_ready && (rows_due || frame_due || lib.query_stale || lib.rows_stale || lib.scanning ||
+			     (lib.fts != NULL && !ehv_fts_done(lib.fts)));
+}
+
+/* what the searches found drawn, at most this often while they go on
+   (drawing it takes longer than finding it), and in a turn of its own:
+   the next timer turn's, before any more work */
+#define FOUND_DRAWN_EVERY 250
+#define R_INFO 16                      /* the info line alone (rows_due) */
+
+/* while the slice has room for another piece of the full-text search:
+   up to 45 ms on an ST (a block's tables, then 1 KB unpacked), 10 on a
+   68030; of the names search: a name, or 4 KB of them read */
+static int fast_cpu(void)
+{
+	static int cpu = -1;
+
+	if (cpu < 0)
+		cpu = get_cookie(0x5F435055L) >= 20;	/* '_CPU' */
+	return cpu;
+}
+
+static int piece_room(void)
+{
+	return bg_piece();                 /* bgwork: 40 ms left on a 68000, 10 on a 68030 */
+}
+
+static int name_room(void)
+{
+	return bg_room(fast_cpu() ? 5 : 20);
+}
+
 int libwin_idle(void)
 {
+	static unsigned long drawn;
+	static int waiting;           /* found, not drawn yet */
 	unsigned long before, after;
 	int r;
 
-	if (!lib_ready || lib.fts == NULL || ehv_fts_done(lib.fts))
-		return 0;
-	ehv_fts_hits(lib.fts, &before);
-	r = lib_fulltext_step(&lib, 1);       /* a page: the caller goes on for a slice */
-	ehv_fts_hits(lib.fts, &after);
-	if (r != 0 || after != before)
+	if (lib_ready && lib.query_stale)
 	{
-		refresh(R_LIST | R_DETAIL);
-		if (r != 0)
+		/* the text typed: the search started, its rows made; drawn in
+		   the next turn */
+		aes_profile_tag("lib-model");
+		rows_now();
+		return libwin_busy() | 2;
+	}
+	if (lib_ready && lib.rows_stale && rows_due)
+	{
+		/* the names found made rows, when they are to be drawn: a turn
+		   of its own, the drawing in the next */
+		aes_profile_tag("lib-model");
+		lib_rows_update(&lib);
+		return libwin_busy() | 2;
+	}
+	if (lib_ready && rows_due)
+	{
+		int what = rows_due;
+
+		aes_profile_tag("lib-rows");      /* for the AESGAP lines */
+		rows_due = 0;
+		if (what == R_INFO)
+			update_info();
+		else
+			refresh(what & ~R_INFO);
+		drawn = tos_ms();
+		if (log_due == 1)
+			log_search();
+		else if (log_due == 2 && lib.fts != NULL)
 		{
 			char q[LIB_QUERY_MAX + 2], num[16];
 
+			ehv_fts_hits(lib.fts, &after);
 			snprintf(q, sizeof(q), "\"%s\"", lib.query);
 			sprintf(num, "%lu", after);
 			log_event("fulltext", q, num);
 		}
-	} else
-	{
-		update_info();
+		log_due = 0;
+		return libwin_busy() | 2;
 	}
-	return r == 0;
+	if (lib_ready && frame_due)
+	{
+		aes_profile_tag("lib-frame");
+		frame_due = 0;
+		if (lib_h > 0 && !lib_icon)
+		{
+			set_slider();
+			update_info();
+		}
+		return libwin_busy() | 2;
+	}
+	if (lib_ready && lib.scanning)
+	{
+		/* on for the slice, the index read with one open */
+		r = lib_search_step(&lib, (unsigned int) -1, name_room);
+		waiting |= r == 2;
+		if (r != 0 && r != 2)
+		{
+			waiting = 0;
+			rows_due |= R_LIST | R_DETAIL;
+			log_due = 1;
+			return 3;
+		}
+		if (waiting && tos_ms() - drawn >= FOUND_DRAWN_EVERY)
+		{
+			waiting = 0;
+			rows_due |= R_LIST | R_DETAIL;
+		}
+		return 3;                         /* it had the slice */
+	}
+	if (!lib_ready || lib.fts == NULL || ehv_fts_done(lib.fts))
+		return 0;
+	ehv_fts_hits(lib.fts, &before);
+	/* on for the slice (bgwork.h), a piece at a time (1 KB of a page,
+	   or 16 of its lines), its hypertext opened once for them */
+	r = lib_fulltext_step(&lib, (unsigned int) -1, piece_room);
+	ehv_fts_hits(lib.fts, &after);
+	waiting |= after != before;
+	if (r != 0)
+	{
+		waiting = 0;
+		rows_due |= R_LIST | R_DETAIL;
+		log_due = 2;
+		return 3;
+	}
+	if (tos_ms() - drawn >= FOUND_DRAWN_EVERY)
+	{
+		/* the rows found so far, else the pages counted in the info line */
+		rows_due |= waiting ? R_LIST | R_DETAIL : R_INFO;
+		waiting = 0;
+	}
+	return 3;                             /* it had the slice: no second call to open its file again */
 }

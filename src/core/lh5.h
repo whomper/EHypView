@@ -20,4 +20,17 @@
 int lh5_decode(const unsigned char *src, unsigned long srclen,
                unsigned char *dst, unsigned long dstlen);
 
+/*
+ * The same a piece at a time (a picture unpacked between event calls,
+ * the guidelines' Speed): lh5_begin() takes the same arguments (NULL: no
+ * memory; src and dst stay the caller's until lh5_end()); lh5_more()
+ * puts out about `budget` more bytes and sets *out to how many are out
+ * from the start: 1 all of them, 0 more to come, -1 corrupt.
+ */
+typedef struct lh5_state lh5_state;
+lh5_state *lh5_begin(const unsigned char *src, unsigned long srclen,
+                     unsigned char *dst, unsigned long dstlen);
+int lh5_more(lh5_state *s, unsigned long budget, unsigned long *out);
+void lh5_end(lh5_state *s);
+
 #endif

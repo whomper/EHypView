@@ -78,6 +78,17 @@ static int ends_with(const char *s, const char *tail)
 	return ls >= lt && strcmp(s + ls - lt, tail) == 0;
 }
 
+/* a search typed, and its slices through the names run to the end (the
+   program runs them between its event calls) */
+static int search(ehv_library *lib, const char *q)
+{
+	int r = lib_set_query(lib, q), n = 0;
+
+	while (r == 0 && (r = lib_search_step(lib, 3, NULL)) != 1 && r >= 0)
+		r = ++n > 10000 ? -1 : 0;
+	return r < 0 ? -1 : 0;
+}
+
 static void row(const ehv_library *lib, long r, char *buf)
 {
 	lib_row_text(lib, (unsigned long) r, buf, 120);
@@ -162,17 +173,17 @@ static void test_bookmarks(const ehv_index *idx)
 	CHECK(lib_move(&lib, 1) == 5);
 
 	/* typing: the ones whose title or page has the text, in any case */
-	CHECK(lib_set_query(&lib, "detail") == 0);
+	CHECK(search(&lib, "detail") == 0);
 	CHECK(lib.rows[0].kind == LIB_GROUP && strcmp(lib.rows[0].text, "Bookmarks") == 0);
 	CHECK(lib.rows[1].kind == LIB_BOOKMARK && lib.rows[1].ref == 1);
 	CHECK(lib.nrows > 2 && lib.rows[2].kind == LIB_GROUP && strcmp(lib.rows[2].text, "Pages") == 0);
-	CHECK(lib_set_query(&lib, "SECOND PAGE") == 0);
+	CHECK(search(&lib, "SECOND PAGE") == 0);
 	CHECK(lib.rows[0].kind == LIB_GROUP && lib.rows[1].kind == LIB_BOOKMARK && lib.rows[1].ref == 0);
-	CHECK(lib_set_query(&lib, "zweite") == 0);              /* none match: no heading */
+	CHECK(search(&lib, "zweite") == 0);              /* none match: no heading */
 	CHECK(lib.rows[0].kind != LIB_BOOKMARK && strcmp(lib.rows[0].text ? lib.rows[0].text : "", "Bookmarks") != 0);
 
 	/* one removed: the list follows */
-	CHECK(lib_set_query(&lib, "") == 0);
+	CHECK(search(&lib, "") == 0);
 	bm_remove(&bm, 0);
 	CHECK(lib_set_bookmarks(&lib, &bm) == 0 && lib.nrows == 2 + 7);
 	row(&lib, 1, t);
@@ -216,9 +227,9 @@ static void test_layouts(const ehv_index *idx)
 	CHECK(lib.nrows == 3 && lib.sel == 0 && lib.rows[0].flags == (LIB_FOLDS | LIB_FOLDED));
 	CHECK(lib.rows[0].ref == 3 && lib.nguides == 4);
 	CHECK(lib_move(&lib, 1) == 1 && lib_move(&lib, 1) == 2);
-	CHECK(lib_set_query(&lib, "image") == 0 && lib.rows[0].flags == 0);   /* searching: none fold */
+	CHECK(search(&lib, "image") == 0 && lib.rows[0].flags == 0);   /* searching: none fold */
 	CHECK(lib.rows[1].kind == LIB_GUIDE && lib.rows[1].tint == 1);
-	CHECK(lib_set_query(&lib, "") == 0 && lib.nrows == 3);                /* still folded */
+	CHECK(search(&lib, "") == 0 && lib.nrows == 3);                /* still folded */
 	lib_select(&lib, 0);
 	CHECK(lib_fold(&lib, -1) == 1 && lib.nrows == 7 && lib.sel == 0);
 	CHECK(lib_fold(&lib, 1) == 0);
@@ -272,8 +283,8 @@ static void test_layouts(const ehv_index *idx)
 	CHECK(lib.nrows == 2 && lib.rows[0].kind == LIB_RECENT);
 	lib_pane_select(&lib, p + 1);
 	CHECK(lib_set_index(&lib, idx) == 0 && lib.pane == p + 1 && lib.nrows == 3);   /* kept */
-	CHECK(lib_set_query(&lib, "second") == 0 && lib.rows[0].kind == LIB_GROUP && lib.npages == 2);
-	CHECK(lib_set_query(&lib, "") == 0 && lib.nrows == 3);
+	CHECK(search(&lib, "second") == 0 && lib.rows[0].kind == LIB_GROUP && lib.npages == 2);
+	CHECK(search(&lib, "") == 0 && lib.nrows == 3);
 	CHECK(lib_set_recent(&lib, NULL) == 0 && lib.npanes == 4 && lib.pane == p);
 	CHECK(lib_set_layout(&lib, LIB_OUTLINE) == 0 && lib.nrows == 7);
 	lib_free(&lib);
@@ -288,7 +299,7 @@ static void test_names(const ehv_index *idx)
 	unsigned short line;
 
 	lib_init(&lib, idx);
-	CHECK(lib_set_query(&lib, "det") == 0);
+	CHECK(search(&lib, "det") == 0);
 	CHECK(lib.npages == 1 && lib.nguides == 0 && lib.nrows == 3);
 	CHECK(lib.rows[0].kind == LIB_GROUP && lib.rows[1].kind == LIB_PAGE && lib.rows[2].kind == LIB_ACTION);
 	CHECK(lib.sel == 1);
@@ -297,8 +308,17 @@ static void test_names(const ehv_index *idx)
 	lib_row_detail(&lib, 1, t, sizeof(t));
 	CHECK(strcmp(t, "EHypView other test") == 0);
 
+	/* at once: the names starting with it (they follow each other in the
+	   index); those containing it, or like it, come in the slices */
+	CHECK(lib_set_query(&lib, "Secnd") == 0 && lib.npages == 0 && lib.scanning);
+	CHECK(lib.nrows >= 2 && lib.rows[1].kind == LIB_WAIT);           /* "Searching the names..." */
+	CHECK(lib_search_step(&lib, 1, NULL) >= 0);
+	CHECK(search(&lib, "Secnd") == 0 && lib.npages >= 1 && !lib.scanning);
+	CHECK(lib_set_query(&lib, "sec") == 0 && lib.npages >= 1 && lib.scanning);
+	CHECK(lib_set_query(&lib, "") == 0 && !lib.scanning);       /* none: stopped */
+
 	/* exact before prefix: Second, then the keyword secondkw */
-	lib_set_query(&lib, "second");
+	search(&lib, "second");
 	CHECK(lib.npages == 2);
 	row(&lib, 1, t);
 	CHECK(strcmp(t, "  Second") == 0);
@@ -306,31 +326,31 @@ static void test_names(const ehv_index *idx)
 	CHECK(strcmp(t, "  secondkw (in Second)") == 0);
 
 	/* aliases lead to their page */
-	lib_set_query(&lib, "Zweite");
+	search(&lib, "Zweite");
 	row(&lib, 1, t);
 	CHECK(strcmp(t, "  Zweite -> Second") == 0);
 	CHECK(lib_activate(&lib, &path, &node, &line) == LIB_OPEN && strcmp(node, "Second") == 0);
 
 	/* titles */
-	lib_set_query(&lib, "image");
+	search(&lib, "image");
 	CHECK(lib.npages == 0 && lib.nguides == 1);
 	CHECK(lib.rows[0].kind == LIB_GROUP && strcmp(lib.rows[0].text, "Hypertexts") == 0);
 	CHECK(lib_activate(&lib, &path, &node, &line) == LIB_OPEN && ends_with(path, "images.hyp"));
 
 	/* a typo still finds it */
-	lib_set_query(&lib, "Secnd");
+	search(&lib, "Secnd");
 	CHECK(lib.npages >= 1);
 	row(&lib, 1, t);
 	CHECK(strcmp(t, "  Second") == 0);
 
 	/* the action row */
-	lib_set_query(&lib, "nothing-like-this");
+	search(&lib, "nothing-like-this");
 	CHECK(lib.nrows == 1 && lib.rows[0].kind == LIB_ACTION && lib.sel == 0);
 	row(&lib, 0, t);
 	CHECK(strcmp(t, "  Search the full text for \"nothing-like-this\"") == 0);
 	CHECK(lib_activate(&lib, &path, &node, &line) == LIB_FULLTEXT);
 
-	lib_set_query(&lib, "");
+	search(&lib, "");
 	CHECK(lib.nrows == 7);
 	lib_free(&lib);
 }
@@ -465,10 +485,57 @@ static int run_fulltext(ehv_library *lib)
 	int r, steps = 0;
 
 	CHECK(lib_fulltext_start(lib) == 0);
-	while ((r = lib_fulltext_step(lib, 1)) == 0)
+	while ((r = lib_fulltext_step(lib, 1, NULL)) == 0)
 		steps++;
 	CHECK(r == 1);
+	{
+		/* the rows the hits were added to as they came: as made anew */
+		unsigned long n = lib->nrows, i;
+		lib_row *was = malloc(n * sizeof(lib_row));
+		char note[sizeof(lib->note)];
+
+		CHECK(was != NULL);
+		if (was != NULL)
+		{
+			memcpy(was, lib->rows, n * sizeof(lib_row));
+			strcpy(note, lib->note);
+			CHECK(lib_rebuild(lib) == 0 && lib->nrows == n && strcmp(note, lib->note) == 0);
+			for (i = 0; i < n && i < lib->nrows; i++)
+				CHECK(was[i].kind == lib->rows[i].kind && was[i].ref == lib->rows[i].ref);
+			free(was);
+		}
+	}
 	return steps;
+}
+
+/* the rows of the names found made later (defer_rows, the program's
+   way: lib_rows_update in a turn of its own): the same rows */
+static void test_defer_rows(const ehv_index *idx)
+{
+	static const char *const qs[] = { "det", "Secnd", "ag", "image" };
+	unsigned int i;
+
+	for (i = 0; i < sizeof(qs) / sizeof(qs[0]); i++)
+	{
+		ehv_library a, b;
+		unsigned long r;
+		int n = 0, rr;
+
+		lib_init(&a, idx);
+		lib_init(&b, idx);
+		b.defer_rows = 1;
+		CHECK(search(&a, qs[i]) == 0);
+		rr = lib_set_query(&b, qs[i]);
+		while (rr == 0 && (rr = lib_search_step(&b, 3, NULL)) != 1 && rr >= 0)
+			rr = ++n > 10000 ? -1 : 0;
+		CHECK(rr == 1 && !b.scanning);
+		CHECK(lib_rows_update(&b) == 0 && !b.rows_stale);
+		CHECK(a.nrows == b.nrows && a.npages == b.npages);
+		for (r = 0; r < a.nrows && r < b.nrows; r++)
+			CHECK(a.rows[r].kind == b.rows[r].kind && a.rows[r].ref == b.rows[r].ref);
+		lib_free(&a);
+		lib_free(&b);
+	}
 }
 
 static void test_fulltext(const ehv_index *idx)
@@ -479,7 +546,7 @@ static void test_fulltext(const ehv_index *idx)
 	unsigned short line;
 
 	lib_init(&lib, idx);
-	lib_set_query(&lib, "beside");
+	search(&lib, "beside");
 	CHECK(run_fulltext(&lib) > 3);
 	CHECK(lib.rows[0].kind == LIB_GROUP && strcmp(lib.rows[0].text, "Full text") == 0);
 	CHECK(lib.nrows == 3 && lib.rows[1].kind == LIB_TEXT && lib.rows[2].kind == LIB_NOTE);
@@ -492,13 +559,13 @@ static void test_fulltext(const ehv_index *idx)
 	CHECK(ends_with(path, "images.hyp") && strcmp(node, "Main") == 0 && line == 0);
 
 	/* line numbers: "0899 ..." is line 900 of the big page */
-	lib_set_query(&lib, "0899");
+	search(&lib, "0899");
 	run_fulltext(&lib);
 	CHECK(lib_activate(&lib, &path, &node, &line) == LIB_OPEN);
 	CHECK(ends_with(path, "big.hyp") && line == 900);
 
 	/* with page matches the selection stays on them */
-	lib_set_query(&lib, "main");
+	search(&lib, "main");
 	CHECK(lib.npages == 3 && lib.rows[lib.sel].kind == LIB_PAGE);   /* basic, images, big */
 	run_fulltext(&lib);
 	CHECK(lib.rows[lib.sel].kind == LIB_PAGE);
@@ -512,7 +579,7 @@ static void test_fulltext(const ehv_index *idx)
 	}
 
 	/* a new query drops the search; a new index too */
-	lib_set_query(&lib, "mai");
+	search(&lib, "mai");
 	CHECK(lib.fts == NULL && lib.rows[lib.nrows - 1].kind == LIB_ACTION);
 	lib_set_index(&lib, NULL);
 	CHECK(lib.nrows == 1 && lib.rows[0].kind == LIB_NOTE);
@@ -525,13 +592,40 @@ static void test_fulltext(const ehv_index *idx)
 		const ehv_fts_hit *h;
 
 		CHECK(s != NULL && strcmp(ehv_fts_query(s), "PAGE") == 0);
-		while (ehv_fts_step(s, 3) == 0)
+		while (ehv_fts_step(s, 3, NULL) == 0)
 			;
 		h = ehv_fts_hits(s, &n);
 		CHECK(n >= 3 && ehv_fts_done(s));       /* ignoring case */
 		CHECK(h[0].count >= 1);
 		ehv_fts_free(s);
 		CHECK(ehv_fts_begin(idx, "") == NULL);
+		CHECK(ehv_fts_begin(NULL, "x") == NULL);
+	}
+
+	/* a piece at a time (1 KB of a page, or 16 of its lines): the same
+	   hits as all at once, BIG.HYP's long page taking many pieces */
+	{
+		ehv_fts *a = ehv_fts_begin(idx, "firebee"), *b = ehv_fts_begin(idx, "firebee");
+		unsigned long na = 0, nb = 0, i, steps = 0;
+		const ehv_fts_hit *ha, *hb;
+
+		CHECK(a != NULL && b != NULL);
+		while (ehv_fts_step(a, 1, NULL) == 0)
+			steps++;
+		CHECK(ehv_fts_step(b, 100000, NULL) == 1);
+		ha = ehv_fts_hits(a, &na);
+		hb = ehv_fts_hits(b, &nb);
+		CHECK(na >= 1 && na == nb && ehv_fts_pages(a) == ehv_fts_pages(b));
+		CHECK(steps > ehv_fts_pages(a) * 2);    /* each page read in a step, then its lines */
+		for (i = 0; i < na && i < nb; i++)
+			CHECK(ha[i].guide == hb[i].guide && ha[i].line == hb[i].line && ha[i].count == hb[i].count &&
+			      strcmp(ha[i].node, hb[i].node) == 0 && strcmp(ha[i].context, hb[i].context) == 0);
+		for (i = 0; i < na; i++)
+			if (ha[i].count > 16)
+				break;
+		CHECK(i < na);                          /* a page with its hits in more than one piece */
+		ehv_fts_free(a);
+		ehv_fts_free(b);
 		CHECK(ehv_fts_begin(NULL, "x") == NULL);
 	}
 }
@@ -560,6 +654,7 @@ int main(int argc, char **argv)
 		test_names(idx);
 		test_subjects();
 	test_documentation();
+		test_defer_rows(idx);
 		test_fulltext(idx);
 	}
 	ehv_index_free(idx);

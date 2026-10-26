@@ -17,6 +17,7 @@ typedef struct {
 	short w, h, planes;
 	MFDB form;                    /* device format, or 1 plane mono */
 	int mono;                     /* draw with vrt_cpyfm            */
+	void *job;                    /* still being made (layout_work) */
 } gimage;
 
 typedef struct {
@@ -27,11 +28,28 @@ typedef struct {
 	long height;                  /* below the last line             */
 	gimage *images;               /* one per page->gfx entry         */
 	unsigned short nimages;
+	char *path;                   /* the hypertext's (pictures kept)  */
 } playout;
 
-/* lay out `pg` of `doc` for the current text font (cw, ch) */
+/* lay out `pg` of `doc` for the current text font (cw, ch).  Its
+   pictures are made afterwards, a piece at a time (layout_work; the
+   guidelines' Speed), their places held: ready at once only when kept
+   from before.  layout_free keeps the last pages' pictures for going
+   back; layout_forget_kept lets them go. */
 void layout_make(playout *L, hyp_doc *doc, const hyp_page *pg);
 void layout_free(playout *L);
+void layout_forget_kept(void);
+
+/* pictures still to be made; the next piece of them (1 more to come,
+   *done the picture just finished, to be drawn, or -1); all of them now */
+int layout_busy(const playout *L);
+int layout_work(playout *L, long *done);
+void layout_finish(playout *L);
+
+/* where picture i is on the screen with the page's origin at (ox, oy),
+   centred ones in `cols` columns: 0 when it isn't one shown */
+int layout_picture_at(const playout *L, unsigned short i, short ox, long oy, long cols,
+                      long *x, long *y, short *w, short *h);
 
 /*
  * Draw the page with its origin (page pixel 0, 0) at screen (ox, oy),

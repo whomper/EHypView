@@ -118,6 +118,17 @@ typedef struct {
 hyp_page *hyp_page_load(hyp_doc *doc, unsigned short num, int *err);
 void hyp_page_free(hyp_page *page);
 
+/* the same a piece at a time (the guidelines' Speed: a big page took
+   2 s on an ST): hyp_page_more() unpacks, then parses, about `budget`
+   bytes a call: 1 done, then hyp_page_take() hands the page over; 0
+   more to do; -1 failed, hyp_page_job_error() saying why */
+typedef struct hyp_page_job hyp_page_job;
+hyp_page_job *hyp_page_begin(hyp_doc *doc, unsigned short num, int *err);
+int hyp_page_more(hyp_page_job *j, unsigned long budget);
+int hyp_page_job_error(const hyp_page_job *j);
+hyp_page *hyp_page_take(hyp_page_job *j);
+void hyp_page_job_free(hyp_page_job *j);
+
 /* the title to show for a page: @title, else the node name */
 const char *hyp_page_title(const hyp_doc *doc, const hyp_page *page);
 

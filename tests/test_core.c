@@ -370,6 +370,59 @@ static void test_big(void)
 	hyp_close(doc);
 }
 
+/* a page a piece at a time (hyp_page_begin/more/take): the same page as
+   hyp_page_load, however small the pieces */
+static void test_page_pieces(const char *name)
+{
+	hyp_doc *doc = open_fixture(name);
+	unsigned short num;
+
+	CHECK(doc != NULL);
+	if (doc == NULL)
+		return;
+	for (num = 0; num < doc->num_entries; num++)
+	{
+		hyp_page *a, *b;
+		hyp_page_job *j;
+		unsigned long i, steps = 0;
+		int err, r;
+
+		if (!HYP_IS_TEXT(doc->entries[num].type))
+			continue;
+		a = hyp_page_load(doc, num, &err);
+		j = hyp_page_begin(doc, num, &err);
+		CHECK(a != NULL && j != NULL && err == HYP_OK);
+		if (a == NULL || j == NULL)
+		{
+			hyp_page_free(a);
+			hyp_page_job_free(j);
+			continue;
+		}
+		while ((r = hyp_page_more(j, 1)) == 0)
+			steps++;
+		CHECK(r == 1);
+		b = hyp_page_take(j);
+		CHECK(b != NULL && steps >= 1);              /* unpacked, then parsed */
+		if (b != NULL)
+		{
+			CHECK(a->nlines == b->nlines && a->nruns == b->nruns && a->ngfx == b->ngfx &&
+			      a->nxrefs == b->nxrefs && a->nobjrefs == b->nobjrefs && a->width == b->width &&
+			      a->size == b->size);
+			for (i = 0; i < a->nlines && i < b->nlines; i++)
+				CHECK(a->lines[i].first_run == b->lines[i].first_run && a->lines[i].nruns == b->lines[i].nruns);
+			for (i = 0; i < a->nruns && i < b->nruns; i++)
+				CHECK(a->runs[i].kind == b->runs[i].kind && a->runs[i].attr == b->runs[i].attr &&
+				      a->runs[i].fg == b->runs[i].fg && a->runs[i].bg == b->runs[i].bg &&
+				      a->runs[i].target == b->runs[i].target && a->runs[i].len == b->runs[i].len &&
+				      (a->runs[i].len == 0 || memcmp(a->runs[i].text, b->runs[i].text, a->runs[i].len) == 0));
+		}
+		hyp_page_free(a);
+		hyp_page_free(b);
+	}
+	CHECK(hyp_page_begin(doc, doc->num_entries, NULL) == NULL);
+	hyp_close(doc);
+}
+
 static void test_encrypted(void)
 {
 	hyp_doc *a = open_fixture("basic.hyp");
@@ -740,6 +793,12 @@ int main(int argc, char **argv)
 	test_basic_pages("basic_enc.hyp");
 	test_images();
 	test_big();
+	test_page_pieces("big.hyp");
+	test_page_pieces("basic.hyp");
+	test_page_pieces("basic_raw.hyp");
+	test_page_pieces("basic_enc.hyp");
+	test_page_pieces("images.hyp");
+	test_page_pieces("colour.hyp");
 	test_encrypted();
 	test_ref();
 	test_ref_walk();

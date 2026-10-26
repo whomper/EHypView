@@ -8,6 +8,7 @@
 #include <string.h>
 #include "tos.h"
 #include "gemui.h"
+#include "text.h"
 
 short ehv_ui_gl_wchar, ehv_ui_gl_hchar;  /* sys_cw, sys_ch (ehypview.c sets them) */
 
@@ -90,18 +91,12 @@ void clip_on(GRECT *r)
 	pxy[1] = r->y;
 	pxy[2] = (short) (r->x + r->w - 1);
 	pxy[3] = (short) (r->y + r->h - 1);
-	vs_clip(vdi_h, 1, pxy);
+	text_clip(vdi_h, pxy);
 }
 
 void clip_off(void)
 {
-	short pxy[4];
-
-	pxy[0] = 0;
-	pxy[1] = 0;
-	pxy[2] = (short) (scr_w - 1);
-	pxy[3] = (short) (scr_h - 1);
-	vs_clip(vdi_h, 0, pxy);
+	text_noclip(vdi_h);
 }
 
 /* ST RAM for a bitmap to blit: the screen can't be fed from TT RAM, where

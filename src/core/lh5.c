@@ -17,6 +17,8 @@
  * a canonical walk for the rare longer ones, which keeps the tables
  * small enough for a 68000 machine.
  */
+#include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include "lh5.h"
 
@@ -44,7 +46,7 @@ typedef struct {
 	unsigned short fast[FASTSIZE];   /* (len << 9) | sym, or SLOW */
 } huff_t;
 
-typedef struct {
+struct lh5_state {
 	const unsigned char *src;
 	unsigned long srclen;
 	unsigned long pos;               /* next byte to load */
@@ -53,8 +55,12 @@ typedef struct {
 	unsigned long consumed;          /* bits consumed so far */
 	int error;
 
+	unsigned char *dst;              /* where it goes, how much, how far */
+	unsigned long dstlen, out;
+	unsigned long blocksize;         /* symbols left in the block */
+
 	huff_t t, c, p;
-} lh5_state;
+};
 
 /* ---------------------------------------------------------------- */
 /* bit input                                                         */
@@ -73,15 +79,16 @@ static void fill(lh5_state *s)
 	}
 }
 
-/* peek n (1..16) bits without consuming them */
-static unsigned int peek(lh5_state *s, int n)
+/* peek n (1..16) bits without consuming them; these two inline, a
+   block's tables read with them (read_c_len: up to 510 codes) */
+static inline unsigned int peek(lh5_state *s, int n)
 {
 	if (s->bitcount < n)
 		fill(s);
 	return (unsigned int) (s->bitbuf >> (32 - n));
 }
 
-static void skip(lh5_state *s, int n)
+static inline void skip(lh5_state *s, int n)
 {
 	if (n <= 0)
 		return;
@@ -111,23 +118,31 @@ static unsigned int getbits(lh5_state *s, int n)
 
 static void huff_constant(huff_t *h, unsigned short nsym, unsigned int sym)
 {
+	unsigned int i;
+
 	h->nsym = nsym;
 	h->constant = (int) sym;
 	memset(h->len, 0, sizeof(h->len));
+	for (i = 0; i < FASTSIZE; i++)     /* lh5_decode()'s own lookup: no bits */
+		h->fast[i] = (unsigned short) sym;
 }
 
 /* build lookup structures from h->len[0 .. nsym-1]; -1 if oversubscribed */
 static int huff_build(huff_t *h, unsigned short nsym)
 {
 	unsigned short offs[MAXLEN + 2];
-	unsigned long code, left;
+	unsigned long left;
 	unsigned int i, l;
 
 	h->nsym = nsym;
 	h->constant = -1;
 	memset(h->count, 0, sizeof(h->count));
-	for (i = 0; i < nsym; i++)
-		h->count[h->len[i]]++;
+	{
+		const unsigned char *lp = h->len, *le = h->len + nsym;
+
+		while (lp < le)
+			h->count[*lp++]++;
+	}
 	h->count[0] = 0;
 
 	/* reject over-subscribed codes; incomplete codes are tolerated */
@@ -143,33 +158,36 @@ static int huff_build(huff_t *h, unsigned short nsym)
 	offs[1] = 0;
 	for (l = 1; l <= MAXLEN; l++)
 		offs[l + 1] = (unsigned short) (offs[l] + h->count[l]);
-	for (i = 0; i < nsym; i++)
-		if (h->len[i] != 0)
-			h->sorted[offs[h->len[i]]++] = (unsigned short) i;
-
-	/* fast table: walk symbols in canonical order, assigning codes */
-	for (i = 0; i < FASTSIZE; i++)
-		h->fast[i] = SLOW;
-	code = 0;
-	i = 0;
-	for (l = 1; l <= MAXLEN; l++)
 	{
-		unsigned int n;
+		const unsigned char *lp = h->len;
+		unsigned short sym;
 
-		for (n = 0; n < h->count[l]; n++, i++)
+		for (sym = 0; sym < nsym; sym++, lp++)
+			if (*lp != 0)
+				h->sorted[offs[*lp]++] = sym;
+	}
+
+	/* fast table: walk symbols in canonical order, assigning codes; they
+	   fill it from the front, the rest is SLOW.  Once a block, three
+	   tables: 16-bit counts and a pointer (an ST took 55 ms a block) */
+	{
+		unsigned short *f = h->fast, *end = h->fast + FASTSIZE;
+
+		i = 0;
+		for (l = 1; l <= FASTBITS; l++)
 		{
-			if (l <= FASTBITS)
-			{
-				unsigned long first = code << (FASTBITS - l);
-				unsigned long cnt = 1UL << (FASTBITS - l);
-				unsigned long k;
+			unsigned short n, cnt = (unsigned short) (1U << (FASTBITS - l));
 
-				for (k = 0; k < cnt; k++)
-					h->fast[first + k] = (unsigned short) ((l << 9) | h->sorted[i]);
+			for (n = 0; n < h->count[l]; n++, i++)
+			{
+				unsigned short v = (unsigned short) ((l << 9) | h->sorted[i]), k;
+
+				for (k = cnt; k > 0; k--)
+					*f++ = v;
 			}
-			code++;
 		}
-		code <<= 1;
+		while (f < end)
+			*f++ = SLOW;
 	}
 	return 0;
 }
@@ -313,24 +331,51 @@ static int read_c_len(lh5_state *s)
 
 /* ---------------------------------------------------------------- */
 
-int lh5_decode(const unsigned char *src, unsigned long srclen,
-               unsigned char *dst, unsigned long dstlen)
+/*
+ * The symbols, the decoder's whole time (an ST spent 8.7 s on a 640 x
+ * 400 picture): the bit buffer is held here, not in the state, and a
+ * code of up to FASTBITS bits (nearly all of them) is one lookup; the
+ * table headers, once a block, and longer codes go through the state.
+ * Reading past the end gives zeros; it is an error when the bits taken
+ * go past it (checked at the end of each block and of the data).  It
+ * stops once `budget` more bytes are out (a match may go a little past):
+ * 1 all of them out, 0 more to come, -1 corrupt.
+ */
+static int run(lh5_state *s, unsigned long budget)
 {
-	static lh5_state st;             /* ~6 KB: keep it off the TOS stack */
-	lh5_state *s = &st;
-	unsigned long out = 0;
-	unsigned long blocksize = 0;
+	const unsigned char *src = s->src;
+	unsigned char *dst = s->dst;
+	unsigned long srclen = s->srclen, dstlen = s->dstlen, out = s->out, blocksize = s->blocksize, pos;
+	unsigned long stop = budget < dstlen - out ? out + budget : dstlen;
+	unsigned int bb;                 /* 32 bits, here and on the Atari */
+	int bc;
 
-	memset(s, 0, sizeof(*s));
-	s->src = src;
-	s->srclen = srclen;
+/* at least n (up to 24) bits in bb, from its top */
+#define NEED(n) \
+	while (bc < (n)) \
+	{ \
+		bb |= (unsigned int) (pos < srclen ? src[pos] : 0) << (24 - bc); \
+		pos++; \
+		bc += 8; \
+	}
+/* the state's bits to and from the locals */
+#define LOAD() (pos = s->pos, bb = (unsigned int) s->bitbuf, bc = s->bitcount)
+#define SAVE() (s->pos = pos, s->bitbuf = bb, s->bitcount = bc, \
+		s->consumed = pos * 8UL - (unsigned long) bc)
+#define PAST_END() (pos * 8UL - (unsigned long) bc > srclen * 8UL)
 
-	while (out < dstlen)
+	if (s->error)
+		return -1;
+	LOAD();
+	while (out < stop)
 	{
-		unsigned int c;
+		unsigned int c, e;
 
 		if (blocksize == 0)
 		{
+			if (PAST_END())
+				return s->error = 1, -1;
+			SAVE();
 			blocksize = getbits(s, 16);
 			if (blocksize == 0)
 				blocksize = 65536UL;
@@ -338,34 +383,140 @@ int lh5_decode(const unsigned char *src, unsigned long srclen,
 				read_c_len(s) < 0 ||
 				read_pt_len(s, &s->p, NP, PBIT, -1) < 0 ||
 				s->error)
-				return -1;
+				return s->error = 1, -1;
+			LOAD();
 		}
 		blocksize--;
 
-		c = huff_decode(s, &s->c);
-		if (s->error)
-			return -1;
+		NEED(MAXLEN);
+		e = s->c.fast[bb >> (32 - FASTBITS)];
+		if (e != SLOW)
+		{
+			bb <<= e >> 9;
+			bc -= (int) (e >> 9);
+			c = e & 0x1FF;
+		} else
+		{
+			SAVE();
+			c = huff_decode(s, &s->c);
+			if (s->error)
+				return -1;
+			LOAD();
+		}
 		if (c < 256)
 		{
 			dst[out++] = (unsigned char) c;
-		} else
+			continue;
+		}
 		{
-			unsigned long len = c - (256 - THRESHOLD);
-			unsigned long dist;
-			unsigned int j = huff_decode(s, &s->p);
+			unsigned long len = c - (256 - THRESHOLD), dist;
+			unsigned int j;
 
-			if (j != 0)
-				j = (1U << (j - 1)) + getbits(s, (int) j - 1);
-			if (s->error)
-				return -1;
-			dist = (unsigned long) j + 1;
-			while (len-- > 0 && out < dstlen)
+			NEED(MAXLEN);
+			e = s->p.fast[bb >> (32 - FASTBITS)];
+			if (e != SLOW)
 			{
-				/* LHarc starts with a window full of spaces */
-				dst[out] = out >= dist ? dst[out - dist] : ' ';
-				out++;
+				bb <<= e >> 9;
+				bc -= (int) (e >> 9);
+				j = e & 0x1FF;
+			} else
+			{
+				SAVE();
+				j = huff_decode(s, &s->p);
+				if (s->error)
+					return -1;
+				LOAD();
 			}
+			if (j > 1)
+			{
+				int n = (int) j - 1;      /* at most 13 bits */
+
+				NEED(n);
+				j = (1U << n) + (unsigned int) (bb >> (32 - n));
+				bb <<= n;
+				bc -= n;
+			}
+			dist = (unsigned long) j + 1;
+			if (len > dstlen - out)
+				len = dstlen - out;
+			if (dist <= out)
+			{
+				unsigned char *d = dst + out;
+				const unsigned char *f = d - dist;
+
+				out += len;
+				while (len-- > 0)
+					*d++ = *f++;
+			} else
+				while (len-- > 0)
+				{
+					/* LHarc starts with a window full of spaces */
+					dst[out] = out >= dist ? dst[out - dist] : ' ';
+					out++;
+				}
 		}
 	}
-	return s->error ? -1 : 0;
+	SAVE();
+	s->out = out;
+	s->blocksize = blocksize;
+	if (out < dstlen)
+		return 0;
+	if (PAST_END())
+		return s->error = 1, -1;
+	return 1;
+}
+
+static void begin(lh5_state *s, const unsigned char *src, unsigned long srclen,
+                  unsigned char *dst, unsigned long dstlen)
+{
+	/* not the tables, made at each block's start: 11 KB cleared took
+	   7 ms a page on an ST */
+	memset(s, 0, offsetof(lh5_state, t));
+	s->src = src;
+	s->srclen = srclen;
+	s->dst = dst;
+	s->dstlen = dstlen;
+}
+
+int lh5_decode(const unsigned char *src, unsigned long srclen,
+               unsigned char *dst, unsigned long dstlen)
+{
+	static lh5_state st;             /* ~6 KB: keep it off the TOS stack */
+
+	begin(&st, src, srclen, dst, dstlen);
+	return run(&st, dstlen) == 1 ? 0 : -1;
+}
+
+/* one decoder kept for the pieces (a page's pictures are unpacked one
+   at a time): no ~11 KB taken from an accessory's heap for each; a
+   second at once gets its own */
+static lh5_state piece_state;
+static int piece_used;
+
+lh5_state *lh5_begin(const unsigned char *src, unsigned long srclen,
+                     unsigned char *dst, unsigned long dstlen)
+{
+	lh5_state *s = piece_used ? malloc(sizeof(lh5_state)) : &piece_state;
+
+	if (s == &piece_state)
+		piece_used = 1;
+	if (s != NULL)
+		begin(s, src, srclen, dst, dstlen);
+	return s;
+}
+
+int lh5_more(lh5_state *s, unsigned long budget, unsigned long *out)
+{
+	int r = run(s, budget);
+
+	*out = s->out;
+	return r;
+}
+
+void lh5_end(lh5_state *s)
+{
+	if (s == &piece_state)
+		piece_used = 0;
+	else
+		free(s);
 }
