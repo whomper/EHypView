@@ -15,6 +15,8 @@
 #                   (needs Xvfb and xdotool for the mouse)
 #   make quiet-test the accessory's start and indexing measured in Hatari:
 #                   no stretch over 50 ms between event calls
+#   make speed-test each action's longest stretch on ST and Falcon-4 against
+#                   the guidelines' times (tests/hatari/speed.py)
 #   make icons      the icon again from common/icons/EHYPVIEW.txt: src/gem/icon*.h,
 #                   docs/icon*.png, icons/ (python3-pil for the PNGs)
 #   make dist       a release's files in dist/: each file, and EHYPVIEW-x.y.zip
@@ -366,6 +368,16 @@ quiet-test: atari
 		$(QUIET_DIR)/ASKHELP.PRG
 	python3 tests/run_quiet.py $(QUIET_DIR) build/quiet
 
+# the speed rig (the AERA guidelines, "Speed"): a build with
+# -DAES_PROFILE=20, each action's longest stretch between event calls on
+# ST:mono, ST:med and Falcon-4:16 (SPEED_MACHINES), against the
+# guidelines' times (needs hatari; the accessory's case Xvfb and xdotool)
+SPEED_DIR = build/speed
+speed-test: atari
+	$(MAKE) ATARI=$(SPEED_DIR)/obj HATARI_DIR=$(SPEED_DIR) XEXTRA=-DAES_PROFILE=20 $(SPEED_DIR)/EHYPVIEW.PRG \
+		$(SPEED_DIR)/EHYPVIEW.ACC $(SPEED_DIR)/ASKHELP.PRG $(SPEED_DIR)/LAUNCH.PRG
+	python3 tests/hatari/speed.py $(SPEED_DIR) build/speed-out
+
 # pictures and text in colour in every screen mode: Falcon 4, 16, 256 and
 # true colour, ST medium, TT medium, low and high, checked pixel by pixel
 # (screenshots in build/colour)
@@ -409,4 +421,4 @@ dist: atari help
 clean:
 	rm -rf build binary dist
 
-.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test colour-test acc-files-test accnvdi-test clean FORCE
+.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test speed-test colour-test acc-files-test accnvdi-test clean FORCE
