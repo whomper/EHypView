@@ -311,6 +311,8 @@ int ehv_names_next(ehv_names *nm, ehv_sym *s)
 			} else
 			{
 				n = nm->last - nm->next < nm->piece ? nm->last - nm->next : nm->piece;
+				if (nm->h < 0 && nm->hold && idx->file != NULL)
+					nm->h = pf_open(idx->file, PF_READ);
 				if (read_blocks(idx, nm->h, nm->next, n, nm->buf) < 0)
 				{
 					nm->failed = 1;
@@ -339,6 +341,21 @@ int ehv_names_next(ehv_names *nm, ehv_sym *s)
 		rec_get(blk + nm->pos, end, s);
 		nm->pos += sz;
 		return 1;
+	}
+}
+
+void ehv_names_hold(ehv_names *nm)
+{
+	nm->hold = 1;
+}
+
+void ehv_names_let_go(ehv_names *nm)
+{
+	nm->hold = 0;
+	if (!nm->keep_open && nm->h >= 0)
+	{
+		pf_close(nm->h);
+		nm->h = -1;
 	}
 }
 

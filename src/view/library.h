@@ -106,6 +106,9 @@ typedef struct {
 	   at once, the rest in slices (lib_search_step) */
 	ehv_names scan;
 	int scanning;         /* 1: lib_search_step() has names to go */
+	int defer_rows;       /* set: the names found made rows by lib_rows_update() */
+	int rows_stale;       /* found since: lib_rows_update() to do */
+	int query_stale;      /* lib_set_query_later(): lib_rows_update() to do */
 	unsigned long plain;  /* names the same as, starting with or containing it */
 	ehv_hits rank[4];     /* the same, starting with, containing, similar */
 	unsigned long npages, nguides;   /* matches in the last rebuild */
@@ -161,10 +164,18 @@ int lib_selected_bookmark(const ehv_library *lib);
 
 /* change the search text; rebuilds the list */
 int lib_set_query(ehv_library *lib, const char *query);
-/* the search through the names on for at most `budget` names (the
+/* the text now, the search and the rows by lib_rows_update() (a key
+   typed answered at once: the rows in the program's next turn) */
+int lib_set_query_later(ehv_library *lib, const char *query);
+/* the search through the names on for at most `budget` names, while
+   more() says so (NULL: no limit), the index read with one open (the
    rows rebuilt when it found more): 1 done (or none going), 2 more and
    the rows changed, 0 more, -1 failed */
-int lib_search_step(ehv_library *lib, unsigned int budget);
+int lib_search_step(ehv_library *lib, unsigned int budget, int (*more)(void));
+/* the rows made here, in a turn of their own (80 ms on an ST): after
+   lib_set_query_later(), or with defer_rows when the steps found more
+   names: 0, -1 failed */
+int lib_rows_update(ehv_library *lib);
 
 /* rebuild the list for the current query */
 int lib_rebuild(ehv_library *lib);

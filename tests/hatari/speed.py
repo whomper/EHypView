@@ -307,11 +307,13 @@ def page_case(spec, nvdi):
              run.act(lambda: run.key(ESC), "dialog-closed settings"))
         note("library opened (^L): drawn whole", WHOLE, spec,
              run.act(lambda: run.key(L, [CTRL]), "library"))
-        # the key's own turn; the rows it found drawn in the next
+        # the key's own turn (the letter drawn); the search started and
+        # its rows made in the next (lib-model), drawn in the one after
         # (lib-rows), the names searched through in slices (lib-work)
         for ch in "gen":
             note("a letter typed in the library's search", KEY, spec,
                  run.act(lambda: run.key(ch), "search", settle=2.0, tags=("event",)))
+            note("search: started, its rows made", SLICE, spec, run.since(("lib-model",)))
             note("search: the rows found drawn", PAGE, spec, run.since(("lib-rows",)))
             note("search: its slices through the names", SLICE, spec, run.since(("lib-work",)))
         # its slices for 30 s (the whole search takes minutes on an ST);

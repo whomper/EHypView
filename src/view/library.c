@@ -679,6 +679,7 @@ static void search_stop(ehv_library *lib)
 	if (lib->scanning)
 		ehv_names_close(&lib->scan);
 	lib->scanning = 0;
+	lib->rows_stale = 0;
 	found_clear(lib);                 /* it holds the ranks' names */
 	lib->found_of = NULL;
 	for (k = 0; k < 4; k++)
@@ -747,13 +748,15 @@ static int search_start(ehv_library *lib)
 			break;
 	}
 	ehv_names_close(&nm);
-	if (rc == 0 && ehv_names_open(&lib->scan, idx, ehv_names_piece(), 0) < 0)
+	/* the rest in the slices, 4 KB a read (the file held for a slice's
+	   reads: a 16 KB read and its slice's names took 130 ms on an ST) */
+	if (rc == 0 && ehv_names_open(&lib->scan, idx, 4, 0) < 0)
 		rc = -1;
 	lib->scanning = rc == 0;
 	return rc < 0 ? -1 : gather(lib);
 }
 
-int lib_search_step(ehv_library *lib, unsigned int budget)
+int lib_search_step(ehv_library *lib, unsigned int budget, int (*more)(void))
 {
 	char folded[LIB_QUERY_MAX];
 	size_t ql = strlen(lib->query);
@@ -765,7 +768,8 @@ int lib_search_step(ehv_library *lib, unsigned int budget)
 	if (!lib->scanning)
 		return 1;
 	fold(lib->query, folded, sizeof(folded));
-	for (n = 0; n < budget && !full; n++)
+	ehv_names_hold(&lib->scan);           /* one open for the step's pieces */
+	for (n = 0; n < budget && !full && (n == 0 || more == NULL || more()); n++)
 	{
 		int k;
 
@@ -789,6 +793,7 @@ int lib_search_step(ehv_library *lib, unsigned int budget)
 		/* the rows full, in the names' order: no other can come in */
 		full = lib->rank[2].n >= MAX_PAGE_ROWS && lib->plain >= ENOUGH_FOR_NO_SIMILAR;
 	}
+	ehv_names_let_go(&lib->scan);         /* no file open across an event call */
 	if (r < 0)
 	{
 		search_stop(lib);
@@ -799,11 +804,30 @@ int lib_search_step(ehv_library *lib, unsigned int budget)
 		/* names to go: the rows again only when it found more */
 		if (lib->rank[2].n + lib->rank[3].n == before)
 			return 0;
+		if (lib->defer_rows)
+			return lib->rows_stale = 1, 2;
 		return gather(lib) < 0 || rebuild(lib, 1, 0) < 0 ? -1 : 2;
 	}
 	ehv_names_close(&lib->scan);
 	lib->scanning = 0;
+	if (lib->defer_rows)
+		return lib->rows_stale = 1, 1;
 	return gather(lib) < 0 || rebuild(lib, 1, 0) < 0 ? -1 : 1;
+}
+
+int lib_rows_update(ehv_library *lib)
+{
+	if (lib->query_stale)
+	{
+		/* the search for the text typed started (the names starting
+		   with it found at once), the rows made */
+		lib->query_stale = 0;
+		return rebuild(lib, 0, 0);
+	}
+	if (!lib->rows_stale)
+		return 0;
+	lib->rows_stale = 0;
+	return gather(lib) < 0 || rebuild(lib, 1, 0) < 0 ? -1 : 0;
 }
 
 static int build_pages(ehv_library *lib)
@@ -1111,7 +1135,7 @@ int lib_selected_bookmark(const ehv_library *lib)
 	return (int) lib->rows[lib->sel].ref;
 }
 
-int lib_set_query(ehv_library *lib, const char *query)
+int lib_set_query_later(ehv_library *lib, const char *query)
 {
 	if (strcmp(lib->query, query) == 0)
 		return 0;
@@ -1122,7 +1146,14 @@ int lib_set_query(ehv_library *lib, const char *query)
 	lib->top = 0;
 	if (query[0] == '\0')
 		search_stop(lib);
-	return rebuild(lib, 0, 0);
+	lib->query_stale = 1;
+	return 0;
+}
+
+int lib_set_query(ehv_library *lib, const char *query)
+{
+	lib_set_query_later(lib, query);
+	return lib_rows_update(lib);
 }
 
 long lib_move(ehv_library *lib, long delta)

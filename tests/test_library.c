@@ -84,7 +84,7 @@ static int search(ehv_library *lib, const char *q)
 {
 	int r = lib_set_query(lib, q), n = 0;
 
-	while (r == 0 && (r = lib_search_step(lib, 3)) != 1 && r >= 0)
+	while (r == 0 && (r = lib_search_step(lib, 3, NULL)) != 1 && r >= 0)
 		r = ++n > 10000 ? -1 : 0;
 	return r < 0 ? -1 : 0;
 }
@@ -312,7 +312,7 @@ static void test_names(const ehv_index *idx)
 	   index); those containing it, or like it, come in the slices */
 	CHECK(lib_set_query(&lib, "Secnd") == 0 && lib.npages == 0 && lib.scanning);
 	CHECK(lib.nrows >= 2 && lib.rows[1].kind == LIB_WAIT);           /* "Searching the names..." */
-	CHECK(lib_search_step(&lib, 1) >= 0);
+	CHECK(lib_search_step(&lib, 1, NULL) >= 0);
 	CHECK(search(&lib, "Secnd") == 0 && lib.npages >= 1 && !lib.scanning);
 	CHECK(lib_set_query(&lib, "sec") == 0 && lib.npages >= 1 && lib.scanning);
 	CHECK(lib_set_query(&lib, "") == 0 && !lib.scanning);       /* none: stopped */
@@ -508,6 +508,36 @@ static int run_fulltext(ehv_library *lib)
 	return steps;
 }
 
+/* the rows of the names found made later (defer_rows, the program's
+   way: lib_rows_update in a turn of its own): the same rows */
+static void test_defer_rows(const ehv_index *idx)
+{
+	static const char *const qs[] = { "det", "Secnd", "ag", "image" };
+	unsigned int i;
+
+	for (i = 0; i < sizeof(qs) / sizeof(qs[0]); i++)
+	{
+		ehv_library a, b;
+		unsigned long r;
+		int n = 0, rr;
+
+		lib_init(&a, idx);
+		lib_init(&b, idx);
+		b.defer_rows = 1;
+		CHECK(search(&a, qs[i]) == 0);
+		rr = lib_set_query(&b, qs[i]);
+		while (rr == 0 && (rr = lib_search_step(&b, 3, NULL)) != 1 && rr >= 0)
+			rr = ++n > 10000 ? -1 : 0;
+		CHECK(rr == 1 && !b.scanning);
+		CHECK(lib_rows_update(&b) == 0 && !b.rows_stale);
+		CHECK(a.nrows == b.nrows && a.npages == b.npages);
+		for (r = 0; r < a.nrows && r < b.nrows; r++)
+			CHECK(a.rows[r].kind == b.rows[r].kind && a.rows[r].ref == b.rows[r].ref);
+		lib_free(&a);
+		lib_free(&b);
+	}
+}
+
 static void test_fulltext(const ehv_index *idx)
 {
 	ehv_library lib;
@@ -624,6 +654,7 @@ int main(int argc, char **argv)
 		test_names(idx);
 		test_subjects();
 	test_documentation();
+		test_defer_rows(idx);
 		test_fulltext(idx);
 	}
 	ehv_index_free(idx);

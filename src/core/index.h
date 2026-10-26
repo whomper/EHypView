@@ -208,6 +208,7 @@ typedef struct {
 	unsigned long nbuf, bi, pos;  /* its blocks, the one read, where in it */
 	unsigned long piece;
 	int h, keep_open, failed;
+	int hold;                     /* ehv_names_hold(): the file opened kept */
 } ehv_names;
 int ehv_names_open(ehv_names *nm, const ehv_index *idx, unsigned long piece, int keep_open);
 int ehv_names_seek(ehv_names *nm, unsigned long block);
@@ -216,6 +217,11 @@ int ehv_names_seek(ehv_names *nm, unsigned long block);
 unsigned long ehv_names_start(const ehv_index *idx, const char *name);
 int ehv_names_next(ehv_names *nm, ehv_sym *s);     /* 1, 0 at the end, -1 failed */
 void ehv_names_close(ehv_names *nm);
+/* the pieces read from here on with one open of the file (a slice's,
+   when the reading goes on over event calls), until ehv_names_let_go(),
+   which comes before the caller's next event call */
+void ehv_names_hold(ehv_names *nm);
+void ehv_names_let_go(ehv_names *nm);
 
 /*
  * Cache file.  Save writes pf_tmp_name(path) and renames it.  Load

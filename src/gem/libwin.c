@@ -85,6 +85,7 @@ static void ensure_model(void)
 	{
 		/* everything in place first: the list made once */
 		lib_init(&lib, NULL);
+		lib.defer_rows = 1;            /* the rows made in a turn of their own */
 		lib.layout = want_layout;
 		lib.bm = lib_bm;
 		lib.recent = lib_recent;
@@ -1044,12 +1045,11 @@ static void draw_search(short wx, short wy, short ww)
 
 	fill(0, wx, wy, (short) (wx + ww - 1), (short) (wy + header_h() - 1));
 
-	/* the search field: a label, then a framed line to type in */
-	vswr_mode(vdi_h, MD_TRANS);
-	vst_color(vdi_h, 1);
-	vst_effects(vdi_h, 1);
-	text_at((short) (wx + MARGIN + cw / 2), (short) (wy + 6), "Search", 6);
-	vst_effects(vdi_h, 0);
+	/* the search field: a label (bold, the cheap way on its white
+	   ground: put), then a framed line to type in */
+	white_ground = 1;
+	put((short) (wx + MARGIN + cw / 2), (short) (wy + 6), "Search", 6, 1, 1);
+	white_ground = 0;
 	fx0 = (short) (wx + MARGIN + 8 * cw);
 	fx1 = (short) (wx + ww - MARGIN - cw / 2);
 	if (fx1 < fx0 + 4 * cw)
@@ -1258,6 +1258,22 @@ static void refresh(int what)
 		redraw(lx, top, lw, (short) (ly + lh - top));
 	if ((what & R_DETAIL) && panes())
 		redraw(lx, (short) (ly + lh), lw, (short) (wy + wh - ly - lh));
+}
+
+/* the search field alone: a key typed, nothing else drawn in its turn
+   (the sliders and the info line with the rows, in a later one) */
+static void refresh_head(void)
+{
+	short wx, wy, ww, wh, fx0;
+
+	if (lib_h <= 0 || lib_icon)
+	{
+		refresh(R_HEAD);
+		return;
+	}
+	work_area(&wx, &wy, &ww, &wh);
+	fx0 = (short) (wx + MARGIN + 8 * cw);
+	redraw(fx0, wy, (short) (wx + ww - fx0), header_h());
 }
 
 /* the rows' part only, as it is (scrolled: the selection not followed) */
@@ -1549,18 +1565,34 @@ static void activate(void)
 	}
 }
 
+/* the search's EHV line due: 1 the names, 2 the full text (logged when
+   what it found is drawn, libwin_idle) */
+static int log_due;
+
+/* a key typed answered at once: the text drawn now, the search and its
+   rows in the next timer turns (libwin_idle) */
 static void set_query(const char *q)
 {
 	int had = lib.query[0] != '\0';
 
-	lib_set_query(&lib, q);
+	lib_set_query_later(&lib, q);
 	if (q[0] != '\0')
 		focus_left = 0;                /* the rows found have the keys */
-	if (!lib.scanning)
-		log_search();                  /* else when its slices end (libwin_idle) */
-	refresh(R_HEAD);
+	refresh_head();
 	/* the pane's line chosen is shown otherwise while searching */
 	rows_due |= R_LIST | R_DETAIL | (had != (q[0] != '\0') ? R_PANE : 0);
+}
+
+/* the rows of the text typed made now: for a key or a click that acts
+   on them */
+static void rows_now(void)
+{
+	if (!lib.query_stale)
+		return;
+	lib_rows_update(&lib);
+	if (!lib.scanning)
+		log_due = 1;
+	rows_due |= R_LIST | R_DETAIL;
 }
 
 /* Two panes: the Subjects pane takes the keys, or gives them back */
@@ -1674,6 +1706,15 @@ void libwin_key(short kstate, short kreturn)
 	char q[LIB_QUERY_MAX];
 	size_t n = strlen(lib.query);
 
+	if (ctrl || ascii < 32 || ascii == 127)
+	{
+		if (scan != 0x0e)
+		{
+			rows_now();                    /* a key for the rows, not the text */
+			old_sel = lib.sel;
+			old_top = lib.top;
+		}
+	}
 	if (ctrl)
 	{
 		if (ascii == 0x0c && scan != 0x33 && viewer_handle() > 0)
@@ -1776,6 +1817,7 @@ void libwin_click(short mx, short my)
 
 	if (lib_icon)
 		return;
+	rows_now();
 	work_area(&x, &y, &w, &h);
 	if (mx < x || mx >= x + w || my < y + header_h() || my >= y + h)
 		return;
@@ -1991,7 +2033,8 @@ int libwin_message(short *msg)
 
 int libwin_busy(void)
 {
-	return lib_ready && (rows_due || lib.scanning || (lib.fts != NULL && !ehv_fts_done(lib.fts)));
+	return lib_ready && (rows_due || lib.query_stale || lib.rows_stale || lib.scanning ||
+			     (lib.fts != NULL && !ehv_fts_done(lib.fts)));
 }
 
 /* what the searches found drawn, at most this often while they go on
@@ -2000,25 +2043,51 @@ int libwin_busy(void)
 #define FOUND_DRAWN_EVERY 250
 #define R_INFO 16                      /* the info line alone (rows_due) */
 
-/* while the slice has room for another of the full-text search's
-   pieces: up to 45 ms on an ST (a block's tables, then 1 KB unpacked),
-   10 on a 68030 */
-static int fts_more(void)
+/* while the slice has room for another piece of the full-text search:
+   up to 45 ms on an ST (a block's tables, then 1 KB unpacked), 10 on a
+   68030; of the names search: a name, or 4 KB of them read */
+static int fast_cpu(void)
 {
-	static unsigned long piece;
+	static int cpu = -1;
 
-	if (piece == 0)
-		piece = get_cookie(0x5F435055L) >= 20 ? 10 : 40;	/* '_CPU' */
-	return bg_room(piece);
+	if (cpu < 0)
+		cpu = get_cookie(0x5F435055L) >= 20;	/* '_CPU' */
+	return cpu;
+}
+
+static int piece_room(void)
+{
+	return bg_room(fast_cpu() ? 10 : 40);
+}
+
+static int name_room(void)
+{
+	return bg_room(fast_cpu() ? 5 : 20);
 }
 
 int libwin_idle(void)
 {
 	static unsigned long drawn;
-	static int waiting, log_due;  /* found, not drawn yet; 1 log the search, 2 the full text */
+	static int waiting;           /* found, not drawn yet */
 	unsigned long before, after;
 	int r;
 
+	if (lib_ready && lib.query_stale)
+	{
+		/* the text typed: the search started, its rows made; drawn in
+		   the next turn */
+		aes_profile_tag("lib-model");
+		rows_now();
+		return libwin_busy() | 2;
+	}
+	if (lib_ready && lib.rows_stale && rows_due)
+	{
+		/* the names found made rows, when they are to be drawn: a turn
+		   of its own, the drawing in the next */
+		aes_profile_tag("lib-model");
+		lib_rows_update(&lib);
+		return libwin_busy() | 2;
+	}
 	if (lib_ready && rows_due)
 	{
 		int what = rows_due;
@@ -2046,7 +2115,8 @@ int libwin_idle(void)
 	}
 	if (lib_ready && lib.scanning)
 	{
-		r = lib_search_step(&lib, 32);
+		/* on for the slice, the index read with one open */
+		r = lib_search_step(&lib, (unsigned int) -1, name_room);
 		waiting |= r == 2;
 		if (r != 0 && r != 2)
 		{
@@ -2059,16 +2129,15 @@ int libwin_idle(void)
 		{
 			waiting = 0;
 			rows_due |= R_LIST | R_DETAIL;
-			return 3;
 		}
-		return lib.scanning;
+		return 3;                         /* it had the slice */
 	}
 	if (!lib_ready || lib.fts == NULL || ehv_fts_done(lib.fts))
 		return 0;
 	ehv_fts_hits(lib.fts, &before);
 	/* on for the slice (bgwork.h), a piece at a time (1 KB of a page,
 	   or 16 of its lines), its hypertext opened once for them */
-	r = lib_fulltext_step(&lib, (unsigned int) -1, fts_more);
+	r = lib_fulltext_step(&lib, (unsigned int) -1, piece_room);
 	ehv_fts_hits(lib.fts, &after);
 	waiting |= after != before;
 	if (r != 0)
