@@ -617,11 +617,20 @@ static long put(short x, short y, const char *s, long room, short color, short e
 		/* bold and underline on the white ground: drawn the cheap way,
 		   the same pixels (text_fx_after) */
 		short by_hand = white_ground && color != 0 && text_fx_fast(effects, MD_REPLACE) ? effects : 0;
+		/* bold any other way: struck twice, a pixel apart, so that it
+		   keeps to its cells (NVDI's bold widens each letter: pagedraw.c) */
+		short twice = !by_hand && (effects & 1) ? 1 : 0;
 
 		vswr_mode(vdi_h, white_ground && color != 0 ? MD_REPLACE : MD_TRANS);
 		vst_color(vdi_h, color);
-		vst_effects(vdi_h, (short) (effects & ~by_hand));
+		vst_effects(vdi_h, (short) (effects & ~by_hand & ~twice));
 		text_at(x, y, s, n);
+		if (twice)
+		{
+			vswr_mode(vdi_h, MD_TRANS);
+			vst_effects(vdi_h, (short) (effects & ~1 & ~8));
+			text_at((short) (x + 1), y, s, n);
+		}
 		vst_effects(vdi_h, 0);
 		if (by_hand)
 			text_fx_after(x, y, s, n, by_hand, color);

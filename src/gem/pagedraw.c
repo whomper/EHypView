@@ -1135,18 +1135,34 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 					/* bold and underline on the white ground: drawn
 					   the cheap way, the same pixels (text_fx_after) */
 					short by_hand = want == MD_REPLACE && text_fx_fast(fx, want) ? fx : 0;
+					/* bold any other way (NVDI, a GDOS font, a ground
+					   of its own): struck twice, a pixel apart. The
+					   VDI's bold widens each letter (NVDI by a pixel
+					   or more), and a run of it ran past its cells,
+					   the next run covering its last letters (Erez's
+					   photo, 27 Oct 2026); the layout's cells are
+					   fixed */
+					short twice = !by_hand && (fx & 1) ? 1 : 0;
 
 					if (mode != want)
 						vswr_mode(vdi_h, mode = want);
 					if (colour != fg)
 						vst_color(vdi_h, colour = fg);
-					if (effects != (fx & ~by_hand))
-						vst_effects(vdi_h, effects = (short) (fx & ~by_hand));
+					if (effects != (fx & ~by_hand & ~twice))
+						vst_effects(vdi_h, effects = (short) (fx & ~by_hand & ~twice));
 					text_at((short) x, (short) y, run->text, run->len);
 					if (by_hand)
 					{
 						text_fx_after((short) x, (short) y, run->text, run->len, by_hand, fg);
 						vswr_mode(vdi_h, mode);
+					}
+					if (twice)
+					{
+						if (mode != MD_TRANS)
+							vswr_mode(vdi_h, mode = MD_TRANS);
+						if (effects & 8)
+							vst_effects(vdi_h, effects = (short) (effects & ~8));   /* one underline */
+						text_at((short) (x + 1), (short) y, run->text, run->len);
 					}
 				}
 			}
