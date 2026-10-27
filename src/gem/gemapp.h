@@ -47,7 +47,7 @@ void viewer_show(const char *path, const char *node, unsigned short line);
 void viewer_top(void);                    /* bring the viewer to the front */
 short viewer_handle(void);                /* -1 when closed */
 void app_window_closed(void);             /* quits the program when none is left */
-int app_key(short kstate, short kreturn); /* ^O, ^L, ^W, ^Q...: 1 when handled */
+int app_key(short kstate, short kreturn); /* ^O, ^L, ^U, ^W, ^Q...: 1 when handled */
 void app_font_changed(void);              /* lay out and redraw both windows */
 void app_guide(const char *page);         /* EHYPVIEW.HYP at page (NULL: the front page) */
 

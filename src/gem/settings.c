@@ -5,12 +5,12 @@
  * EHYPVIEW.INF holds, as EMail's Settings lays it out: a black title band,
  * the pages on the left (the chosen one in a black bar) and that page's
  * settings on the right. Built in code, run by the shared dialog loop
- * (common/ui/dialog.c), so Esc and Undo are Cancel (3.5).
+ * (common/ui/dialog.c), so Undo is Cancel, and Esc too where no field
+ * has the cursor; in a folder field Esc empties it (3.5). The dialogs
+ * are 3D wherever the AES draws 3D: there is no setting for it (5.6).
  *
  *   General   START=: when the accessory looks through the library;
- *             FOLDER=, shown: where the index is kept;
- *             DIALOGS3D=: the 3D dialogs tick (5.6), greyed where the
- *             AES draws no 3D
+ *             FOLDER=, shown: where the index is kept
  *   Library   LIBRARY=: its layout, Outline or Two panes;
  *             PATHS=: folders to look in as well as ST-GUIDE.INF's
  *
@@ -191,8 +191,7 @@ static void show_page(short p, int draw)
 		dlg_draw(tree, 0);
 }
 
-static short o_band, o_start, o_layout, o_3d, o_ok, o_cancel;
-static int look_3d, look_was;          /* DIALOGS3D=, and as the file had it */
+static short o_band, o_start, o_layout, o_ok, o_cancel;
 static char folder_text[PLEN + 1];
 
 static void build(const char *folder)
@@ -236,9 +235,6 @@ static void build(const char *folder)
 	d_text(SX + 2, (short) (10 | (gap << 8)), folder_text);
 	d_text(SX, (short) (11 | (gap << 8)), "keeps the library's index, EHYPVIEW.IDX,");
 	d_text(SX, (short) (12 | (gap << 8)), "and the fonts measured, EHYPVIEW.FNT.");
-	d_text(SX, 14, "Look:");
-	o_3d = d_add(G_BUTTON, SELECTABLE, (short) ((look_3d ? SELECTED : 0) | (dlg_3d_ok() ? 0 : DISABLED)),
-		     (long) "3D dialogs", SX + 7, 14, 14, 1);
 	for (i = from; i < nobj; i++)
 		page_of[i] = 1;
 
@@ -283,8 +279,16 @@ static void under_popup(void)
 		objc_draw(tree, 0, 8, popup_area.x, popup_area.y, popup_area.w, popup_area.h);
 }
 
-/* the popup of START= choices, below its button; the dialog under it
-   drawn again */
+/* where a popup goes to have its row sel over the button at y, as the
+   AES's own pop-ups do (the guidelines, 5.7): popup.c's rows are a line
+   and 2 pixels high, from 2 pixels down, their text a pixel in */
+static short over_button(short y, short sel)
+{
+	return (short) (y - 3 - sel * (sys_ch + 2));
+}
+
+/* the popup of START= choices, over its button with the choice ticked;
+   the dialog under it drawn again */
 static void start_pick(void)
 {
 	static char lab[NSTART][28];
@@ -298,7 +302,7 @@ static void start_pick(void)
 	}
 	objc_offset(tree, o_start, &x, &y);
 	log_event("menu", "settings-start", NULL);
-	r = popup(x, (short) (y + tree[o_start].ob_height + 1), l, NSTART);
+	r = popup(x, over_button(y, start_sel < NSTART ? start_sel : 0), l, NSTART);
 	under_popup();
 	if (r < 0)
 		return;
@@ -322,7 +326,7 @@ static void layout_pick(void)
 	}
 	objc_offset(tree, o_layout, &x, &y);
 	log_event("menu", "settings-layout", NULL);
-	r = popup(x, (short) (y + tree[o_layout].ob_height + 1), l, NLAYOUT);
+	r = popup(x, over_button(y, layout_sel), l, NLAYOUT);
 	under_popup();
 	if (r < 0)
 		return;
@@ -411,13 +415,7 @@ int settings_dialog(const char *inf_path, const char *folder)
 			snprintf(paths[k], sizeof(paths[k]), "%s", (unsigned int) k < n ? list[k] : "");
 		inf_free_list(list, n);
 	}
-	{
-		const char *v = inf != NULL ? inf_get(inf, "DIALOGS3D") : NULL;
-
-		look_3d = v == NULL || atoi(v) != 0;
-	}
 	inf_free(inf);
-	look_was = look_3d;
 	start_was = start_sel;
 	layout_was = layout_sel;
 	paths_join(was, sizeof(was));
@@ -434,7 +432,7 @@ int settings_dialog(const char *inf_path, const char *folder)
 		sprintf(at, "%d %d", x, y);
 		log_event("dialog", "settings", at);
 	}
-	log_event("settings-look", !dlg_3d_ok() ? "no-3d" : look_3d ? "3d" : "flat", NULL);
+	log_event("settings-look", dlg_3d_ok() ? "3d" : "no-3d", NULL);
 	for (;;)
 	{
 		r = (short) (dlg_do(tree, 0, o_cancel) & 0x7fff);
@@ -467,7 +465,6 @@ int settings_dialog(const char *inf_path, const char *folder)
 	}
 	dlg_close();
 	lf_forget(tree);
-	look_3d = (tree[o_3d].ob_state & SELECTED) != 0;
 	tree[r].ob_state &= (unsigned short) ~SELECTED;
 	log_event("dialog-closed", "settings", r == o_ok ? "ok" : "cancel");
 	if (r != o_ok)
@@ -497,11 +494,5 @@ int settings_dialog(const char *inf_path, const char *folder)
 		changed |= SETTINGS_PATHS;
 	}
 	log_event("settings", "PATHS", now);
-	if (look_3d != look_was)
-	{
-		settings_put("DIALOGS3D", look_3d ? "1" : "0", dialogs3d_note);	/* and dlg_3d_on with it */
-		changed |= SETTINGS_LOOK;
-	}
-	log_event("settings", "DIALOGS3D", look_3d ? "1" : "0");
 	return changed;
 }

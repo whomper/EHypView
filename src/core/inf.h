@@ -42,6 +42,13 @@ const char *inf_get(const inf_file *inf, const char *key);
 char *inf_put(const char *text, const char *key, const char *value, const char *note);
 
 /*
+ * A setting no longer used taken out of text: each line that sets key,
+ * the "; note" lines just above it and the empty line after it. The rest
+ * stays as it was. A malloc'ed copy, or NULL.
+ */
+char *inf_drop(const char *text, const char *key);
+
+/*
  * Split a path list ("C:\GUIDES\;D:\DOC" - separated by ';' or ',') into
  * a malloc'ed array of malloc'ed strings with blanks trimmed.  Returns
  * the number of entries; *out is NULL when there are none.
