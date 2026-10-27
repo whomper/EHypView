@@ -643,9 +643,8 @@ static long put(short x, short y, const char *s, long room, short color, short e
 		text_at(x, y, s, n);
 		if (twice)
 		{
-			vswr_mode(vdi_h, MD_TRANS);
 			vst_effects(vdi_h, (short) (effects & ~1 & ~8));
-			text_at((short) (x + 1), y, s, n);
+			text_bold_strike(vdi_h, x, y, s, n);
 		}
 		vst_effects(vdi_h, 0);
 		if (by_hand)
@@ -1919,73 +1918,21 @@ static int held(void)
 	return (mb & 1) != 0;
 }
 
-/* an outline dotted over the screen (XOR: drawn twice it is gone) */
-static void xor_frame(short x, short y, short w, short h)
-{
-	short p[10];
-
-	p[0] = p[6] = p[8] = x;
-	p[1] = p[3] = p[9] = y;
-	p[2] = p[4] = (short) (x + w - 1);
-	p[5] = p[7] = (short) (y + h - 1);
-	vswr_mode(vdi_h, MD_XOR);
-	vsl_color(vdi_h, 1);
-	vsl_type(vdi_h, 3);
-	v_pline(vdi_h, 5, p);
-	vsl_type(vdi_h, 1);
-	vswr_mode(vdi_h, MD_REPLACE);
-}
-
-/* graf_dragbox's way, drawn here (common/ has no binding for it): an
-   outline w x h from x, y follows the mouse, within bx, by, bw, bh,
-   while the button is held; where it was let go */
+/* an outline w x h dragged from x, y within bx, by, bw, bh (the AES's
+   graf_dragbox, while the button is held); where it was let go */
 static void drag_box(short w, short h, short x, short y, short bx, short by, short bw, short bh,
 		     short *ex, short *ey)
 {
-	short mx0, my0, mx, my, mb, ks, cx = x, cy = y;
-
-	graf_mkstate(&mx0, &my0, &mb, &ks);
 	wind_update(BEG_UPDATE);
-	wind_update(3);                    /* BEG_MCTRL: the mouse is ours */
 	graf_mouse(FLAT_HAND, NULL);
 	clip_off();
-	graf_mouse(M_OFF, NULL);
-	xor_frame(cx, cy, w, h);
-	graf_mouse(M_ON, NULL);
-	while (mb & 1)
+	if (!graf_dragbox(w, h, x, y, bx, by, bw, bh, ex, ey))
 	{
-		short nx, ny;
-
-		evnt_timer_(10);
-		graf_mkstate(&mx, &my, &mb, &ks);
-		nx = (short) (x + mx - mx0);
-		ny = (short) (y + my - my0);
-		if (nx > bx + bw - w)
-			nx = (short) (bx + bw - w);
-		if (nx < bx)
-			nx = bx;
-		if (ny > by + bh - h)
-			ny = (short) (by + bh - h);
-		if (ny < by)
-			ny = by;
-		if (nx != cx || ny != cy)
-		{
-			graf_mouse(M_OFF, NULL);
-			xor_frame(cx, cy, w, h);
-			xor_frame(nx, ny, w, h);
-			graf_mouse(M_ON, NULL);
-			cx = nx;
-			cy = ny;
-		}
+		*ex = x;                       /* (the AES refused: not moved) */
+		*ey = y;
 	}
-	graf_mouse(M_OFF, NULL);
-	xor_frame(cx, cy, w, h);
-	graf_mouse(M_ON, NULL);
 	graf_mouse(ARROW, NULL);
-	wind_update(2);                    /* END_MCTRL */
 	wind_update(END_UPDATE);
-	*ex = cx;
-	*ey = cy;
 }
 
 /* hypertext g filed under subject (""; none): in the index, kept,

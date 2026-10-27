@@ -104,6 +104,14 @@ def inf(start, paths="C:\\LIB1;C:\\LIB2"):
             f.write(b"PATHS=%s\r\n" % paths.encode())
 
 
+# an accessory's first boot (no MEMKB=, no HEAPKB= in its INF yet: each
+# case below that starts from inf()) may look once more, at the boot
+# root's *.ACC, to share the memory with the others loading (common's
+# accmem.c acc_count; guideline 6.5, a2a12bc). Later boots read only the
+# INF
+FIRST_BOOT_LOOK = 1
+
+
 def boot(name, wanted, idle=0, auto=None, timeout=900):
     """boot, wait for the EHV events wanted, idle seconds more: the trace,
     and the events with their times (the host's clock, fast-forward off)"""
@@ -289,8 +297,8 @@ def main():
     tr, seen = boot("s0", ["started"], idle=60)
     calls, across, events = parse(tr)
     each("0. START=opened, never opened, 60 s", calls, across, events, seen)
-    check(opens(calls) <= 1 and looks(calls) == 0, "0: EHYPVIEW.INF read once, nothing else (%d opens, %d looks)"
-          % (opens(calls), looks(calls)))
+    check(opens(calls) <= 1 and looks(calls) <= FIRST_BOOT_LOOK,
+          "0: EHYPVIEW.INF read once, nothing else (%d opens, %d looks; a first boot)" % (opens(calls), looks(calls)))
 
     # 1. the first index
     inf("now")
@@ -303,8 +311,9 @@ def main():
     # again for MEMKB=, read and written once
     budget = 3 + guides + refs + 2 + (2 if inf_written(calls) else 0)
     check(opens(calls) <= budget, "1: %d opens (budget %d: one per file)" % (opens(calls), budget))
-    check(looks(calls) <= roots + folders + 1, "1: %d looks (budget %d: the roots and folders once)"
-          % (looks(calls), roots + folders + 1))
+    check(looks(calls) <= roots + folders + 1 + FIRST_BOOT_LOOK,
+          "1: %d looks (budget %d: the roots and folders once; a first boot)"
+          % (looks(calls), roots + folders + 1 + FIRST_BOOT_LOOK))
     rest = not_inf(calls)
     check(count(rest, "Frename") == 1 and count(rest, "Fwrite") == 2,
           "1: the index written in two goes: its names, its head")

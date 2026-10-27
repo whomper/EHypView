@@ -336,7 +336,8 @@ are used as ST-Guide uses them. Its `DEFHYP` and `HYPTOP` aren't: EHypView start
 ## About EHypView
 
 **About EHypView...** (the first item of the EHypView menu, or the toolbar's ≡ menu) shows the
-version, the number of hypertexts found and the font in use.
+version, then on one line the number of hypertexts found and the font in use, and under it the
+memory: where EHypView is (ST or TT RAM) and how much is free.
 
 EHypView is free software under the GNU General Public License, version 2 or later. Its source,
 releases and what is new are at github.com/whomper/EHypView. It is one of the AERA programs, with
