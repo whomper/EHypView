@@ -143,8 +143,9 @@ make room first; the ≡ menu and the keys still reach everything.
 | ^+ / ^- (on the keypad, or ^= and ^-) | larger / smaller text |
 | ^, | settings |
 
-**EHypView > About EHypView...** (the first menu, where other programs have Desk) shows the version, the
-number of hypertexts found and the font in use.
+**EHypView > About EHypView...** (the first menu, where other programs have Desk) shows the version
+and the family's status lines (guidelines 1.3): the hypertexts found and the font in use, then the
+memory (`about_mem_line`, `common/ui/aboutline.c`); EHypView has no connection line.
 
 **Pop-ups** (links to a `@pnode`) open as a small framed box just below the link, over the page. A
 click on a link in the box follows it; any other click, or any key, closes the box and leaves the
