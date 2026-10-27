@@ -1636,6 +1636,7 @@ static void clip_command(int cmd)
 
 static void seealso_here(void);
 static void job_again(void);
+static void idx_check(void);
 static void show_request(const char *args);
 
 static void command(int cmd)
@@ -2629,7 +2630,8 @@ static void viewer_message(short *msg)
 			av_init("EHYPVIEW|ST-GUIDE");	/* a desktop started since */
 			wake();
 			font_check();
-			bookmarks_load();
+			bookmarks_load();          /* (the INF read again) */
+			idx_check();
 			pick_current();
 			if (cur->view.page != NULL)
 				open_window();
@@ -2882,6 +2884,24 @@ static int library_layout(void)
 	return v != NULL && atari_casecmp(v, "panes") == 0 ? LIB_PANES : LIB_OUTLINE;
 }
 
+/* PANECOLS=: the Subjects pane's width, dragged by its edge (0: the
+   default) */
+int app_pane_cols(void)
+{
+	const char *v = own_inf != NULL ? inf_get(own_inf, "PANECOLS") : NULL;
+
+	return v != NULL ? atoi(v) : 0;
+}
+
+void app_pane_cols_set(int cols)
+{
+	char v[8];
+
+	sprintf(v, "%d", cols);
+	settings_put("PANECOLS", v, "the width of the library's Subjects pane (Two panes), in characters, "
+		     "as its edge was dragged");
+}
+
 /* BOOKMARK1 to BOOKMARKn (or RECENTn) written back, in one go: the ones
    no longer used left empty */
 static int list_save(const ehv_bookmarks *list, const char *prefix, unsigned int *written,
@@ -3035,6 +3055,31 @@ static const inf_file *read_inf(void)
 	return stg;
 }
 
+static ehv_saver *saver;               /* EHYPVIEW.IDX written again, edited (below) */
+static void edits_again(void);
+static long edited_seen;               /* EDITED= when this edition last read or wrote EHYPVIEW.IDX */
+
+/* EDITED= in EHYPVIEW.INF: counted up each time an edition writes the
+   index edited, so that the other sees it from the INF it reads anyway
+   (no look at EHYPVIEW.IDX: the guidelines, 6.5) */
+static long edited_value(void)
+{
+	const char *v = own_inf != NULL ? inf_get(own_inf, "EDITED") : NULL;
+
+	return v != NULL ? atol(v) : 0;
+}
+
+/* the accessory opens (its INF read again): the program may have
+   written EHYPVIEW.IDX since, with subjects changed in its library;
+   then it is read again */
+static void idx_check(void)
+{
+	if (job != NULL || !job_over || saver != NULL || edited_value() == edited_seen)
+		return;
+	log_event("index", "changed", "read again");
+	job_again();
+}
+
 /* the job starts: the folders to look in, EHypView's own (PATHS= in
    EHYPVIEW.INF) and ST-GUIDE.INF's */
 static void job_begin(void)
@@ -3044,7 +3089,7 @@ static void job_begin(void)
 	unsigned int n;
 	char *p;
 
-	if (job != NULL || job_over)
+	if (job != NULL || job_over || saver != NULL)
 		return;
 	inf = read_inf();
 	n = ehv_default_roots(inf, own_inf != NULL ? inf_get(own_inf, "PATHS") : NULL, &roots);
@@ -3066,6 +3111,7 @@ static void job_end(const char *how)
 	ehv_libjob_free(job);
 	job = NULL;
 	job_over = 1;
+	edited_seen = edited_value();
 	log_event("index", how, NULL);
 	index_news = 1;
 	acc_mem_note(strcmp(how, "failed") == 0);
@@ -3125,6 +3171,7 @@ static void job_step(void)
 		/* the one before (if any) isn't read by the job any more */
 		ehv_index_free(idx);
 		idx = ehv_libjob_take(job);
+		edits_again();
 		set_index_everywhere();
 		sprintf(num, "%lu", idx->nguides);
 		log_event("index", num, "guides");
@@ -3149,10 +3196,129 @@ static void job_step(void)
 	}
 }
 
+/* ---------------------------------------------------------------- */
+/* the index edited in the library: hypertexts filed under other      */
+/* subjects (Erez, 27 Oct 2026; index.h: the index is where a         */
+/* hypertext belongs). Each change is kept for this run, by path, and */
+/* made again in every index the job hands over (it may have read the */
+/* hypertext before the change); EHYPVIEW.IDX is written again in     */
+/* steps once no job runs                                             */
+
+typedef struct
+{
+	char *path, *subject;              /* subject NULL: none */
+} index_edit;
+static index_edit *edits;
+static unsigned long nedits, cap_edits;
+static int save_due;                   /* EHYPVIEW.IDX to write again */
+
+static char *dup_str(const char *t)
+{
+	char *d = t != NULL ? malloc(strlen(t) + 1) : NULL;
+
+	if (d != NULL)
+		strcpy(d, t);
+	return d;
+}
+
+void app_index_edited(const unsigned long *g, unsigned long n)
+{
+	unsigned long i, k;
+
+	for (i = 0; idx != NULL && i < n; i++)
+	{
+		const ehv_guide *gd;
+		char *subj;
+
+		if (g[i] >= idx->nguides)
+			continue;
+		gd = &idx->guides[g[i]];
+		for (k = 0; k < nedits && strcmp(edits[k].path, gd->path) != 0; k++)
+			;
+		if (k == nedits)
+		{
+			if (nedits == cap_edits)
+			{
+				unsigned long cap = cap_edits ? cap_edits * 2 : 16;
+				index_edit *e = realloc(edits, cap * sizeof(*e));
+
+				if (e == NULL)
+					break;
+				edits = e;
+				cap_edits = cap;
+			}
+			if ((edits[k].path = dup_str(gd->path)) == NULL)
+				break;
+			edits[k].subject = NULL;
+			nedits++;
+		}
+		subj = dup_str(gd->subject);
+		free(edits[k].subject);
+		edits[k].subject = subj;
+		log_event("refiled", gd->path, gd->subject != NULL ? gd->subject : "");
+	}
+	save_due = 1;
+	if (saver != NULL)
+	{
+		/* the one being written is out of date: from the start */
+		ehv_index_save_abort(saver);
+		saver = NULL;
+	}
+}
+
+/* this run's changes, in an index the job handed over */
+static void edits_again(void)
+{
+	unsigned long k;
+
+	for (k = 0; idx != NULL && k < nedits; k++)
+	{
+		long g = ehv_index_find_path(idx, edits[k].path);
+
+		if (g >= 0)
+			ehv_index_set_subject(idx, (unsigned long) g, edits[k].subject);
+	}
+}
+
+/* a step of writing EHYPVIEW.IDX again: 1 while there is more */
+static int save_step(void)
+{
+	int r;
+
+	if (saver == NULL)
+	{
+		if (!save_due || idx == NULL || cache_path[0] == '\0')
+			return 0;
+		save_due = 0;
+		if ((saver = ehv_index_save_begin(idx, cache_path)) == NULL)
+		{
+			log_event("index", "not saved", NULL);
+			return 0;
+		}
+	}
+	r = ehv_index_save_some(saver, 1);
+	if (r == 0)
+		return 1;
+	ehv_index_save_abort(saver);       /* (frees it; a finished one stays) */
+	saver = NULL;
+	if (r > 0)
+	{
+		char v[16];
+
+		sprintf(v, "%ld", edited_value() + 1);
+		settings_put("EDITED", v, "counted up when the library's index was written with subjects changed "
+			     "(the other edition then reads it again)");
+		edited_seen = edited_value();
+	}
+	log_event("index", r > 0 ? "saved" : "not saved", "edited");
+	return 0;
+}
+
 /* there is work for the job now or later (bgwork.h decides when) */
 static int job_pending(void)
 {
-	return job != NULL || (!job_over && (woken || start_when != BG_OPENED));
+	return job != NULL || saver != NULL || (job_over && save_due) ||
+	       (!job_over && (woken || start_when != BG_OPENED));
 }
 
 /* a request that can't be answered without the index (a page name,
@@ -3731,7 +3897,7 @@ int main(void)
 				click(ev.mx, ev.my, ev.mbutton, ev.kstate);
 			}
 			else if (h == libwin_handle() && h > 0)
-				libwin_click(ev.mx, ev.my);
+				libwin_click(ev.mx, ev.my, ev.mbutton);
 		}
 		/* the index, in a slice (bgwork.h): not while the user works, nor
 		   while EHYPVIEW.PRG runs (it has the index to itself) */
@@ -3757,11 +3923,21 @@ int main(void)
 			   that opens a file or reads a folder begins a slice */
 			unsigned long t1 = tos_ms();
 
-			job_begin();
-			bg_begin();
-			do
-				job_step();
-			while (job != NULL && bg_more() && tos_ms() - t1 < 35 && !ehv_libjob_next_is_big(job));
+			if (saver != NULL || (job_over && save_due))
+			{
+				/* the index edited: written again, a piece a step */
+				aes_profile_tag("idx-save");
+				bg_begin();
+				while (save_step() && bg_more() && tos_ms() - t1 < 35)
+					;
+			} else
+			{
+				job_begin();
+				bg_begin();
+				do
+					job_step();
+				while (job != NULL && bg_more() && tos_ms() - t1 < 35 && !ehv_libjob_next_is_big(job));
+			}
 		}
 		/* the pages' pictures, the library's search through the
 		   names, its full-text search: a slice in a turn of its own,

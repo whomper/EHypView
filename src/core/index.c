@@ -115,6 +115,17 @@ long ehv_index_add_guide(ehv_index *idx, const ehv_guide *src)
 	return (long) idx->nguides++;
 }
 
+int ehv_index_set_subject(ehv_index *idx, unsigned long g, const char *subject)
+{
+	if (g >= idx->nguides)
+		return -1;
+	if (subject != NULL && subject[0] == '\0')
+		subject = NULL;
+	if (subject != NULL && idx->guides[g].subject != NULL && strcmp(subject, idx->guides[g].subject) == 0)
+		return 0;
+	return pdup(idx, &idx->guides[g].subject, subject);
+}
+
 #define REF_NAMES 16                    /* ALL.REF names merged a step */
 
 /* does ALL.REF's module (its file name) name guide g? */

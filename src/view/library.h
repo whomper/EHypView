@@ -136,6 +136,38 @@ void lib_free(ehv_library *lib);
 /* a new index (after a scan): rebuilds, stops a full-text search */
 int lib_set_index(ehv_library *lib, const ehv_index *idx);
 
+/*
+ * Hypertexts filed under other subjects (Erez, 27 Oct 2026): the index
+ * is where a hypertext belongs, its @subject only where it starts
+ * (index.h). These change the index the library shows, which the caller
+ * then saves.
+ *
+ * lib_pane_name       the Subjects line's own name: "Personal", or
+ *                     "Calendar" for the part "Personal/Calendar"; -1
+ *                     for a line that isn't a subject (Bookmarks, All
+ *                     hypertexts, Other hypertexts).
+ * lib_drop_subject    the subject hypertext g gets dropped on line p:
+ *                     on a subject, that subject with g's own part kept
+ *                     ("Personal/Calendar" onto Utilities: "Utilities/
+ *                     Calendar"); on a part, that part; on Other
+ *                     hypertexts none (""). -1: p takes no hypertexts.
+ * lib_rename_pane     line p renamed to `name` (no "/"): every hypertext
+ *                     under it (and its parts) gets the new name in
+ *                     idx; the guides changed listed in changed (max of
+ *                     them). Returns how many, -1 for a line that isn't
+ *                     a subject or out of memory. Rebuilds.
+ * lib_pane_of_row     the Subjects line an Outline heading (a GROUP row,
+ *                     a subject or a part) stands for, or -1.
+ * lib_subjects_changed  idx's subjects changed (ehv_index_set_subject):
+ *                     the panes and rows made again.
+ */
+int lib_pane_name(const ehv_library *lib, long p, char *buf, unsigned long size);
+int lib_drop_subject(const ehv_library *lib, unsigned long g, long p, char *buf, unsigned long size);
+long lib_rename_pane(ehv_library *lib, ehv_index *idx, long p, const char *name,
+		     unsigned long *changed, unsigned long max);
+long lib_pane_of_row(const ehv_library *lib, long row);
+int lib_subjects_changed(ehv_library *lib);
+
 /* new bookmarks (added or removed): rebuilds */
 int lib_set_bookmarks(ehv_library *lib, const ehv_bookmarks *bm);
 

@@ -279,6 +279,15 @@ void ehv_index_batch(unsigned long bytes);
 
 /* add a guide; returns its index or -1 when out of memory */
 long ehv_index_add_guide(ehv_index *idx, const ehv_guide *g);
+
+/*
+ * The index is where a hypertext belongs (Erez, 27 Oct 2026): its own
+ * @subject is read only the first time it is found; a rescan keeps the
+ * subject the index has (scan.c), and the library files a hypertext
+ * under another subject, or renames one, here. subject NULL or "": none.
+ * Saved with the index (ehv_index_save). -1: out of memory
+ */
+int ehv_index_set_subject(ehv_index *idx, unsigned long g, const char *subject);
 int ehv_index_add_sym(ehv_index *idx, unsigned long guide, unsigned char kind,
                       unsigned short line, const char *name, const char *node, int from_ref);
 

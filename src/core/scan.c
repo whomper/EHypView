@@ -683,6 +683,23 @@ static int same_ref(const ehv_guide *g, const char *ref, const pf_info *ri)
 	return strcmp(ref, g->ref_path) == 0 && ri->size == g->ref_size && ri->mtime == g->ref_mtime;
 }
 
+/* the index is where a hypertext belongs (index.h): one it knew before,
+   changed since or moved (the same file name, in another folder),
+   keeps the subject it had there; only one never seen takes its own
+   @subject */
+static const char *known_subject(const ehv_scan *s, const file_item *f, const char *own)
+{
+	long pg;
+	unsigned long hit;
+
+	if (s->prev == NULL)
+		return own;
+	pg = ehv_index_find_path(s->prev, f->path);
+	if (pg < 0 && ehv_index_find_guides(s->prev, fs_basename(f->path), &hit, 1) > 0)
+		pg = (long) hit;
+	return pg < 0 ? own : s->prev->guides[pg].subject;
+}
+
 /* read a hypertext from disk into the index: its guide now, its names
    (and those of its .REF) in the steps after */
 static int read_guide(ehv_scan *s, const file_item *f, ehv_guide *g)
@@ -695,7 +712,7 @@ static int read_guide(ehv_scan *s, const file_item *f, ehv_guide *g)
 	if (doc != NULL)
 	{
 		g->database = doc->database;
-		g->subject = doc->subject;
+		g->subject = known_subject(s, f, doc->subject);
 		g->author = doc->author;
 		g->version = doc->version;
 		g->hostname = doc->hostname;

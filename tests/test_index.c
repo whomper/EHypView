@@ -621,7 +621,28 @@ static void test_cache(ehv_index *idx, const ref_db *allref)
 	CHECK(again && again->norphans == 1);
 	ehv_index_free(again);
 
-	/* change one file: only that one is read */
+	/* the index is where a hypertext belongs (Erez, 27 Oct 2026): one
+	   filed elsewhere stays there in the index saved again (its names
+	   copied from its own file) */
+	{
+		long o = guide_named(loaded, "/deepest/Other.Hyp"), b;
+		ehv_index *back;
+
+		CHECK(o >= 0 && ehv_index_set_subject(loaded, (unsigned long) o, "Mine/Filed") == 0);
+		CHECK(ehv_index_save(loaded, cache) == 0);
+		back = ehv_index_load(cache);
+		CHECK(back != NULL);
+		if (back != NULL)
+		{
+			b = guide_named(back, "/deepest/Other.Hyp");
+			CHECK(b >= 0 && back->guides[b].subject != NULL && strcmp(back->guides[b].subject, "Mine/Filed") == 0);
+			CHECK(same_names(back, idx) && back->nsyms == idx->nsyms);
+		}
+		ehv_index_free(back);
+	}
+
+	/* change one file: only that one is read, and it stays where the
+	   index filed it, not under its own @subject */
 	copy_file("other_raw.hyp", tp("r1/sub/deeper/deepest/Other.Hyp"));
 	again = scan_tree(loaded, allref, &st);
 	CHECK(st.opened == 1 && st.reused == 4);
@@ -630,6 +651,7 @@ static void test_cache(ehv_index *idx, const ref_db *allref)
 		long o = guide_named(again, "/deepest/Other.Hyp");
 
 		CHECK(o >= 0 && sym_of(again, o, "Anfang", EHV_SYM_ALIAS) != NULL);
+		CHECK(o >= 0 && again->guides[o].subject != NULL && strcmp(again->guides[o].subject, "Mine/Filed") == 0);
 	}
 	ehv_index_free(again);
 	ehv_index_free(loaded);

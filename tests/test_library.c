@@ -430,6 +430,96 @@ static void test_subjects(void)
 }
 
 /*
+ * Filing hypertexts under other subjects (Erez, 27 Oct 2026): the
+ * subject a hypertext dropped on a Subjects line gets, and renaming a
+ * subject or a part in the index.
+ */
+static void test_refile(void)
+{
+	static const char *subj[] = { "Develop/Utilities", "Develop", "Documentation/Develop/Editors",
+				      "COPS", NULL };
+	static const char *title[] = { "u1", "doc", "ed", "cops", "none" };
+	ehv_guide g[5];
+	ehv_index idx;
+	ehv_library lib;
+	char t[120];
+	unsigned long changed[8];
+	unsigned int i;
+	long p;
+
+	memset(&idx, 0, sizeof(idx));
+	memset(g, 0, sizeof(g));
+	for (i = 0; i < 5; i++)
+	{
+		g[i].path = title[i];
+		g[i].key = title[i];
+		g[i].database = title[i];
+		g[i].subject = subj[i];
+	}
+	idx.guides = g;
+	idx.nguides = 5;
+	lib_init(&lib, &idx);
+	lib_set_layout(&lib, LIB_PANES);
+
+	/* a subject's own name, a part's own name; not for All or Other */
+	p = pane_of(&lib, "Develop");
+	CHECK(lib_pane_name(&lib, p, t, sizeof(t)) == 0 && strcmp(t, "Develop") == 0);
+	CHECK(lib_pane_name(&lib, p + 1, t, sizeof(t)) == 0 && strcmp(t, "Editors") == 0);
+	CHECK(lib_pane_name(&lib, 0, t, sizeof(t)) < 0);
+
+	/* dropped: on a subject the part is kept, on a part that part, on
+	   Other hypertexts none, on All nothing */
+	CHECK(lib_drop_subject(&lib, 0, pane_of(&lib, "COPS"), t, sizeof(t)) == 0 && strcmp(t, "COPS/Utilities") == 0);
+	CHECK(lib_drop_subject(&lib, 1, pane_of(&lib, "COPS"), t, sizeof(t)) == 0 && strcmp(t, "COPS") == 0);
+	CHECK(lib_drop_subject(&lib, 3, p + 1, t, sizeof(t)) == 0 && strcmp(t, "Develop/Editors") == 0);
+	CHECK(lib_drop_subject(&lib, 3, (long) lib.npanes - 1, t, sizeof(t)) == 0 && t[0] == '\0');
+	CHECK(lib_drop_subject(&lib, 3, 0, t, sizeof(t)) < 0);
+
+	/* filed there: the index says so, and the panes follow */
+	CHECK(ehv_index_set_subject(&idx, 3, "Develop/Editors") == 0 && strcmp(g[3].subject, "Develop/Editors") == 0);
+	CHECK(lib_subjects_changed(&lib) == 0);
+	CHECK(pane_of(&lib, "COPS") < 0 && lib.panes[pane_of(&lib, "Develop") + 1].count == 2);
+	CHECK(ehv_index_set_subject(&idx, 3, "") == 0 && g[3].subject == NULL);
+	CHECK(lib_subjects_changed(&lib) == 0 && lib.panes[lib.npanes - 1].kind == PANE_OTHER &&
+	      lib.panes[lib.npanes - 1].count == 2);
+
+	/* a subject renamed: it and its parts, "Documentation/" left out;
+	   the line chosen stays chosen */
+	p = pane_of(&lib, "Develop");
+	CHECK(lib_pane_select(&lib, p) == p);
+	CHECK(lib_rename_pane(&lib, &idx, p, "Tools", changed, 8) == 3);
+	CHECK(strcmp(g[0].subject, "Tools/Utilities") == 0 && strcmp(g[1].subject, "Tools") == 0 &&
+	      strcmp(g[2].subject, "Tools/Editors") == 0);
+	CHECK(changed[0] == 0 && changed[1] == 1 && changed[2] == 2);
+	CHECK(pane_of(&lib, "Develop") < 0 && lib.pane == pane_of(&lib, "Tools"));
+	/* a part renamed: only it */
+	p = pane_of(&lib, "Tools");
+	CHECK(lib_pane_name(&lib, p + 1, t, sizeof(t)) == 0 && strcmp(t, "Editors") == 0);
+	CHECK(lib_rename_pane(&lib, &idx, p + 1, "Text", changed, 8) == 1 && strcmp(g[2].subject, "Tools/Text") == 0);
+	CHECK(strcmp(g[0].subject, "Tools/Utilities") == 0);
+	/* the Outline's headings stand for the same lines */
+	lib_set_layout(&lib, LIB_OUTLINE);
+	{
+		unsigned long r;
+		long tools = -1, text = -1;
+
+		for (r = 0; r < lib.nrows; r++)
+			if (lib.rows[r].kind == LIB_GROUP && strcmp(lib.rows[r].text, "Tools") == 0)
+				tools = lib_pane_of_row(&lib, (long) r);
+			else if (lib.rows[r].kind == LIB_GROUP && strcmp(lib.rows[r].text, "Text") == 0)
+				text = lib_pane_of_row(&lib, (long) r);
+		CHECK(tools == pane_of(&lib, "Tools") && text == pane_of(&lib, "Text") && text == tools + 1);
+		CHECK(lib_pane_of_row(&lib, (long) lib.nrows - 1) < 0);
+	}
+	lib_set_layout(&lib, LIB_PANES);
+	/* not a subject, an empty name or one with "/" */
+	CHECK(lib_rename_pane(&lib, &idx, 0, "X", NULL, 0) < 0);
+	CHECK(lib_rename_pane(&lib, &idx, p, "", NULL, 0) < 0 && lib_rename_pane(&lib, &idx, p, "a/b", NULL, 0) < 0);
+	lib_free(&lib);
+	pool_free(&idx.pool);
+}
+
+/*
  * "Documentation/Editors" and "Dokumentation/Editoren" are filed under
  * their part (Erez, 22 Oct 2026): no Documentation subject over them.
  */
@@ -658,6 +748,7 @@ int main(int argc, char **argv)
 		test_layouts(idx);
 		test_names(idx);
 		test_subjects();
+		test_refile();
 	test_documentation();
 		test_defer_rows(idx);
 		test_fulltext(idx);

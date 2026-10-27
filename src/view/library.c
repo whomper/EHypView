@@ -1095,6 +1095,140 @@ int lib_set_index(ehv_library *lib, const ehv_index *idx)
 	return rebuild(lib, 0, 0);
 }
 
+/* ---------------------------------------------------------------- */
+/* filing hypertexts under other subjects (the index is where a       */
+/* hypertext belongs: index.h)                                        */
+
+int lib_pane_name(const ehv_library *lib, long p, char *buf, unsigned long size)
+{
+	const lib_pane *pn;
+
+	if (p < 0 || (unsigned long) p >= lib->npanes || lib->panes[p].kind != PANE_SUBJECT)
+		return -1;
+	pn = &lib->panes[p];
+	if (pn->level)
+		snprintf(buf, size, "%s", subj_part(pn->subj));
+	else
+		snprintf(buf, size, "%.*s", (int) subj_top(pn->subj), pn->subj);
+	return 0;
+}
+
+int lib_drop_subject(const ehv_library *lib, unsigned long g, long p, char *buf, unsigned long size)
+{
+	const lib_pane *pn;
+	const char *own, *part;
+
+	if (p < 0 || (unsigned long) p >= lib->npanes || lib->idx == NULL || g >= lib->idx->nguides)
+		return -1;
+	pn = &lib->panes[p];
+	buf[0] = '\0';
+	if (pn->kind == PANE_OTHER)
+		return 0;
+	if (pn->kind != PANE_SUBJECT)
+		return -1;
+	if (pn->level)
+	{
+		snprintf(buf, size, "%s", pn->subj);
+		return 0;
+	}
+	/* a subject: the hypertext's own part kept under it */
+	own = lib_subject(lib->idx->guides[g].subject);
+	part = own != NULL ? subj_part(own) : NULL;
+	if (part != NULL)
+		snprintf(buf, size, "%.*s/%s", (int) subj_top(pn->subj), pn->subj, part);
+	else
+		snprintf(buf, size, "%.*s", (int) subj_top(pn->subj), pn->subj);
+	return 0;
+}
+
+long lib_pane_of_row(const ehv_library *lib, long row)
+{
+	unsigned long r, k;
+	int level;
+	const char *subj = NULL;
+
+	if (row < 0 || (unsigned long) row >= lib->nrows || lib->rows[row].kind != LIB_GROUP || lib->idx == NULL)
+		return -1;
+	level = (lib->rows[row].flags & LIB_SUB) != 0;
+	if (!level)
+	{
+		/* a subject: by its name (folded, it has no rows under it) */
+		for (k = 0; k < lib->npanes; k++)
+			if (lib->panes[k].kind == PANE_SUBJECT && lib->panes[k].level == 0 &&
+			    lib->rows[row].text != NULL && atari_casecmp(lib->panes[k].text, lib->rows[row].text) == 0)
+				return (long) k;
+		return -1;
+	}
+	/* a part: by its first hypertext's subject (parts of different
+	   subjects may share a name) */
+	for (r = (unsigned long) row + 1; r < lib->nrows && subj == NULL; r++)
+	{
+		if (lib->rows[r].kind == LIB_GROUP)
+			break;                 /* the next heading: none under this one */
+		if (lib->rows[r].kind == LIB_GUIDE && lib->rows[r].ref < lib->idx->nguides)
+			subj = lib_subject(lib->idx->guides[lib->rows[r].ref].subject);
+	}
+	if (subj == NULL)
+		return -1;
+	for (k = 0; k < lib->npanes; k++)
+		if (lib->panes[k].kind == PANE_SUBJECT && lib->panes[k].level == level && in_pane(&lib->panes[k], subj))
+			return (long) k;
+	return -1;
+}
+
+long lib_rename_pane(ehv_library *lib, ehv_index *idx, long p, const char *name,
+		     unsigned long *changed, unsigned long max)
+{
+	const lib_pane *pn;
+	char from[LIB_PANE_TEXT + 64], top[LIB_PANE_TEXT + 1], key[sizeof(lib->pane_name)];
+	unsigned long g, n = 0;
+	int level, chosen;
+
+	if (p < 0 || (unsigned long) p >= lib->npanes || lib->panes[p].kind != PANE_SUBJECT ||
+	    idx == NULL || name == NULL || name[0] == '\0' || strchr(name, '/') != NULL)
+		return -1;
+	pn = &lib->panes[p];
+	level = pn->level;
+	chosen = p == lib->pane;
+	/* what is matched, kept here: renaming changes the strings pn->subj
+	   is among */
+	snprintf(from, sizeof(from), "%s", pn->subj);
+	snprintf(top, sizeof(top), "%.*s", (int) subj_top(pn->subj), pn->subj);
+	for (g = 0; g < idx->nguides; g++)
+	{
+		const char *own = lib_subject(idx->guides[g].subject);
+		char now[256];
+
+		if (own == NULL || !(level ? same_subject(own, from) : same_top(own, from)))
+			continue;
+		if (level)
+			snprintf(now, sizeof(now), "%s/%s", top, name);
+		else
+			snprintf(now, sizeof(now), "%s%s", name, own + subj_top(own));
+		if (ehv_index_set_subject(idx, g, now) < 0)
+			return -1;
+		if (changed != NULL && n < max)
+			changed[n] = g;
+		n++;
+	}
+	/* the line chosen goes on being chosen under its new name */
+	if (chosen)
+	{
+		if (level)
+			snprintf(key, sizeof(key), "%s/%s", top, name);
+		else
+			snprintf(key, sizeof(key), "%s", name);
+		snprintf(lib->pane_name, sizeof(lib->pane_name), "%s", key);
+	}
+	return lib_subjects_changed(lib) < 0 ? -1 : (long) n;
+}
+
+int lib_subjects_changed(ehv_library *lib)
+{
+	lib->order_of = NULL;             /* the order and the panes made again */
+	return rebuild(lib, 1, 0);
+}
+
 int lib_set_bookmarks(ehv_library *lib, const ehv_bookmarks *bm)
 {
 	lib->bm = bm;

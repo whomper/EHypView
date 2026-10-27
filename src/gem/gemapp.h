@@ -63,7 +63,7 @@ short libwin_handle(void);
 int libwin_iconified(void);               /* shown as the icon */
 int libwin_message(short *msg);           /* 1 when the message was for it */
 void libwin_key(short kstate, short kreturn);
-void libwin_click(short mx, short my);
+void libwin_click(short mx, short my, short button);
 void libwin_clip(int what);               /* ^C ^X ^V: CLIP_COPY, ... (clip.h) */
 int libwin_idle(void);                    /* 1 while the search or full-text search runs, | 2 when the slice ends (it drew, has drawing due, or had the slice) */
 int libwin_busy(void);                    /* the same, without working */
@@ -74,6 +74,12 @@ void libwin_bookmarks(const ehv_bookmarks *bm);  /* added or removed: shown agai
 void libwin_recent(const ehv_bookmarks *recent); /* the pages read last */
 void libwin_layout(int layout);                  /* LIB_OUTLINE, LIB_PANES (LIBRARY=) */
 void app_bookmark_remove(int i);         /* Delete in the library, the menu */
+/* the library filed these hypertexts (idx->guides) under other subjects:
+   kept for this run and EHYPVIEW.IDX written again (ehypview.c) */
+void app_index_edited(const unsigned long *g, unsigned long n);
+/* the Subjects pane's width in characters (PANECOLS=), and a new one */
+int app_pane_cols(void);
+void app_pane_cols_set(int cols);
 
 /* ehypview.c: EHYPVIEW.INF, in the boot drive's root (the AERA
    guidelines, 6.1): key=value set, the rest of the file kept; note is the

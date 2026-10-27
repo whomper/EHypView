@@ -382,6 +382,14 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             if k[1]:
                 send("hatari-event keyup 0x%x" % k[1])
                 time.sleep(0.2)
+        elif isinstance(k, tuple) and k[0] == "drag":       # press, glide there, let go
+            mouse.move(k[1], k[2])
+            mouse.xdo("mousedown", "1")
+            time.sleep(0.4)
+            mouse.move(k[3], k[4])
+            time.sleep(0.3)
+            mouse.xdo("mouseup", "1")
+            time.sleep(1)
         elif isinstance(k, tuple) and k[0] == "wait":
             time.sleep(k[1])
         elif isinstance(k, tuple) and k[0] == "still":     # till the screen stops changing
@@ -1059,6 +1067,49 @@ def panebar():
         xvfb.terminate()
 
 
+# hypertexts filed under other subjects (Erez, 27 Oct 2026; the index is
+# where a hypertext belongs): the twenty of the pane bar's run, each its
+# own subject, SubNN/EHypVie. A right click on a row chooses it and shows
+# its menu, never opens it; S00 dragged onto Sub01 is filed there; Sub01
+# renamed tools through its menu (Esc empties the name first); the edge
+# between the panes dragged wider (PANECOLS=); the index written again
+# holds the new subject. Screenshots refile-NN on Falcon:16
+REFILE_STEPS = [
+    ([], ["library *", "library-layout panes", "library-bar *", "index 20 guides"]),
+    ([("home",), ("hover", 620, 380), ("still", 3)], []),   # (off the menu bar)
+    ([("rclick", 330, 183)], ["menu row", "!page *"]),
+    ([ESC], ["!page *"]),
+    ([("drag", 330, 183, 60, 204)], [r"refiled C:\GUIDES\S00.HYP Sub01/EHypVie", "index saved edited"]),
+    ([("rclick", 60, 160)], ["menu subject"]),
+    ([("click", 100, 171)], ["dialog ask *"]),
+    ([ESC] + typed("tools") + [RETURN], ["dialog-closed ask tools", r"refiled C:\GUIDES\S00.HYP tools/EHypVie",
+                                         r"refiled C:\GUIDES\S01.HYP tools/EHypVie", "index saved edited"]),
+    ([("drag", 224, 300, 304, 300)], ["pane-cols *"]),
+    ([("hover", 620, 470), ("still", 5)], []),
+    ([("ctrl", Q)], ["quit"]),
+]
+
+
+def refile():
+    d = copy_dir("refile", "PATHS=C:\\GUIDES\n", "; the layout\nLIBRARY=panes\n")
+    shutil.rmtree(os.path.join(d, "FIXT"))
+    os.makedirs(os.path.join(d, "GUIDES"))
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "colour.hyp"), "rb") as f:
+        hyp = f.read()
+    for i in range(20):
+        with open(os.path.join(d, "GUIDES", "S%02d.HYP" % i), "wb") as f:
+            f.write(hyp.replace(b"Test/EHypView", b"Sub%02d/EHypVie" % i))
+    xvfb = start_xvfb()
+    try:
+        ok = run_scenario("refile", d, REFILE_STEPS, windowed=True)
+    finally:
+        xvfb.terminate()
+    with open(os.path.join(d, "EHYPVIEW.IDX"), "rb") as f:
+        held = f.read().count(b"tools/EHypVie")
+    print("%s  EHYPVIEW.IDX files %d hypertexts under tools/EHypVie" % ("ok  " if held == 2 else "FAIL", held))
+    return ok and held == 2 and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["PANECOLS=*"])
+
+
 # the README's pictures (make shots): the family's guides from their latest
 # releases and EHypView's own in C:\\GUIDES, on the Falcon; each step's
 # screenshot named in SHOT_FILES goes to docs/
@@ -1157,6 +1208,8 @@ def main():
         return 0 if st_field() else 1
     if sys.argv[3:] == ["look"]:                    # the dialogs' look alone (5.6)
         return 0 if look() else 1
+    if sys.argv[3:] == ["refile"]:                  # hypertexts filed under other subjects alone
+        return 0 if refile() else 1
     if sys.argv[3:4] == ["panebar"]:                # the Subjects pane's bar alone (5.1)
         return 0 if panebar() else 1
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
@@ -1200,6 +1253,7 @@ def main():
             ok = ok and st_field()
             ok = ok and look()
             ok = ok and panebar()
+            ok = ok and refile()
         else:
             print("skip  mouse: needs Xvfb and xdotool")
     if ok:
