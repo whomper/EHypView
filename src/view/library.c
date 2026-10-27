@@ -808,6 +808,17 @@ static int search_start(ehv_library *lib)
 	return rc < 0 ? -1 : gather(lib);
 }
 
+/* the rows again with what the search found since: the row chosen
+   stays, but not the full-text line, chosen only while nothing else was
+   found yet (1.28: Return then searched the full text, with the page
+   found right above it) */
+static int found_more(ehv_library *lib)
+{
+	int keep = !(lib->sel >= 0 && (unsigned long) lib->sel < lib->nrows && lib->rows[lib->sel].kind == LIB_ACTION);
+
+	return gather(lib) < 0 || rebuild(lib, keep, 0) < 0 ? -1 : 0;
+}
+
 int lib_search_step(ehv_library *lib, unsigned int budget, int (*more)(void))
 {
 	char folded[LIB_QUERY_MAX];
@@ -858,13 +869,13 @@ int lib_search_step(ehv_library *lib, unsigned int budget, int (*more)(void))
 			return 0;
 		if (lib->defer_rows)
 			return lib->rows_stale = 1, 2;
-		return gather(lib) < 0 || rebuild(lib, 1, 0) < 0 ? -1 : 2;
+		return found_more(lib) < 0 ? -1 : 2;
 	}
 	ehv_names_close(&lib->scan);
 	lib->scanning = 0;
 	if (lib->defer_rows)
 		return lib->rows_stale = 1, 1;
-	return gather(lib) < 0 || rebuild(lib, 1, 0) < 0 ? -1 : 1;
+	return found_more(lib) < 0 ? -1 : 1;
 }
 
 int lib_rows_update(ehv_library *lib)
@@ -879,7 +890,7 @@ int lib_rows_update(ehv_library *lib)
 	if (!lib->rows_stale)
 		return 0;
 	lib->rows_stale = 0;
-	return gather(lib) < 0 || rebuild(lib, 1, 0) < 0 ? -1 : 0;
+	return found_more(lib);
 }
 
 static int build_pages(ehv_library *lib)

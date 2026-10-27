@@ -126,7 +126,7 @@ In both layouts:
 - **Bookmarks** come first: all of them with an empty search, the ones that match while you type.
 - **Keys:** Up and Down to choose, Return or a click to open, Backspace to take out a letter,
   Delete to remove the bookmark chosen. ^V pastes into the search, ^X cuts it, ^C copies the
-  hypertext chosen. Help opens this guide. Esc leaves the search as it is.
+  hypertext chosen. Help opens this guide. Esc empties the search; the window stays.
 
 The pages read last are kept in `EHYPVIEW.INF` when a viewer window closes and when EHypView ends,
 not at every page.
@@ -174,15 +174,16 @@ and its Font dialog lists the fonts it knows "from the next start".
 ## Settings
 
 **Options > Settings...** (^,; in the accessory, the toolbar's ≡ menu) shows what `EHYPVIEW.INF`
-holds, on two pages. OK keeps the changes, Cancel (or Esc, or Undo) forgets them.
+holds, on two pages. OK keeps the changes, Cancel (or Undo, or Esc) forgets them; in a folder's
+field Esc empties the field instead, as in every GEM dialog.
 
 - **General:** when the accessory looks through the library: **When first opened** (the first time
   you open it, or a program asks it for a page), **At start**, **After a minute** or **After 5
   minutes**. It takes effect at the next start. The program looks as it starts. Under it,
   EHypView's folder: where the library's index (`EHYPVIEW.IDX`) and the fonts measured
-  (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` was started from. Last, **3D dialogs**:
-  where the system draws dialogs in 3D (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour), EHypView's
-  dialogs and alerts are in 3D; untick it for the flat look. It is greyed where the system has no 3D.
+  (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` was started from. Where the system draws
+  dialogs in 3D (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour), EHypView's dialogs and alerts are
+  in 3D, as every other program's.
 - **Library:** its layout, **Outline** or **Two panes** (see [the library](#the-library)); up to
   three more folders to look for hypertexts in, each with its subfolders. A folder's field holds
   a path of up to 128 characters, more than it shows: it scrolls as you type, the cursor keys
@@ -217,10 +218,15 @@ The font is chosen with **View > Font...**, and bookmarks from the Bookmarks men
 
 - **The Help key.** EMail, EFTP, ECal, EContact and ClaudeST open their guides in EHypView with the
   Help key when it runs (as an accessory, or as a program under MultiTOS or MagiC): they look for
-  EHypView first, then ST-Guide and HypView. Any program or desktop can hand it a hypertext and a page the same way, with the AV protocol's `VA_START`, or as
+  the viewer named by `STGUIDE` (below) first, then EHypView, ST-Guide and HypView. Any program or
+  desktop can hand it a hypertext and a page the same way, with the AV protocol's `VA_START`, or as
   ST-Guide with `AC_HELP`.
   Under MiNT and MagiC, when no viewer runs, their Help key starts EHYPVIEW.PRG beside them, on
   the page asked for, once the program has run one time (it writes its folder into EHYPVIEW.INF).
+- **Another viewer.** If you read hypertexts with another viewer, name it in the system's
+  environment as `STGUIDE`, as ST-Guide started the custom: `setenv STGUIDE C:\HYPVIEW\HYPVIEW.APP`
+  in `XAAES.CNF`, or `#_ENV STGUIDE=C:\HYPVIEW\HYPVIEW.APP` in `MAGX.INF`. The AERA programs then ask
+  that viewer first, and start it rather than EHypView when none runs.
 - **Drag and drop.** Under MultiTOS, MagiC or XaAES, a hypertext dragged onto EHypView's windows
   opens. The accessory tells the desktop about its windows, so Thing and the like can drop one on
   them under plain TOS too.
@@ -228,7 +234,7 @@ The font is chosen with **View > Font...**, and bookmarks from the Bookmarks men
   library ^C copies the hypertext chosen, and ^V and ^X paste into and cut the search.
 - **Dialogs under MiNT and MagiC.** Where the system runs several programs at once (MiNT with
   XaAES, N.AES or MyAES; MagiC), the alerts are the system's own, and Settings, Font and About open
-  in windows: they can be moved, the closer works as Esc, and the other programs go on running.
+  in windows: they can be moved, the closer works as Undo, and the other programs go on running.
 - **Iconify.** Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the viewer and the
   library shrink to EHypView's icon. A page asked for by another program brings the viewer back.
 
@@ -257,7 +263,9 @@ Most menu items have a key, shown beside them in the menu.
 | ⇧^F | choose the font |
 | ^+ / ^- | larger / smaller text (on the keypad, or ^= and ^-) |
 | ^, | settings |
-| ^W or ^U | close the window in front |
+| ^U | close the window in front |
+| ^W | the next of EHypView's windows in front, in turn |
+| Esc | in the library, empty the search; in a dialog's field, empty it; in a dialog without one, cancel |
 | ^Q | quit (the accessory: close its windows) |
 
 ## EHYPVIEW.INF
@@ -271,7 +279,6 @@ keeps the notes, and anything it doesn't know, when it writes the file. [Setting
 | `FOLDER=` | EHypView's folder, for `EHYPVIEW.IDX` and `EHYPVIEW.FNT`: the program writes the folder it was started from |
 | `START=` | when the accessory looks through the library: `opened`, `now`, or seconds after boot |
 | `LIBRARY=` | the library's layout: `outline` or `panes` |
-| `DIALOGS3D=` | `1`: dialogs in 3D where the system draws them; `0`: flat |
 | `PATHS=` | more folders to look in, between `;` |
 | `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
 | `PAGEKB=` | the part of it its pages needed at the most, in KB: grows when a viewer window closes having needed more |

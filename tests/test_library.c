@@ -512,7 +512,7 @@ static int run_fulltext(ehv_library *lib)
    way: lib_rows_update in a turn of its own): the same rows */
 static void test_defer_rows(const ehv_index *idx)
 {
-	static const char *const qs[] = { "det", "Secnd", "ag", "image" };
+	static const char *const qs[] = { "det", "Secnd", "ag", "image", "etail", "econd" };
 	unsigned int i;
 
 	for (i = 0; i < sizeof(qs) / sizeof(qs[0]); i++)
@@ -533,6 +533,11 @@ static void test_defer_rows(const ehv_index *idx)
 		CHECK(a.nrows == b.nrows && a.npages == b.npages);
 		for (r = 0; r < a.nrows && r < b.nrows; r++)
 			CHECK(a.rows[r].kind == b.rows[r].kind && a.rows[r].ref == b.rows[r].ref);
+		/* the row chosen too: not the full-text line, chosen while the
+		   search had found nothing yet (1.28: Return searched the full
+		   text for "viewer" with the page found) */
+		CHECK(a.sel == b.sel);
+		CHECK(b.npages == 0 || (b.sel >= 0 && b.rows[b.sel].kind == LIB_PAGE));
 		lib_free(&a);
 		lib_free(&b);
 	}

@@ -43,6 +43,7 @@ enum {
 	CMD_SEEALSO,                   /* the page's @xref list, as a menu */
 	CMD_SETTINGS,                  /* the Settings dialog (EHYPVIEW.INF) */
 	CMD_GUIDE,                     /* EHypView's own guide, EHYPVIEW.HYP */
+	CMD_NEXTWIN,                   /* ^W: the next of its windows on top */
 	CMD_BM0,                       /* open bookmark 0 ... */
 	CMD_COUNT = CMD_BM0 + BM_MAX
 };

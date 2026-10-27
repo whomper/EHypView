@@ -203,6 +203,43 @@ char *inf_put(const char *text, const char *key, const char *value, const char *
 	return out;
 }
 
+char *inf_drop(const char *text, const char *key)
+{
+	size_t tl = strlen(text);
+	const char *p = text, *note = NULL;
+	char *out = malloc(tl + 1), *o = out;
+
+	if (out == NULL)
+		return NULL;
+	while (*p)
+	{
+		const char *e = strchr(p, '\n'), *next;
+		size_t len = e ? (size_t) (e - p) + 1 : strlen(p);
+
+		next = p + len;
+		if (*p == ';')
+		{
+			if (note == NULL)
+				note = o;          /* where the notes above a line start */
+		} else if (sets(p, key))
+		{
+			if (note != NULL)
+				o = (char *) note; /* its notes go with it */
+			note = NULL;
+			if (*next == '\n' || (next[0] == '\r' && next[1] == '\n'))
+				next += *next == '\n' ? 1 : 2;	/* and the empty line after it */
+			p = next;
+			continue;
+		} else
+			note = NULL;
+		memcpy(o, p, len);
+		o += len;
+		p = next;
+	}
+	*o = '\0';
+	return out;
+}
+
 unsigned int inf_split_list(const char *value, char ***out)
 {
 	unsigned int n = 0, max = 1;

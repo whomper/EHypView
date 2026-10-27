@@ -36,7 +36,7 @@ BASIC = r"C:\FIXT\BASIC.HYP"
 OTHER = r"C:\FIXT\SUB\DEEP\OTHER.HYP"
 
 TAB, RETURN, BACKSPACE, HELP, UNDO, ESC = 15, 28, 14, 0x62, 0x61, 1
-RIGHT, LEFT, Q, L, W, I, F, CTRL, SHIFT = 0x4D, 0x4B, 0x10, 0x26, 0x11, 0x17, 0x21, 29, 0x2A
+RIGHT, LEFT, Q, L, W, U, I, F, CTRL, SHIFT = 0x4D, 0x4B, 0x10, 0x26, 0x11, 0x16, 0x17, 0x21, 29, 0x2A
 MINUS, EQUALS = 0x0C, 0x0D
 N, D, DELETE = 0x31, 0x20, 0x53
 DOWN, UP = 0x50, 0x48
@@ -97,9 +97,10 @@ STEPS = [
     ([("type", "det")], ['search "det" 1']),                 # page names as you type
     ([RETURN], ["page %s Detail" % OTHER]),
     ([("ctrl", L)], ["library 4"]),
-    # Esc clears no text (the guidelines, 3.5): the search is still "det",
-    # and Backspace takes it out a letter at a time
-    ([ESC], []),
+    # Esc empties the search (the guidelines, 3.5, GEM's way) and the window
+    # stays; Backspace takes text out a letter at a time
+    ([ESC], ['search "" 4']),
+    ([("type", "det")], ['search "det" 1']),
     ([BACKSPACE], ['search "de" *']),
     ([BACKSPACE, BACKSPACE], ['search "" 4']),
     ([("type", "beside")], ['search "beside" 0']),
@@ -117,16 +118,21 @@ STEPS = [
     ([ESC], ["alert-closed six-windows 1", "!window new *"]),
     ([("ctrl", N)], ["alert six-windows"]),
     ([UNDO], ["alert-closed six-windows 1", "!window new *"]),
-    ([("ctrl", W)], ["closed viewer"]),
-    ([("ctrl", W)], ["closed viewer"]),
-    ([("ctrl", W)], ["closed viewer"]),
-    ([("ctrl", W)], ["closed viewer"]),
+    # ^W: the next window on top, in turn (3.2): after the sixth viewer the
+    # library, then the viewers from the first, round to the sixth again;
+    # ^U closes the one in front
+    ([("ctrl", W)] * 7, ["next-window library"] + ["next-window viewer %d" % i for i in range(1, 7)]),
+    ([("ctrl", U)], ["closed viewer"]),
+    ([("ctrl", U)], ["closed viewer"]),
+    ([("ctrl", U)], ["closed viewer"]),
+    ([("ctrl", U)], ["closed viewer"]),
     ([("ctrl", D)], ["bookmark added *"]),
     ([("ctrl", D)], ["status This page is bookmarked already."]),
-    ([("ctrl", W)], ["closed viewer"]),                # the first window stays
+    ([("ctrl", U)], ["closed viewer"]),                # the first window stays
     # with the menu bar the program stays when its windows are closed
-    ([("ctrl", W)], ["closed viewer"]),
-    ([("ctrl", W)], ["closed library"]),
+    ([("ctrl", U)], ["closed viewer"]),
+    ([("ctrl", W)], ["!next-window *"]),               # one window, the library: nothing
+    ([("ctrl", U)], ["closed library"]),
     ([("ctrl", L)], ["library 4"]),
     ([BACKSPACE] * 6, ['search "" 4']),                # the search typed before, taken out:
     ([ESC], []),                                       # Esc with none: nothing, the window stays
@@ -525,9 +531,10 @@ OPTIONS, HELPMENU = (444, 9), (504, 9)
 
 # the Settings dialog, centred on the screen: its pages on the left, the
 # START= popup on General; on Library the layout's popup and its second
-# choice, the first folder field
-SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 187), (320, 203), (300, 236), (300, 237)
-SET_LAYOUT, SET_LAYOUT_PANES = (340, 181), (330, 214)
+# choice (a pop-up opens over its button, the choice shown on it: the
+# second just below), the first folder field
+SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 187), (320, 203), (300, 219), (300, 237)
+SET_LAYOUT, SET_LAYOUT_PANES = (340, 181), (330, 197)
 SET_ORIGIN = (89, 102)          # where the dialog is on 640 x 480, which SET_* are measured on
 
 
@@ -612,7 +619,7 @@ MOUSE_STEPS = [
     ([("wait", 1)], []),                                    # (a picture of it)
     ([("type", "sec")], ['search "sec" *']),
     ([BACKSPACE] * 3, ['search "" 4']),
-    ([("ctrl", W)], ["closed library"]),
+    ([("ctrl", U)], ["closed library"]),
     # the page: links, the right button's menu, pop-ups
     ([("click", vx(120), 142)], ["page %s Second" % BASIC]),    # "to Second"
     ([("rclick", vx(300), 174)], ["menu popup"]),               # right button: the menu,
@@ -627,10 +634,10 @@ MOUSE_STEPS = [
     ([("click", 320, 300)], []),                            # a click closes it
     ([item(DESK, 0)], ["menu about", "dialog about *"]),    # the About box
     ([("click", 320, 300)], []),                            # a click closes it
-    # Settings: START= from the popup, three folders on the Library page;
-    # one that isn't there is asked about (Esc: Change, back to the page),
-    # then kept; OK writes EHYPVIEW.INF and looks through the library again.
-    # The third is longer than its field shows (5.4), typed with an X in
+    # Settings: START= from the popup, three folders on the Library page
+    # (Esc in a field empties it); one that isn't there is asked about
+    # (Esc: Change, back to the page), then kept; OK writes EHYPVIEW.INF
+    # and looks through the library again. The third is longer than its field shows (5.4), typed with an X in
     # front that ClrHome and Delete take away at its start, then its end
     # added after Shift+Right: the whole of it is kept
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
@@ -641,6 +648,8 @@ MOUSE_STEPS = [
     ([("click",) + SET_LAYOUT_PANES], ["settings-layout panes"]),
     ([("click",) + SET_FIELD] + typed("C:\\FIXT\\SUB"), []),
     ([TAB] + typed("C:\\NOWHERE"), []),
+    # Esc empties the field the cursor is in and the dialog stays (3.5)
+    ([ESC] + typed("C:\\NOWHERE"), ["!dialog-closed *"]),
     ([TAB] + typed("X" + LONG[:-3]) + [("field", None, CLRHOME), ("field", None, DELETE),
                                        ("field", SHIFT, RIGHT)] + typed(LONG[-3:]), []),
     ([RETURN], ["alert no-folder C:\\NOWHERE"]),
@@ -656,13 +665,13 @@ MOUSE_STEPS = [
     # several windows: Shift+click opens the link in a new one
     ([("sclick", vx(120), 142)], ["window new 2", "page %s Second" % BASIC]),
     ([item(BOOK, 0)], ["menu bookmark-add", "bookmark added *"]),
-    ([("ctrl", W)], ["closed viewer"]),
+    ([("ctrl", U)], ["closed viewer"]),
     ([item(BOOK, 3)], ["menu bookmark", "page %s Second" % BASIC]),   # in the first window
     ([item(BOOK, 1)], ["menu bookmark-remove", "bookmark removed *"]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
     ([("rclick", vx(120), 142)], ["menu popup"]),               # on a link, the menu has
     ([("click", vx(150), 189)], ["menu link-window", "window new 2", "page %s Second" % BASIC]),
-    ([("ctrl", W)], ["closed viewer"]),
+    ([("ctrl", U)], ["closed viewer"]),
     ([item(VIEW, 0)], ["menu font", "dialog font"]),        # the font selector
     ([ESC], []),
     ([item(EDIT, 1)], ["menu copy", "copy page *"]),       # the page to the clipboard
@@ -673,7 +682,7 @@ MOUSE_STEPS = [
     ([("ctrl", N)], ["window new 2", "page %s Main" % BASIC]),
     ([HELP], ["page %s Help" % BASIC]),
     ([TAB, RETURN], ["select *", "closed viewer"]),
-    ([item(FILE, 6)], ["menu quit", "quit"]),
+    ([item(FILE, 7)], ["menu quit", "quit"]),
 ]
 
 
@@ -808,7 +817,7 @@ ACC_NVDI_BOOT1 = [
     ([("ctrl", Q)], ["quit"]),
     (DESK_ACC, ["library *"]),                              # the accessory, from the desktop
     (pick_gdos_font, []),
-    ([("ctrl", W)], ["closed *"]),
+    ([("ctrl", U)], ["closed *"]),
     (reopen, []),
 ]
 ACC_NVDI_BOOT2 = [
@@ -816,7 +825,7 @@ ACC_NVDI_BOOT2 = [
     ([], ["page %s Main" % BASIC]),                         # asked by ASKHELP.PRG
     (ask_done, []),                                         # which ends: TOS closes the window
     (reopen, []),
-    ([("ctrl", W)], ["closed *"]),
+    ([("ctrl", U)], ["closed *"]),
     (reopen, []),
 ]
 
@@ -891,8 +900,8 @@ def twin_dir():
 
 
 def check_inf(path, settings):
-    """EHYPVIEW.INF (the AERA guidelines, 6.1): these settings, CR LF line
-    ends, and a ';' note above each"""
+    """EHYPVIEW.INF (the AERA guidelines, 6.1): these settings ("!KEY": no
+    such line), CR LF line ends, and a ';' note above each"""
     try:
         with open(path, newline="") as f:
             got = f.read()
@@ -900,7 +909,8 @@ def check_inf(path, settings):
         got = str(e)
     lines = got.split("\r\n")
     ok = got.endswith("\r\n") and "\n" not in got.replace("\r\n", "")
-    ok = ok and all(any(l.startswith(s[:-1]) for l in lines) if s.endswith("*") else s in lines
+    ok = ok and all(not any(l.upper().startswith(s[1:]) for l in lines) if s.startswith("!") else
+                    any(l.startswith(s[:-1]) for l in lines) if s.endswith("*") else s in lines
                     for s in settings)
     ok = ok and all(i > 0 and lines[i - 1].startswith(";")
                     for i, l in enumerate(lines) if l and not l.startswith(";"))
@@ -961,48 +971,30 @@ def st_field():
     return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["PATHS=" + LONG])
 
 
-# the dialogs' look (guidelines 5.6): where the AES draws 3D (TOS 4,
-# EmuTOS in colour) the Settings tick turns it off, kept as DIALOGS3D=0,
-# and the next dialogs are flat; on TOS 1 to 3 (and EmuTOS in fewer
-# colours) the tick is greyed and a click leaves it. The screenshots show
-# Settings' two pages, the Font dialog and an alert each way (look-01,
-# -02, -04, -07; look-11, -12, -14, -17)
-SET_3D = (321, 334)
-
-
-def look_off(rig):
-    """the tick clicked, then OK: 0 where the AES has 3D, else 1 still"""
-    want = "1" if "settings-look no-3d" in rig.events() else "0"
-    in_settings(("click",) + SET_3D)(rig)
-    rig.press(RETURN)
-    return rig.wait_for("settings DIALOGS3D " + want)
-
-
+# the dialogs' look (guidelines 5.6): 3D wherever the AES draws it (TOS 4,
+# EmuTOS in colour), flat on TOS 1 to 3 (and EmuTOS in fewer colours),
+# with no setting for it (27 Oct): an EHYPVIEW.INF that still has
+# DIALOGS3D=0 is read without it, and the first save leaves it out. The
+# screenshots show Settings' two pages (its pop-up open over its button,
+# 5.7), the Font dialog and an alert (look-01, -02, -03, -05, -08)
 LOOK_STEPS = [
     ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *", "settings-look *"]),
     (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
-    ([ESC], ["dialog-closed settings cancel"]),
+    (in_settings(("click",) + SET_LAYOUT), ["menu settings-layout"]),
+    ([ESC], []),                                        # the pop-up closed, nothing chosen
+    ([UNDO], ["dialog-closed settings cancel"]),        # (Esc would empty a folder field)
     ([("ctrl+shift", F)], ["dialog font"]),
     ([ESC], ["dialog-closed font cancel"]),
     ([("ctrl", L)], ["library *"]),
     ([HELP], ["alert no-guide"]),                       # the library's Help: no EHYPVIEW.HYP here
-    ([RETURN, ("ctrl", W)], []),
-    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
-    (look_off, []),
-    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *", "settings-look *"]),
-    (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
-    ([ESC], ["dialog-closed settings cancel"]),
-    ([("ctrl+shift", F)], ["dialog font"]),
-    ([ESC], ["dialog-closed font cancel"]),
-    ([("ctrl", L)], ["library *"]),
-    ([HELP], ["alert no-guide"]),
     ([RETURN, ("ctrl", Q)], ["quit"]),
 ]
 
 
 def look():
-    d = copy_dir("look", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
+    d = copy_dir("look", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n",
+                 "; the dialogs' look\nDIALOGS3D=0\n", start=BASIC)
     xvfb = start_xvfb()
     try:
         ok = run_scenario("look", d, LOOK_STEPS, auto=LAUNCH, windowed=True)
@@ -1010,16 +1002,16 @@ def look():
         xvfb.terminate()
     with open(os.path.join(OUT, "look.log"), errors="replace") as f:
         flat = "EHV settings-look no-3d" in f.read()
-    print("      the AES %s" % ("draws no 3D: the tick greyed" if flat else "draws 3D"))
-    return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["DIALOGS3D=%d" % flat])
+    print("      the AES %s" % ("draws no 3D" if flat else "draws 3D"))
+    return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["!DIALOGS3D"])
 
 
 # the Subjects pane's bar (guidelines 5.1: AES objects, common/ui/panebar.c):
 # twenty hypertexts, each its own subject, more than the pane shows; a
 # click on the bar's down arrow scrolls it a line, one on its track below
 # the slider a page, and the line chosen stays. Its screenshots show the
-# bar (panebar-01, after the scroll -03); run on ST:mono, Falcon:16 (3D,
-# and DIALOGS3D=0) and under XaAES for the hub
+# bar (panebar-01, after the scroll -03); run on ST:mono, Falcon:16 (3D)
+# and under XaAES for the hub
 def bar_click(where):
     """a click on the bar ("library-bar X Y W H"): its down arrow, or
     its track just above the down arrow"""
@@ -1050,9 +1042,8 @@ PANEBAR_STEPS = [
 ]
 
 
-def panebar(look3d=1):
-    d = copy_dir("panebar", "PATHS=C:\\GUIDES\n", "; the layout\nLIBRARY=panes\n"
-                 "; the dialogs' look\nDIALOGS3D=%d\n" % look3d)
+def panebar():
+    d = copy_dir("panebar", "PATHS=C:\\GUIDES\n", "; the layout\nLIBRARY=panes\n")
     shutil.rmtree(os.path.join(d, "FIXT"))
     os.makedirs(os.path.join(d, "GUIDES"))
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "colour.hyp"), "rb") as f:
@@ -1167,7 +1158,7 @@ def main():
     if sys.argv[3:] == ["look"]:                    # the dialogs' look alone (5.6)
         return 0 if look() else 1
     if sys.argv[3:4] == ["panebar"]:                # the Subjects pane's bar alone (5.1)
-        return 0 if panebar(int(sys.argv[4]) if sys.argv[4:] else 1) else 1
+        return 0 if panebar() else 1
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
         print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "accnvdi")).describe())
         return 0 if acc_nvdi() else 1

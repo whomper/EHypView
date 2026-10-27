@@ -137,7 +137,8 @@ make room first; the ≡ menu and the keys still reach everything.
 | ^L | the library (and back to the viewer) |
 | ^O | open a hypertext |
 | ^C | copy the page, as text, to the clipboard |
-| ^W or ^U / ^Q | close the top window / quit |
+| ^U / ^Q | close the top window / quit |
+| ^W | the next window on top, in turn |
 | ⇧^F | choose the font |
 | ^+ / ^- (on the keypad, or ^= and ^-) | larger / smaller text |
 | ^, | settings |
@@ -201,8 +202,8 @@ when EHypView ends, not at every page.
   while typing.
 - **Keys:** Up/Down to choose, Return or a click to open (or to start the full-text search),
   Backspace to delete a letter, Delete to remove the bookmark chosen. ^V pastes into the search and ^X
-  cuts it; ^C copies the hypertext chosen. Esc leaves the search as it is: it clears no text, in this
-  window or any dialog.
+  cuts it; ^C copies the hypertext chosen. Esc empties the search, as GEM's fields, and does nothing
+  else: the window stays (guidelines 3.5).
 
 ### Fonts
 
@@ -225,14 +226,16 @@ accessory from the next boot, and its Font dialog lists the ones it knows "from 
 ### Settings
 
 **Options > Settings...** (^,; in the accessory, the toolbar's ≡ menu) shows what `EHYPVIEW.INF` holds,
-on two pages, as EMail's and ECal's Settings do. OK keeps the changes; Cancel, Esc and Undo forget them.
+on two pages, as EMail's and ECal's Settings do. OK keeps the changes; Cancel, Undo and Esc forget them
+(in a folder's field Esc empties the field instead, guidelines 3.5).
 
 ![The Settings dialog over the library: the Library page, with the library's layout and the folders to look in as well, the first one longer than its field shows](docs/settings.png)
 
 - **General:** when the accessory looks through the library (`START=`): when first opened, at start,
-  after a minute or after 5 minutes; EHypView's folder (`FOLDER=`), where the index is kept; and
-  **3D dialogs** (`DIALOGS3D=`, guidelines 5.6): dialogs and alerts in 3D where the AES draws them
-  (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour), flat when unticked, greyed where the AES has no 3D (`common/ui/dialog.c`).
+  after a minute or after 5 minutes, from a pop-up that opens over its button; EHypView's folder
+  (`FOLDER=`), where the index is kept. Dialogs and alerts are in 3D wherever the AES draws it (TOS 4,
+  MagiC, N.AES, XaAES, EmuTOS in colour), with no setting for it (guidelines 5.6, `common/ui/dialog.c`);
+  a `DIALOGS3D=` line left from 1.25 to 1.28 is ignored and left out when the file is next written.
 - **Library:** its layout, Outline or Two panes (`LIBRARY=`); up to three more folders to look for
   hypertexts in, with their subfolders (`PATHS=`). Each field holds a path of up to 128 characters,
   more than it shows (guidelines 5.4, `common/ui/field.c`). A folder that isn't there is asked about: **Keep**
@@ -272,13 +275,17 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
 
 - **The Help key.** EMail, EFTP, ECal, EContact and ClaudeST open their guides in EHypView with the
   Help key when it runs (as an accessory, or as a program under MultiTOS or MagiC): they look for
-  EHypView first, then ST-Guide and HypView. Any program or desktop (Thing, jinnee, Gemini) can hand
-  it a hypertext and a page the same way, with the AV protocol's `VA_START`, or as ST-Guide is asked,
-  with `AC_HELP`.
+  the viewer `STGUIDE` names first, then EHypView, ST-Guide and HypView. Any program or desktop
+  (Thing, jinnee, Gemini) can hand it a hypertext and a page the same way, with the AV protocol's
+  `VA_START`, or as ST-Guide is asked, with `AC_HELP`.
   Under MiNT and MagiC, when no viewer runs, their Help key starts `EHYPVIEW.PRG` beside them with the
   hypertext and page on its command line (`common/ui/help.c`), found by `FOLDER=` in `EHYPVIEW.INF`,
   which the program writes: so it needs to have run once. EHypView reads its command line the ARGV
   way too (`cmd_line()`, `common/atari/tos.c`), as MiNT and MagiC pass it.
+- **Another viewer.** Users of another hypertext viewer name it in the AES's environment as
+  `STGUIDE` (`setenv STGUIDE C:\HYPVIEW\HYPVIEW.APP` in `XAAES.CNF`, `#_ENV STGUIDE=...` in `MAGX.INF`),
+  as ST-Guide started the custom: the AERA programs' Help key asks that viewer first and, under MiNT
+  and MagiC, starts it rather than EHypView when none runs (guidelines 4.3, `common/ui/help.c`).
 - **The clipboard.** ^C copies the page shown, as text, to the GEM clipboard (`SCRAP.TXT`); in the
   library ^C copies the hypertext chosen, and ^V and ^X paste into and cut the search.
 - **Drag and drop.** Under MultiTOS, MagiC or XaAES, a hypertext dragged onto EHypView's windows opens.
@@ -286,7 +293,7 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
   plain TOS too.
 - **Dialogs and alerts under MiNT and MagiC.** Where the AES runs several programs at once (MiNT with
   XaAES, N.AES or MyAES; MagiC), EHypView's alerts are the AES's own, and its dialogs (Settings, Font,
-  About) open in windows with their own names: they can be moved, the closer works as Esc, and other
+  About) open in windows with their own names: they can be moved, the closer works as Undo, and other
   programs go on running meanwhile. Under TOS and EmuTOS they are drawn over the screen as before
   (`common/ui/dialog.c`).
 - **Iconify.** Where the AES can iconify windows (MultiTOS, MagiC, XaAES, N.AES), the viewer and the
@@ -440,7 +447,7 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   `EHVCHECK.PRG`.
 - **`make gui-test`** drives `EHYPVIEW.PRG` through Hatari's command FIFO: links (also into a
   hypertext three folders down), back, help, the library and both searches, fonts and the font
-  selector, Settings (Esc and Undo cancel it), the accessory, and the program and accessory side by
+  selector, Settings (Undo cancels it, Esc too where no field has the cursor), ^U and ^W, the accessory, and the program and accessory side by
   side. The mouse run (Xvfb and xdotool; skipped without them) clicks links, the right button, the
   menus, the About box and Settings: its START= popup, its Library page's folders (one longer than
   its field shows, edited at its start and end), the alert for one that isn't there, and the library

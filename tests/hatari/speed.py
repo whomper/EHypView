@@ -19,7 +19,7 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
            start; Down, Shift+Down (a line, a page); Tab (a link chosen);
            Settings (^,) opened and closed with Esc; the library (^L)
            drawn whole; letters typed into its search; a full-text search
-           (Return); the library closed (^W): the page uncovered
+           (Return); the library closed (^U): the page uncovered
   images   IMAGES.HYP (a 640 x 400 16-colour picture), and on a Falcon in
            256 colours COLOUR.HYP: the page drawn, a line and a page
            scrolled
@@ -52,7 +52,7 @@ ONLY = os.environ.get("SPEED_ONLY")
 GUIDES = 60
 
 ESC, TAB, RETURN, DOWN, CTRL, SHIFT = 1, 15, 28, 0x50, 29, 0x2A
-COMMA, L, W, Q = 0x33, 0x26, 0x11, 0x10
+COMMA, L, U, Q = 0x33, 0x26, 0x16, 0x10
 
 # the guidelines' times, ms
 KEY, LINE, PAGE, DIALOG, WHOLE, ACC, START = 50, 50, 150, 150, 300, 500, 2000
@@ -323,8 +323,8 @@ def page_case(spec, nvdi):
              run.act(lambda: run.key(RETURN), "fulltext-start", settle=30.0, tags=("event",)))
         note("full-text search: its slices", SLICE, spec, run.since(("lib-work",)))
         note("full-text search: what it found drawn", PAGE, spec, run.since(("lib-rows",)))
-        note("library closed (^W): the page uncovered", WHOLE, spec,
-             run.act(lambda: run.key(W, [CTRL]), "closed library"))
+        note("library closed (^U): the page uncovered", WHOLE, spec,
+             run.act(lambda: run.key(U, [CTRL]), "closed library"))
     finally:
         run.stop()
 

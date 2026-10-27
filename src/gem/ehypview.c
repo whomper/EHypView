@@ -1073,6 +1073,40 @@ static void close_window(void)
 	app_window_closed();
 }
 
+/*
+ * ^W (the guidelines, 3.2): the next of EHypView's own windows on top,
+ * the viewers in turn and then the library, round again; with one
+ * window open nothing.
+ */
+static void next_window(void)
+{
+	short h[MAX_VIEWERS + 1], top = top_window();
+	int i, n = 0, at = -1;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+		if (viewers[i].used && viewers[i].h > 0)
+			h[n++] = viewers[i].h;
+	if (libwin_handle() > 0)
+		h[n++] = libwin_handle();
+	if (n < 2)
+		return;
+	for (i = 0; i < n; i++)
+		if (h[i] == top)
+			at = i;
+	top = h[(at + 1) % n];             /* none of ours on top: the first */
+	wind_set(top, WF_TOP, top, 0, 0, 0);
+	if (top == libwin_handle())
+		log_event("next-window", "library", NULL);
+	else
+	{
+		char k[8];
+
+		cur = viewer_of(top);
+		sprintf(k, "%d", (int) (cur - viewers) + 1);
+		log_event("next-window", "viewer", k);
+	}
+}
+
 /* all viewer windows (Quit in the accessory) */
 static void close_all_windows(void)
 {
@@ -1630,6 +1664,9 @@ static void command(int cmd)
 		else
 			close_window();
 		return;
+	case CMD_NEXTWIN:
+		next_window();
+		return;
 	case CMD_NEWWIN:
 		new_window(0);
 		return;
@@ -1716,6 +1753,8 @@ static void update_menu(void)
 
 		if (c == CMD_CLOSE)
 			on = viewer_windows() > 0 || libwin_handle() > 0;
+		else if (c == CMD_NEXTWIN)
+			on = viewer_windows() + (libwin_handle() > 0) > 1;
 		else if (c == CMD_NEWWIN)
 			on = viewer_windows() < MAX_VIEWERS;
 		else if (c == CMD_LINKWIN)
@@ -1797,8 +1836,8 @@ int app_key(short kstate, short kreturn)
 	case 0x0e: command(CMD_NEWWIN); return 1;         /* ^N */
 	case 0x04: command(CMD_BM_ADD); return 1;         /* ^D */
 	case 0x11: command(CMD_QUIT); return 1;          /* ^Q */
-	case 0x15:                                        /* ^U */
-	case 0x17: command(CMD_CLOSE); return 1;          /* ^W */
+	case 0x15: command(CMD_CLOSE); return 1;          /* ^U */
+	case 0x17: command(CMD_NEXTWIN); return 1;        /* ^W: the next window (3.2) */
 	case 0x0f: command(CMD_OPEN); return 1;           /* ^O */
 	case 0x0c: command(CMD_LIBRARY); return 1;        /* ^L */
 	case 0x03: command(CMD_COPY); return 1;           /* ^C */
@@ -2113,7 +2152,8 @@ static void bar_menu(short x, short y)
 		{ "-", NULL, CMD_NONE },
 		{ "EHypView guide", NULL, CMD_GUIDE },
 		{ "-", NULL, CMD_NONE },
-		{ "Close window", "^W", CMD_CLOSE },
+		{ "Next window", "^W", CMD_NEXTWIN },
+		{ "Close window", "^U", CMD_CLOSE },
 		{ "Quit", "^Q", CMD_QUIT }
 	};
 	enum { N = sizeof(all) / sizeof(all[0]) };
@@ -2726,9 +2766,6 @@ static void dialog_redraw(const short *msg)
 /* EHYPVIEW.INF: in the boot drive's root, where the accessory finds  */
 /* it too; FOLDER= says where the rest is (the AERA guidelines, 6.1)  */
 
-const char dialogs3d_note[] = "the dialogs' look: 1, 3D where the AES draws it (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour); "
-	"0, flat everywhere (Settings, 3D dialogs)";
-
 static const char inf_head[] =
 	"; EHYPVIEW.INF: EHypView's settings, the program's and the accessory's.\r\n"
 	"; A line starting with ';' is a note. EHypView keeps the notes, and\r\n"
@@ -2745,15 +2782,22 @@ static inf_file *own_inf;
 
 static void own_set(char *text)
 {
-	const char *v;
-
 	free(own_text);
 	inf_free(own_inf);
 	own_text = text;
 	own_inf = text != NULL ? inf_parse(text, NULL) : NULL;
-	/* DIALOGS3D= (guidelines 5.6): the next dialog follows it */
-	v = own_inf != NULL ? inf_get(own_inf, "DIALOGS3D") : NULL;
-	dlg_3d_on = v == NULL || atoi(v) != 0;
+}
+
+/* settings no longer used, left out when the file is written:
+   DIALOGS3D= (the 3D dialogs tick, gone: the guidelines 5.6, 27 Oct) */
+static char *retired_out(char *t)
+{
+	char *u = t != NULL ? inf_drop(t, "DIALOGS3D") : NULL;
+
+	if (u == NULL)
+		return t;
+	free(t);
+	return u;
 }
 
 static void own_reload(void)
@@ -2775,7 +2819,7 @@ int settings_put(const char *key, const char *value, const char *note)
 	char *text = pf_load(settings_path, NULL), *t;
 	int r = -1;
 
-	t = inf_put(text != NULL ? text : inf_head, key, value, note);
+	t = retired_out(inf_put(text != NULL ? text : inf_head, key, value, note));
 	if (t != NULL)
 	{
 		r = pf_save(settings_path, t, (unsigned long) strlen(t));
@@ -2879,7 +2923,10 @@ static int list_save(const ehv_bookmarks *list, const char *prefix, unsigned int
 		}
 	}
 	if (r == 0 && text != NULL)
+	{
+		text = retired_out(text);
 		r = pf_save(settings_path, text, (unsigned long) strlen(text));
+	}
 	if (r == 0 && text != NULL)
 		own_set(text);
 	else
@@ -2956,8 +3003,6 @@ static void find_home(void)
 		if (own_inf == NULL || inf_get(own_inf, "START") == NULL)
 			settings_put("START", "opened", "when the accessory looks through the library: opened (when "
 				     "first opened or asked for a page), now (at boot), or seconds after boot");
-		if (own_inf == NULL || inf_get(own_inf, "DIALOGS3D") == NULL)
-			settings_put("DIALOGS3D", "1", dialogs3d_note);
 		return;
 	}
 	own_reload();

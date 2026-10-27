@@ -584,6 +584,17 @@ static void test_inf_put(void)
 	t = inf_put(NULL, "POINT", "12", "its size");
 	CHECK(t != NULL && strcmp(t, "; its size\r\nPOINT=12\r\n\r\n") == 0);
 	free(t);
+	/* a setting no longer used: gone with its note and its empty line */
+	t = inf_drop("; the font\r\nFONT=1\r\n\r\n; the look\r\n; two lines\r\nDIALOGS3D=0\r\n\r\n"
+		     "MINE=kept\r\n; DIALOGS3D=a note\r\nPOINT=10", "dialogs3d");
+	CHECK(t != NULL && strcmp(t, "; the font\r\nFONT=1\r\n\r\nMINE=kept\r\n; DIALOGS3D=a note\r\nPOINT=10") == 0);
+	free(t);
+	t = inf_drop("A=1\nDIALOGS3D=1", "DIALOGS3D");
+	CHECK(t != NULL && strcmp(t, "A=1\n") == 0);
+	free(t);
+	t = inf_drop("", "DIALOGS3D");
+	CHECK(t != NULL && t[0] == '\0');
+	free(t);
 }
 
 static void test_save(void)

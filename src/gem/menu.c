@@ -20,7 +20,8 @@ static const MBAR_ITEM file_items[] = {
 	{ "Open hypertext...", "^O", CMD_OPEN },
 	{ "Library and search", "^L", CMD_LIBRARY },
 	{ "-", NULL, CMD_NONE },
-	{ "Close window", "^W", CMD_CLOSE },
+	{ "Next window", "^W", CMD_NEXTWIN },
+	{ "Close window", "^U", CMD_CLOSE },
 	{ "-", NULL, CMD_NONE },
 	{ "Quit", "^Q", CMD_QUIT },
 	{ NULL, NULL, CMD_NONE }
@@ -139,7 +140,7 @@ const char *menu_command_name(int cmd)
 		"back", "home", "index", "toc", "help", "prev", "next",
 		"font", "larger", "smaller", "cut", "copy", "paste",
 		"new-window", "link-window", "bookmark-add", "bookmark-remove",
-		"forward", "see-also", "settings", "guide"
+		"forward", "see-also", "settings", "guide", "next-window"
 	};
 
 	if (cmd >= CMD_BM0 && cmd < CMD_COUNT)

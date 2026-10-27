@@ -5,7 +5,7 @@
  * box.  Typing goes into the search line at the top; Up/Down choose a
  * row; Return (or a click) opens it in the viewer, or starts the
  * full-text search.  Backspace and ^X take text out of the search; Esc
- * clears no text (the AERA guidelines, 3.5).
+ * empties it, as GEM's fields (the AERA guidelines, 3.5).
  *
  * Two layouts (LIBRARY=, Settings):
  *
@@ -40,6 +40,7 @@
 #include "fsys.h"
 #include "libbar.h"
 #include "bgwork.h"
+#include "dialog.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
 #define MARGIN 8
@@ -243,7 +244,9 @@ static short heading_h(void)
 
 static short detail_h(void)
 {
-	return panes() ? (short) (3 * ch + 16) : 0;
+	short h = (short) (3 * ch + 16), b = (short) (2 * (sys_ch + 2) + 20);	/* its text, or Open and Index */
+
+	return panes() ? (h > b ? h : b) : 0;
 }
 
 /* where the rows are */
@@ -726,33 +729,43 @@ static void detail_buttons(short *bx, short *oy, short *iy, short *bw, short *bh
 	short wx, wy, ww, wh;
 
 	work_area(&wx, &wy, &ww, &wh);
-	*bw = (short) (8 * cw);
-	*bh = (short) (ch + 4);
+	*bw = (short) (8 * sys_cw);
+	*bh = (short) (sys_ch + 2);
 	*bx = (short) (wx + ww - MARGIN - 4 - *bw);
 	*oy = (short) (wy + wh - detail_h() + 8);
 	*iy = (short) (*oy + *bh + 6);
 }
 
-static void button(short x, short y, short w, short h, const char *label, int bold)
+/* Open and Index: the AES's own buttons, raised where it draws 3D,
+   drawn by objc_draw within the rectangle being drawn (the guidelines,
+   5.6: never a button drawn by hand) */
+static void button(short x, short y, short w, short h, const char *label, int def, const short *clip)
 {
-	long n = (long) strlen(label);
+	OBJECT t[1];
 
-	fill(0, x, y, (short) (x + w - 1), (short) (y + h - 1));
-	frame_(x, y, (short) (x + w - 1), (short) (y + h - 1), 1);
-	line_((short) (x + 2), (short) (y + h), (short) (x + w), (short) (y + h), 1);      /* a shadow */
-	line_((short) (x + w), (short) (y + 2), (short) (x + w), (short) (y + h), 1);
-	put((short) (x + (w - n * cw) / 2), (short) (y + 2), label, n, 1, bold ? 1 : 0);
+	memset(t, 0, sizeof(t));
+	t[0].ob_next = t[0].ob_head = t[0].ob_tail = -1;
+	t[0].ob_type = G_BUTTON;
+	t[0].ob_flags = (unsigned short) (SELECTABLE | EXIT | LASTOB | (def ? DEFAULT : 0) |
+					  (dlg_3d_ok() ? 0x0600 : 0));	/* FL3DACT: raised */
+	t[0].ob_spec = (long) label;
+	t[0].ob_x = x;
+	t[0].ob_y = y;
+	t[0].ob_width = w;
+	t[0].ob_height = h;
+	objc_draw(t, 0, 0, clip[0], clip[1], (short) (clip[2] - clip[0] + 1), (short) (clip[3] - clip[1] + 1));
 }
 
-static void draw_detail(short wx, short ww, short y)
+static void draw_detail(short wx, short ww, short y, const short *clip)
 {
 	short bx, oy, iy, bw, bh, x = (short) (wx + pane_w() + 4 + MARGIN), tx, wy, wh;
 	long room;
 
 	work_area(&wx, &wy, &ww, &wh);
 	fill(0, (short) (wx + pane_w() + 4), y, (short) (wx + ww - 1), (short) (wy + wh - 1));
-	line_((short) (wx + pane_w() + 4), y, (short) (wx + ww - 1), y, 1);
-	line_((short) (wx + pane_w() + 4), (short) (y + 3), (short) (wx + ww - 1), (short) (y + 3), 1);
+	/* the rows and this meet with one line, from the Subjects' bar on
+	   (the guidelines, 5.7) */
+	line_((short) (wx + pane_w()), y, (short) (wx + ww - 1), y, 1);
 	describe();
 	if (about1[0] == '\0')
 		return;
@@ -769,21 +782,32 @@ static void draw_detail(short wx, short ww, short y)
 	put(tx, (short) (y + 7 + ch), about2, room, 1, 0);
 	put(tx, (short) (y + 7 + 2 * ch), about3, room, about_color(), 0);
 	if (can_open())
-		button(bx, oy, bw, bh, "Open", 1);
+		button(bx, oy, bw, bh, "Open", 1, clip);
 	if (has_index(about_guide))
-		button(bx, iy, bw, bh, "Index", 0);
+		button(bx, iy, bw, bh, "Index", 0, clip);
 }
 
 /* ---------------------------------------------------------------- */
 
-/* the Subjects pane's bar where the window is now */
+/* 1 where the bar has a frame of its own (flat); in 3D the AES draws
+   its ground with none (panebar.c) */
+static int bar_framed(void)
+{
+	return !(dlg_3d_ok() && dlg_3d_on);
+}
+
+/* the Subjects pane's bar where the window is now: the pane is edged by
+   one line all round (the guidelines, 5.7). Flat, the bar's top frame
+   lies on the rule under the search; in 3D it starts under the rule.
+   Its bottom goes past the work area, so the window's own frame is the
+   line there */
 static void bar_place(void)
 {
 	short wx, wy, ww, wh, y;
 
 	work_area(&wx, &wy, &ww, &wh);
-	y = (short) (wy + header_h());
-	libbar_set((short) (wx + pane_text_w()), y, libbar_width(), (short) (wy + wh - y),
+	y = (short) (wy + header_h() - (bar_framed() ? 2 : 1));
+	libbar_set((short) (wx + pane_text_w()), y, libbar_width(), (short) (wy + wh + 1 - y),
 		   (long) lib.npanes, pane_last() - pane_top + 1, pane_top);
 }
 
@@ -804,15 +828,9 @@ static void draw_panes(short wx, short wy, short wh, short cx, short cy, short c
 	}
 	if (pane_top > pane_max_top())
 		pane_top = pane_max_top();     /* a taller window: no room left below */
-	fill(pane_ground(), wx, y, (short) (wx + pw - 1), (short) (wy + wh - 1));
-	{
-		short bx = (short) (wx + pane_w());
-
-		fill(0, (short) (bx + 1), y, (short) (bx + 2), (short) (wy + wh - 1));
-		/* a double line beside it */
-		line_(bx, y, bx, (short) (wy + wh - 1), 1);
-		line_((short) (bx + 3), y, (short) (bx + 3), (short) (wy + wh - 1), 1);
-	}
+	fill(pane_ground(), wx, (short) (y - 1), (short) (wx + pw - 1), (short) (wy + wh - 1));   /* up to the rule */
+	/* beside the bar the rows' white margin */
+	fill(0, (short) (wx + pane_w()), y, (short) (wx + pane_w() + 3), (short) (wy + wh - 1));
 	put((short) (wx + MARGIN), (short) (y + 4), "Subjects", PANE_COLS, 1, 1);
 	for (i = (unsigned long) pane_top; i < lib.npanes && (long) i <= pane_last(); i++)
 	{
@@ -856,6 +874,13 @@ static void draw_panes(short wx, short wy, short wh, short cx, short cy, short c
 	if (!libbar_draw(cx, cy, cw_, ch_))      /* too low for one: the pane's ground */
 		fill(pane_ground(), (short) (wx + pw), (short) (wy + header_h()), (short) (wx + pane_w() - 1),
 		     (short) (wy + wh - 1));
+	/* the panes meet with one line (the guidelines, 5.7): the bar's own
+	   frame; in 3D, where it has none, a line on its last column, which
+	   a raised slider's edge lies on (every drawing of the bar comes
+	   here, so the line is drawn after it) */
+	if (!bar_framed())
+		line_((short) (wx + pane_w() - 1), (short) (wy + header_h() - 1), (short) (wx + pane_w() - 1),
+		      (short) (wy + wh - 1), 1);
 }
 
 /* Continue: the pages read last, as buttons; where each is */
@@ -1135,7 +1160,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 			line_(lx, (short) (ly - 3), (short) (lx + lw - 1), (short) (ly - 3), 1);
 		}
 		if (cy + ch_ > wy + wh - detail_h())
-			draw_detail(wx, ww, (short) (wy + wh - detail_h()));
+			draw_detail(wx, ww, (short) (wy + wh - detail_h()), clip);
 	}
 
 	/* the rows, clipped to their area */
@@ -1719,6 +1744,14 @@ void libwin_key(short kstate, short kreturn)
 			old_top = lib.top;
 		}
 	}
+	if (scan == 0x01 || ascii == 0x1b)
+	{
+		/* Esc (and ^[) empties the search and does nothing else: the
+		   window stays (the guidelines, 3.5) */
+		if (n > 0)
+			set_query("");
+		return;
+	}
 	if (ctrl)
 	{
 		if (ascii == 0x0c && scan != 0x33 && viewer_handle() > 0)
@@ -1726,7 +1759,7 @@ void libwin_key(short kstate, short kreturn)
 			viewer_top();                  /* ^L: back to the viewer */
 			return;
 		}
-		app_key(kstate, kreturn);          /* ^O, ^W, ^Q */
+		app_key(kstate, kreturn);          /* ^O, ^U, ^W, ^Q */
 		return;
 	}
 	if (panes() && focus_left)
@@ -1792,9 +1825,6 @@ void libwin_key(short kstate, short kreturn)
 	case 0x53:                             /* Delete: the bookmark chosen */
 		if (lib_selected_bookmark(&lib) >= 0)
 			app_bookmark_remove(lib_selected_bookmark(&lib));
-		return;
-	case 0x01:                             /* Esc: nothing (the guidelines,
-	                                          3.5: Esc clears no text) */
 		return;
 	case 0x0e:                             /* Backspace */
 		if (n > 0)
