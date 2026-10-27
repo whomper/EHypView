@@ -313,6 +313,9 @@ $(HOST)/ehvcheck: tests/ehvcheck.c $(HOST)/libehv.a
 
 atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPVIEW.ACC \
        binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC
+	@# no word or long at an odd stack offset: an address error on a 68000
+	@# (common/tools/oddaccess.py; common's accmem at sp+39, 27 Oct 2026)
+	@python3 common/tools/oddaccess.py $(ATARI)/ehypview.elf $(ATARI)/ehvcheck.elf
 
 # what goes onto the Atari: binary/ (built, never committed)
 binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC: binary/%: $(HATARI_DIR)/%

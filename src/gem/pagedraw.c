@@ -1136,7 +1136,8 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 					   the cheap way, the same pixels (text_fx_after) */
 					short by_hand = want == MD_REPLACE && text_fx_fast(fx, want) ? fx : 0;
 					/* bold any other way (NVDI, a GDOS font, a ground
-					   of its own): struck twice, a pixel apart. The
+					   of its own): struck twice, a pixel apart
+					   (text_bold_strike, common/ui/text.c). The
 					   VDI's bold widens each letter (NVDI by a pixel
 					   or more), and a run of it ran past its cells,
 					   the next run covering its last letters (Erez's
@@ -1158,11 +1159,10 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 					}
 					if (twice)
 					{
-						if (mode != MD_TRANS)
-							vswr_mode(vdi_h, mode = MD_TRANS);
 						if (effects & 8)
 							vst_effects(vdi_h, effects = (short) (effects & ~8));   /* one underline */
-						text_at((short) (x + 1), (short) y, run->text, run->len);
+						text_bold_strike(vdi_h, (short) x, (short) y, run->text, run->len);
+						mode = MD_REPLACE;     /* as it leaves it */
 					}
 				}
 			}
