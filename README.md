@@ -183,8 +183,17 @@ what a hypertext is about: `Documentation/Editors` is Editors. Settings chooses 
 - **Two panes.** The subjects on the left (Bookmarks, Recently read, All hypertexts, each subject),
   scrolling on their own with a bar of AES objects at their right, so it takes the AES's look
   (guidelines 5.1, `common/ui/panebar.c`); the hypertexts of the one chosen on the right, and under them what the row chosen is: its title, author
-  and version, the file and its `.REF`, with **Open** and **Index**. Left or Tab goes to the subjects,
-  Right, Tab or Return back to the rows. A window narrower than 56 characters shows the Outline.
+  and version, the file and its `.REF`, with **Open** and **Index** (the AES's own buttons). Left or
+  Tab goes to the subjects, Right, Tab or Return back to the rows. The edge between the panes can be
+  dragged; the width is kept (`PANECOLS=`). A window narrower than 56 characters shows the Outline.
+- **Your own subjects.** A hypertext's `@subject` is only where it starts: the library's index,
+  `EHYPVIEW.IDX`, is where it belongs. Drag a hypertext onto another subject (the Subjects pane, or
+  a heading in the Outline) to file it there, or use **File under...** in its right-button menu;
+  **Rename subject...** renames a subject or a part for all its hypertexts. The right button
+  chooses and shows the menu, it never opens. The index changes and is written again in short
+  steps; the `.HYP` files are never written. A rescan keeps the subject the index has for every
+  hypertext it knows, changed or moved to another folder; only a new one takes its own @subject
+  (`src/core/scan.c`, `src/view/library.c`).
 
 ![The library in two panes: the subjects on the left, the guides of the one chosen on the right, and what the guide chosen is, with Open and Index](docs/library-panes.png)
 

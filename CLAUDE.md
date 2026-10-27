@@ -82,6 +82,13 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   layouts, `LIBRARY=outline` (the default: Continue, folding groups, two-line rows) and `panes`
   (Subjects | rows | details). The pages read last are `RECENT1=`... in the INF, written when a
   viewer window closes and at the end, never per page.
+- **The index is the single source of truth for where a hypertext belongs** (Erez, 27 Oct 2026): a
+  `.HYP`'s `@subject` is read only when the scan first meets the file (by path, else by file name);
+  after that the subject in EHYPVIEW.IDX counts (`known_subject` in src/core/scan.c). The library
+  files hypertexts elsewhere (drag, File under..., Rename subject...) by changing the index
+  (`ehv_index_set_subject`, `lib_rename_pane`) and writing it again in steps (`app_index_edited`,
+  `save_step` in src/gem/ehypview.c); a run's changes are made again in any index a running job
+  hands over. The `.HYP` files are never written.
 - Disk access (guidelines 6.5): a file is looked at once and opened once a job (`pf_load`,
   `hyp_open` take size and date from the open file; listings carry them; `pf_look` and
   `hyp_recent` hold an event's lookups); the INF is read once a start; the index's head

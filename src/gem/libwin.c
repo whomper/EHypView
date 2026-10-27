@@ -41,11 +41,15 @@
 #include "libbar.h"
 #include "bgwork.h"
 #include "dialog.h"
+#include "popup.h"
+#include "ask.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
 #define MARGIN 8
 #define PANES_COLS 56                  /* the narrowest window with two panes */
-#define PANE_COLS 22                   /* the Subjects pane */
+#define PANE_COLS 22                   /* the Subjects pane, unless dragged (PANECOLS=) */
+#define PANE_MIN 12                    /* the Subjects pane at its narrowest */
+#define ROWS_MIN 30                    /* and the rows beside it */
 #define CHIP_COLS 26                   /* a Continue button's text at most */
 #define MAX_CHIPS 5
 
@@ -60,6 +64,8 @@ static char info_shown[120];           /* the info line the window has */
 static int want_layout = LIB_OUTLINE;  /* LIBRARY= */
 static int focus_left;                 /* Two panes: the Subjects have the keys */
 static long pane_top;                  /* the first line of the Subjects shown */
+static short pane_want;                /* its width as asked for (PANECOLS=), in characters */
+static short pane_n = PANE_COLS;       /* and as the window has room for */
 
 short libwin_handle(void)
 {
@@ -91,6 +97,7 @@ static void ensure_model(void)
 		lib.bm = lib_bm;
 		lib.recent = lib_recent;
 		lib_set_index(&lib, idx);
+		pane_want = (short) app_pane_cols();
 		lib_ready = 1;
 	}
 }
@@ -118,11 +125,20 @@ static void apply_layout(void)
 
 	if (!lib_ready)
 		return;
+	pane_n = pane_want >= PANE_MIN ? pane_want : PANE_COLS;
 	if (lib_h > 0 && !lib_icon)
 	{
+		short most;
+
 		work_area(&x, &y, &w, &h);
 		if (w < PANES_COLS * cw)
 			l = LIB_OUTLINE;
+		/* the Subjects as wide as asked, leaving the rows room */
+		most = (short) ((w - 2 * MARGIN - libbar_width()) / cw - ROWS_MIN);
+		if (pane_n > most)
+			pane_n = most;
+		if (pane_n < PANE_MIN)
+			pane_n = PANE_MIN;
 	}
 	if (l != lib.layout)
 	{
@@ -158,7 +174,7 @@ static short strip_h(void)
 /* the Subjects pane, its bar at its right included */
 static short pane_w(void)
 {
-	return panes() ? (short) (PANE_COLS * cw + 2 * MARGIN + libbar_width()) : 0;
+	return panes() ? (short) (pane_n * cw + 2 * MARGIN + libbar_width()) : 0;
 }
 
 /* its lines' part: the pane less the bar */
@@ -617,11 +633,20 @@ static long put(short x, short y, const char *s, long room, short color, short e
 		/* bold and underline on the white ground: drawn the cheap way,
 		   the same pixels (text_fx_after) */
 		short by_hand = white_ground && color != 0 && text_fx_fast(effects, MD_REPLACE) ? effects : 0;
+		/* bold any other way: struck twice, a pixel apart, so that it
+		   keeps to its cells (NVDI's bold widens each letter: pagedraw.c) */
+		short twice = !by_hand && (effects & 1) ? 1 : 0;
 
 		vswr_mode(vdi_h, white_ground && color != 0 ? MD_REPLACE : MD_TRANS);
 		vst_color(vdi_h, color);
-		vst_effects(vdi_h, (short) (effects & ~by_hand));
+		vst_effects(vdi_h, (short) (effects & ~by_hand & ~twice));
 		text_at(x, y, s, n);
+		if (twice)
+		{
+			vswr_mode(vdi_h, MD_TRANS);
+			vst_effects(vdi_h, (short) (effects & ~1 & ~8));
+			text_at((short) (x + 1), y, s, n);
+		}
 		vst_effects(vdi_h, 0);
 		if (by_hand)
 			text_fx_after(x, y, s, n, by_hand, color);
@@ -829,9 +854,11 @@ static void draw_panes(short wx, short wy, short wh, short cx, short cy, short c
 	if (pane_top > pane_max_top())
 		pane_top = pane_max_top();     /* a taller window: no room left below */
 	fill(pane_ground(), wx, (short) (y - 1), (short) (wx + pw - 1), (short) (wy + wh - 1));   /* up to the rule */
-	/* beside the bar the rows' white margin */
-	fill(0, (short) (wx + pane_w()), y, (short) (wx + pane_w() + 3), (short) (wy + wh - 1));
-	put((short) (wx + MARGIN), (short) (y + 4), "Subjects", PANE_COLS, 1, 1);
+	/* beside the bar the rows' white margin, up to where their text
+	   starts on the 8-pixel grid (list_area; left unfilled, the desktop
+	   showed through) */
+	fill(0, (short) (wx + pane_w()), y, (short) (wx + ((pane_w() + 4 + 7) & ~7) - 1), (short) (wy + wh - 1));
+	put((short) (wx + MARGIN), (short) (y + 4), "Subjects", pane_n, 1, 1);
 	for (i = (unsigned long) pane_top; i < lib.npanes && (long) i <= pane_last(); i++)
 	{
 		const lib_pane *p = &lib.panes[i];
@@ -866,7 +893,7 @@ static void draw_panes(short wx, short wy, short wh, short cx, short cy, short c
 			fill_tint(p->tint, gx, (short) (y + 4), (short) (gx + cw - 2), (short) (y + lh - 5), color);
 		}
 		sprintf(n, "%lu", p->count);
-		room = PANE_COLS - 3 - (long) strlen(n) - 1 - (p->level ? 2 : 0);
+		room = pane_n - 3 - (long) strlen(n) - 1 - (p->level ? 2 : 0);
 		put((short) (gx + 2 * cw), (short) (y + 3), p->text, room, color, 0);
 		put_right((short) ((wx + pw - MARGIN) & ~7), (short) (y + 3), n, 8, color);
 	}
@@ -1844,13 +1871,379 @@ void libwin_key(short kstate, short kreturn)
 	}
 }
 
-void libwin_click(short mx, short my)
+/* ---------------------------------------------------------------- */
+/* hypertexts filed under other subjects (Erez, 27 Oct 2026): dragged */
+/* onto a Subjects line or an Outline heading, or from the right      */
+/* button's menu; a subject renamed. The index is where a hypertext   */
+/* belongs (index.h): it changes, and EHYPVIEW.IDX is written again   */
+
+/* the line of the Subjects pane at y, or -1 */
+static long pane_at(short my)
+{
+	long i;
+
+	for (i = pane_top; i < (long) lib.npanes && i <= pane_last(); i++)
+		if (my >= pane_y(i) && my < pane_y(i) + pane_line_h())
+			return i;
+	return -1;
+}
+
+/* the row at y, or -1; its top in *top */
+static long row_at(short my, short *top)
+{
+	short lx, ly, lw, lh, h;
+	long row;
+
+	list_area(&lx, &ly, &lw, &lh);
+	if (my < ly || my >= ly + lh)
+		return -1;
+	for (row = lib.top, h = ly; (unsigned long) row < lib.nrows; row++)
+	{
+		if (my < h + row_h(row))
+		{
+			if (top != NULL)
+				*top = h;
+			return row;
+		}
+		h = (short) (h + row_h(row));
+	}
+	return -1;
+}
+
+/* the mouse button still held: a press, which may become a drag */
+static int held(void)
+{
+	short mx, my, mb, ks;
+
+	graf_mkstate(&mx, &my, &mb, &ks);
+	return (mb & 1) != 0;
+}
+
+/* an outline dotted over the screen (XOR: drawn twice it is gone) */
+static void xor_frame(short x, short y, short w, short h)
+{
+	short p[10];
+
+	p[0] = p[6] = p[8] = x;
+	p[1] = p[3] = p[9] = y;
+	p[2] = p[4] = (short) (x + w - 1);
+	p[5] = p[7] = (short) (y + h - 1);
+	vswr_mode(vdi_h, MD_XOR);
+	vsl_color(vdi_h, 1);
+	vsl_type(vdi_h, 3);
+	v_pline(vdi_h, 5, p);
+	vsl_type(vdi_h, 1);
+	vswr_mode(vdi_h, MD_REPLACE);
+}
+
+/* graf_dragbox's way, drawn here (common/ has no binding for it): an
+   outline w x h from x, y follows the mouse, within bx, by, bw, bh,
+   while the button is held; where it was let go */
+static void drag_box(short w, short h, short x, short y, short bx, short by, short bw, short bh,
+		     short *ex, short *ey)
+{
+	short mx0, my0, mx, my, mb, ks, cx = x, cy = y;
+
+	graf_mkstate(&mx0, &my0, &mb, &ks);
+	wind_update(BEG_UPDATE);
+	wind_update(3);                    /* BEG_MCTRL: the mouse is ours */
+	graf_mouse(FLAT_HAND, NULL);
+	clip_off();
+	graf_mouse(M_OFF, NULL);
+	xor_frame(cx, cy, w, h);
+	graf_mouse(M_ON, NULL);
+	while (mb & 1)
+	{
+		short nx, ny;
+
+		evnt_timer_(10);
+		graf_mkstate(&mx, &my, &mb, &ks);
+		nx = (short) (x + mx - mx0);
+		ny = (short) (y + my - my0);
+		if (nx > bx + bw - w)
+			nx = (short) (bx + bw - w);
+		if (nx < bx)
+			nx = bx;
+		if (ny > by + bh - h)
+			ny = (short) (by + bh - h);
+		if (ny < by)
+			ny = by;
+		if (nx != cx || ny != cy)
+		{
+			graf_mouse(M_OFF, NULL);
+			xor_frame(cx, cy, w, h);
+			xor_frame(nx, ny, w, h);
+			graf_mouse(M_ON, NULL);
+			cx = nx;
+			cy = ny;
+		}
+	}
+	graf_mouse(M_OFF, NULL);
+	xor_frame(cx, cy, w, h);
+	graf_mouse(M_ON, NULL);
+	graf_mouse(ARROW, NULL);
+	wind_update(2);                    /* END_MCTRL */
+	wind_update(END_UPDATE);
+	*ex = cx;
+	*ey = cy;
+}
+
+/* hypertext g filed under subject (""; none): in the index, kept,
+   shown */
+static void refile(unsigned long g, const char *subject)
+{
+	if (idx == NULL || g >= idx->nguides || ehv_index_set_subject(idx, g, subject) < 0)
+		return;
+	app_index_edited(&g, 1);
+	lib_subjects_changed(&lib);
+	redraw_all();
+}
+
+/* hypertext g dropped at mx, my: on a Subjects line, or on a heading
+   among the rows */
+static void drop_at(unsigned long g, short mx, short my)
+{
+	short x, y, w, h;
+	long p = -1, r;
+	char subj[128];
+
+	work_area(&x, &y, &w, &h);
+	if (panes() && mx >= x && mx < x + pane_text_w())
+		p = pane_at(my);
+	else if ((r = row_at(my, NULL)) >= 0)
+		p = lib_pane_of_row(&lib, r);
+	if (p < 0 || lib_drop_subject(&lib, g, p, subj, sizeof(subj)) < 0)
+	{
+		log_event("drop", "nowhere", NULL);
+		return;
+	}
+	refile(g, subj);
+}
+
+/* a row held and moved: its outline dragged (the AES's own way); 1 when
+   it was dropped somewhere else, 0 for a click */
+static int drag_row(long row, short mx, short my, short top)
+{
+	short x, y, w, h, lx, ly, lw, lh, bw, bh, bx, ex, ey;
+
+	if (lib.rows[row].kind != LIB_GUIDE || !held())
+		return 0;
+	work_area(&x, &y, &w, &h);
+	list_area(&lx, &ly, &lw, &lh);
+	bh = row_h(row);
+	bw = (short) (lw < 20 * cw ? lw : 20 * cw);     /* small enough to reach the Subjects */
+	bx = (short) (mx - bw / 2);
+	if (bx < x)
+		bx = x;
+	if (bx + bw > x + w)
+		bx = (short) (x + w - bw);
+	drag_box(bw, bh, bx, top, x, y, w, h, &ex, &ey);
+	if (ex - bx < 4 && bx - ex < 4 && ey - top < 4 && top - ey < 4)
+		return 0;                      /* not moved: a click */
+	drop_at(lib.rows[row].ref, (short) (mx + ex - bx), (short) (my + ey - top));
+	return 1;
+}
+
+/* the Subjects pane's edge dragged: its width, in whole characters,
+   kept (PANECOLS=) */
+static void drag_edge(void)
+{
+	short x, y, w, h, top, lo, hi, ex, ey, n;
+	short most;
+
+	work_area(&x, &y, &w, &h);
+	top = (short) (y + header_h());
+	most = (short) ((w - 2 * MARGIN - libbar_width()) / cw - ROWS_MIN);
+	if (most <= PANE_MIN)
+		return;
+	lo = (short) (x + PANE_MIN * cw + 2 * MARGIN + libbar_width() - 1);
+	hi = (short) (x + most * cw + 2 * MARGIN + libbar_width() - 1);
+	drag_box(2, (short) (y + h - top), (short) (x + pane_w() - 1), top, lo, top, (short) (hi - lo + 2),
+		 (short) (y + h - top), &ex, &ey);
+	n = (short) ((ex + 1 - x - 2 * MARGIN - libbar_width() + cw / 2) / cw);
+	if (n < PANE_MIN)
+		n = PANE_MIN;
+	if (n > most)
+		n = most;
+	if (n == pane_n)
+		return;
+	pane_want = n;
+	app_pane_cols_set(n);
+	apply_layout();
+	{
+		char t[8];
+
+		sprintf(t, "%d", n);
+		log_event("pane-cols", t, NULL);
+	}
+	redraw_all();
+}
+
+/* a subject renamed (line p of the Subjects pane), asked for */
+static void rename_pane(long p)
+{
+	char name[LIB_PANE_TEXT], what[64];
+	unsigned long *changed;
+	long n;
+
+	if (idx == NULL || lib_pane_name(&lib, p, name, sizeof(name)) < 0)
+		return;
+	snprintf(what, sizeof(what), "Rename \"%.24s\" to:", name);
+	if (!ask_name(what, name, sizeof(name)))
+	{
+		redraw_all();
+		return;
+	}
+	if (strchr(name, '/') != NULL)
+	{
+		alert(1, "[1][A subject's name has no \"/\".|A part goes under a subject|by dragging its hypertexts.][ OK ]");
+		redraw_all();
+		return;
+	}
+	changed = malloc((idx->nguides + 1) * sizeof(*changed));
+	if (changed == NULL)
+		return;
+	n = lib_rename_pane(&lib, idx, p, name, changed, idx->nguides);
+	if (n > 0)
+		app_index_edited(changed, (unsigned long) n);
+	free(changed);
+	redraw_all();
+}
+
+/* File under...: the subjects, Other hypertexts, a new one */
+static void file_under(unsigned long g, short mx, short my)
+{
+	enum { MAXSUB = 60 };
+	static char lab[MAXSUB + 2][LIB_PANE_TEXT + 8];
+	const char *l[MAXSUB + 2];
+	long line[MAXSUB + 2];
+	short n = 0, r;
+	unsigned long k;
+
+	for (k = 0; k < lib.npanes && n < MAXSUB; k++)
+	{
+		const lib_pane *p = &lib.panes[k];
+
+		if (p->kind != PANE_SUBJECT && p->kind != PANE_OTHER)
+			continue;
+		snprintf(lab[n], sizeof(lab[n]), "  %s%s", p->level ? "  " : "", p->text);
+		line[n++] = (long) k;
+	}
+	strcpy(lab[n], "  New subject...");
+	line[n++] = -1;
+	for (r = 0; r < n; r++)
+		l[r] = lab[r];
+	log_event("menu", "file-under", NULL);
+	r = popup(mx, my, l, n);
+	redraw(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
+	if (r < 0)
+		return;
+	if (line[r] >= 0)
+	{
+		char subj[128];
+
+		if (lib_drop_subject(&lib, g, line[r], subj, sizeof(subj)) == 0)
+			refile(g, subj);
+		return;
+	}
+	{
+		char name[LIB_PANE_TEXT];
+
+		name[0] = '\0';
+		if (!ask_name("File it under a new subject:", name, sizeof(name)) || strchr(name, '/') != NULL)
+		{
+			redraw_all();
+			return;
+		}
+		refile(g, name);
+	}
+}
+
+/* the right button: a menu for the line or row under the mouse; it is
+   chosen, never opened (Erez, 27 Oct 2026; the guidelines, 3.3) */
+static void right_click(short mx, short my)
+{
+	short x, y, w, h, top;
+	long row;
+
+	work_area(&x, &y, &w, &h);
+	if (mx < x || mx >= x + w || my < y + header_h() || my >= y + h)
+		return;
+	if (panes() && mx < x + pane_text_w())
+	{
+		long p = pane_at(my), before = lib.pane, top_before = pane_top;
+		const char *lab[1];
+		char t[LIB_PANE_TEXT];
+
+		if (p < 0)
+			return;
+		if (lib.query[0] == '\0' && p != lib.pane)
+		{
+			lib_pane_select(&lib, p);
+			pane_moved(before, top_before);
+		}
+		lab[0] = lib_pane_name(&lib, p, t, sizeof(t)) == 0 ? "  Rename subject..." : "~  Rename subject...";
+		log_event("menu", "subject", NULL);
+		if (popup(mx, my, lab, 1) == 0)
+			rename_pane(p);
+		else
+			redraw(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
+		return;
+	}
+	if (panes() && my >= y + h - detail_h())
+		return;
+	if ((row = row_at(my, &top)) < 0)
+		return;
+	{
+		long os = lib.sel, ot = lib.top;
+		const lib_row *rw = &lib.rows[row];
+		static char l_open[] = "  Open             Return", l_open_no[] = "~  Open             Return";
+		static char l_index[] = "  Index", l_index_no[] = "~  Index";
+		static char l_file[] = "  File under...", l_file_no[] = "~  File under...";
+		static char l_ren[] = "  Rename subject...", l_ren_no[] = "~  Rename subject...";
+		const char *lab[5];
+		long p = rw->kind == LIB_GROUP ? lib_pane_of_row(&lib, row) : -1;
+		int r;
+
+		if (rw->kind != LIB_GROUP && lib_select(&lib, row) == row)
+		{
+			sel_moved(os, ot);
+			if (os == lib.sel)
+				refresh_row(lib.sel);
+		}
+		describe();                        /* about_guide: the row chosen's */
+		lab[0] = rw->kind != LIB_GROUP && can_open() ? l_open : l_open_no;
+		lab[1] = rw->kind != LIB_GROUP && has_index(about_guide) ? l_index : l_index_no;
+		lab[2] = "-";
+		lab[3] = rw->kind == LIB_GUIDE ? l_file : l_file_no;
+		lab[4] = p >= 0 ? l_ren : l_ren_no;
+		log_event("menu", "row", NULL);
+		r = popup(mx, my, lab, 5);
+		redraw(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
+		if (r == 0)
+			activate();
+		else if (r == 1)
+			open_index();
+		else if (r == 3)
+			file_under(rw->ref, mx, my);
+		else if (r == 4)
+			rename_pane(p);
+	}
+}
+
+void libwin_click(short mx, short my, short button)
 {
 	short x, y, w, h, lx, ly, lw, lh;
 	long row;
 
 	if (lib_icon)
 		return;
+	if (button & 2)
+	{
+		rows_now();
+		right_click(mx, my);
+		return;
+	}
 	rows_now();
 	work_area(&x, &y, &w, &h);
 	if (mx < x || mx >= x + w || my < y + header_h() || my >= y + h)
@@ -1878,7 +2271,10 @@ void libwin_click(short mx, short my)
 		long i, before = lib.pane, top_before = pane_top;
 
 		if (mx >= x + pane_w())
+		{
+			drag_edge();                   /* the edge between the panes */
 			return;
+		}
 		bar_place();
 		if (libbar_hit(mx, my))
 		{
@@ -1929,14 +2325,10 @@ void libwin_click(short mx, short my)
 		return;
 	}
 	list_area(&lx, &ly, &lw, &lh);
-	if (my < ly || my >= ly + lh)
+	if ((row = row_at(my, &h)) < 0)
 		return;
-	for (row = lib.top, h = ly; (unsigned long) row < lib.nrows; row++)
-	{
-		if (my < h + row_h(row))
-			break;
-		h = (short) (h + row_h(row));
-	}
+	if (drag_row(row, mx, my, h))      /* held and moved: filed elsewhere */
+		return;
 	{
 		long os = lib.sel, ot = lib.top;
 

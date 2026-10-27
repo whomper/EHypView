@@ -114,6 +114,8 @@ nothing of what a hypertext is about: `Documentation/Editors` is Editors. It has
   of the one chosen are on the right: a subject's own, then each part's.
 - **What you chose** is shown under the rows: the title, the author and version, the file and its
   `.REF`. **Open** opens it; **Index** opens its index page, when it has one.
+- **The edge between the panes** can be dragged: the subjects get wider or narrower, in whole
+  characters, and keep that width.
 - **Keys:** Left or Tab goes to the subjects, where Up and Down choose one; Right, Tab or Return
   goes back to the rows. A window narrower than 56 characters shows the Outline.
 
@@ -127,6 +129,25 @@ In both layouts:
 - **Keys:** Up and Down to choose, Return or a click to open, Backspace to take out a letter,
   Delete to remove the bookmark chosen. ^V pastes into the search, ^X cuts it, ^C copies the
   hypertext chosen. Help opens this guide. Esc empties the search; the window stays.
+
+### Your own subjects
+
+Each hypertext names its subject inside the file. EHypView takes it as a start: the library is
+where you put the hypertexts, and it keeps your choice.
+
+- **Drag a hypertext** onto another subject in the Subjects pane, or onto a group's heading in the
+  Outline, to file it there. Dropped on a subject, it keeps its part ("Personal/Calendar" dropped
+  on Utilities becomes "Utilities/Calendar"); dropped on a part, it goes into that part; dropped on
+  **Other hypertexts**, it has no subject.
+- **The right mouse button** on a hypertext chooses it and shows its menu: **Open**, **Index**,
+  **File under...** (the subjects, or a new one) and, on a heading, **Rename subject...**. It never
+  opens the hypertext itself.
+- **Rename subject...** (the right button on a subject or a part) renames it for every hypertext
+  in it.
+
+What you change is kept in the library's index, `EHYPVIEW.IDX`; the hypertexts themselves are
+never written. A hypertext EHypView knows keeps its subject when its file is changed or moved to
+another folder: only one it has never seen starts with the subject the file names.
 
 The pages read last are kept in `EHYPVIEW.INF` when a viewer window closes and when EHypView ends,
 not at every page.
@@ -279,6 +300,8 @@ keeps the notes, and anything it doesn't know, when it writes the file. [Setting
 | `FOLDER=` | EHypView's folder, for `EHYPVIEW.IDX` and `EHYPVIEW.FNT`: the program writes the folder it was started from |
 | `START=` | when the accessory looks through the library: `opened`, `now`, or seconds after boot |
 | `LIBRARY=` | the library's layout: `outline` or `panes` |
+| `PANECOLS=` | the width of the Two panes layout's subjects, in characters, as its edge was dragged |
+| `EDITED=` | counted up when the library's index was written with subjects changed, so that the program or the accessory, whichever didn't, reads it again |
 | `PATHS=` | more folders to look in, between `;` |
 | `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
 | `PAGEKB=` | the part of it its pages needed at the most, in KB: grows when a viewer window closes having needed more |
