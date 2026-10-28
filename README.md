@@ -317,7 +317,7 @@ The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in
   anything it doesn't know, when it writes the file. An `EHYPVIEW.INF` next to the program, from an older EHypView, is copied to
   the root the first time.
 - **`FOLDER=`** in it names EHypView's folder, which holds the index of the hypertexts
-  (`EHYPVIEW.IDX`) and `EHYPVIEW.FNT`. `EHYPVIEW.PRG` uses the folder it was started from and writes
+  (`EHYPVIEW.IDX`) and `EHYPVIEW.FNT`. `EHYPVIEW.PRG` uses its own folder and writes
   it into `FOLDER=`; the accessory uses `FOLDER=`, or the root while there is none.
 - **`START=`** says when the accessory starts on its library: `opened` (the first time it is opened
   or asked for a page; the program writes this when there is none), `now`, or seconds after boot.
