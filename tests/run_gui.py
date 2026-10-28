@@ -390,6 +390,12 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             time.sleep(0.3)
             mouse.xdo("mouseup", "1")
             time.sleep(1)
+        elif isinstance(k, tuple) and k[0] == "hold":       # a click held so many ms
+            mouse.move(k[1], k[2])
+            mouse.xdo("mousedown", "1")
+            time.sleep(k[3] / 1000.0)
+            mouse.xdo("mouseup", "1")
+            time.sleep(0.4)
         elif isinstance(k, tuple) and k[0] == "wait":
             time.sleep(k[1])
         elif isinstance(k, tuple) and k[0] == "still":     # till the screen stops changing
@@ -1067,6 +1073,61 @@ def panebar():
         xvfb.terminate()
 
 
+# one click, one step (guidelines 5.1, 28 Oct 2026): TOS 4.04's AES sent a
+# click on a window's track or arrow twice, so the window moved two pages
+# a click (Erez: "still jumping two positions"); common's evnt_multi_
+# drops the echo. On the Falcon-4 with TOS 4.04: BIG.HYP, a click held
+# 120 ms on the viewer's track below the slider moves one page, one on its
+# down arrow one line, one held 20 ms on the track one page more, each
+# with one WM_ARROWED ("arrowed WHAT TOP")
+ARROW_MACHINE = "Falcon-4:16"
+BIG = r"C:\FIXT\BIG.HYP"
+
+
+def arrow_click(where, ms):
+    """a click held ms on the viewer's track ("window-at X Y W H": its
+    right edge, three quarters down) or its down arrow (above the sizer)"""
+    def step(rig):
+        at = [ev.split()[1:5] for ev in rig.events() if ev.startswith("window-at ")]
+        if not at:
+            return False
+        x, y, w, h = (int(v) for v in at[-1])
+        cell = 19                                   # an arrow box, 8x16 font on VGA
+        rig.press(("hold", x + w - cell // 2, y + h * 3 // 4 if where == "track" else y + h - cell - cell // 2,
+                   ms))
+        return True
+    return step
+
+
+def arrow_tops(rig):
+    """the three steps: a page, a line, a page"""
+    tops = [int(ev.split()[2]) for ev in rig.events() if ev.startswith("arrowed ")]
+    ok = len(tops) == 3 and tops[0] > 1 and tops[1] == tops[0] + 1 and tops[2] == tops[1] + tops[0]
+    print("%s  tops after each click: %s (a page, a line, a page)" % ("ok  " if ok else "FAIL", tops))
+    return ok
+
+
+ARROW_STEPS = [
+    ([], ["window-at *", "page %s Main" % BIG]),
+    ([("home",), ("hover", 320, 300), ("still", 5)], []),   # (the pointers in step)
+    (arrow_click("track", 120), ["arrowed dnpage *", "!arrowed *"]),
+    (arrow_click("down", 120), ["arrowed dnline *", "!arrowed *"]),
+    (arrow_click("track", 20), ["arrowed dnpage *", "!arrowed *"]),
+    (arrow_tops, []),
+    ([("ctrl", Q)], ["quit"]),
+]
+
+
+def arrowed():
+    d = copy_dir("arrowed", "PATHS=C:\\FIXT\n", start=BIG)
+    print("      arrowed on %s" % machines.Machine(ARROW_MACHINE, d).describe())
+    xvfb = start_xvfb()
+    try:
+        return run_scenario("arrowed", d, ARROW_STEPS, auto=LAUNCH, windowed=True, machine=ARROW_MACHINE)
+    finally:
+        xvfb.terminate()
+
+
 # hypertexts filed under other subjects (Erez, 27 Oct 2026; the index is
 # where a hypertext belongs): the twenty of the pane bar's run, each its
 # own subject, SubNN/EHypVie. A right click on a row chooses it and shows
@@ -1206,6 +1267,8 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     if sys.argv[3:] == ["shots"]:                   # make shots: the README's pictures
         return 0 if shots() else 1
+    if sys.argv[3:] == ["arrowed"]:                 # one click, one step alone
+        return 0 if arrowed() else 1
     if sys.argv[3:] == ["stfield"]:                 # the ST's long field alone
         return 0 if st_field() else 1
     if sys.argv[3:] == ["look"]:                    # the dialogs' look alone (5.6)
@@ -1256,6 +1319,7 @@ def main():
             ok = ok and look()
             ok = ok and panebar()
             ok = ok and refile()
+            ok = ok and arrowed()
         else:
             print("skip  mouse: needs Xvfb and xdotool")
     if ok:

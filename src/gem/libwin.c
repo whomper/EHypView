@@ -2384,6 +2384,13 @@ int libwin_message(short *msg)
 			}
 			set_slider();
 			redraw_list();
+			{
+				static const char *const what[4] = { "uppage", "dnpage", "upline", "dnline" };
+				char top[16];
+
+				sprintf(top, "%ld", lib.top);
+				log_event("library-arrowed", msg[4] >= 0 && msg[4] < 4 ? what[msg[4]] : "?", top);
+			}
 		}
 		break;
 	case WM_VSLID:
