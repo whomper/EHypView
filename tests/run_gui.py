@@ -1073,18 +1073,33 @@ def panebar():
         xvfb.terminate()
 
 
-# one click, one step (guidelines 5.1, 28 Oct 2026): TOS 4.04's AES sent a
-# click on a window's track or arrow twice, so the window moved two pages
-# a click (Erez: "still jumping two positions"); common's evnt_multi_
-# drops the echo. On the Falcon-4 with TOS 4.04: BIG.HYP, a click held
-# 120 ms on the viewer's track below the slider moves one page, one on its
-# down arrow one line, one held 20 ms on the track one page more, each
-# with one WM_ARROWED ("arrowed WHAT TOP")
-ARROW_MACHINE = "Falcon-4:16"
+# one click, one step (guidelines 5.1, 28 Oct 2026): the AES sent a click
+# on a window's track or arrow twice, so the window moved two pages a
+# click (Erez: "still jumping two positions"); TOS 4.04 every click, TOS
+# 1.04 now and then (ClaudeST); common's evnt_multi_ drops the echo. On
+# the Falcon-4 with TOS 4.04 and the ST in mono with TOS 1.04: BIG.HYP,
+# whose window must fit the screen (wind_x8 had moved it 7 pixels past
+# the right edge); a click held 120 ms on the viewer's track below the
+# slider moves one page, one on its down arrow one line, one held 20 ms
+# on the track one page more, each with one WM_ARROWED ("arrowed WHAT TOP")
+ARROW_MACHINES = ["Falcon-4:16", "ST:mono"]
 BIG = r"C:\FIXT\BIG.HYP"
 
 
-def arrow_click(where, ms):
+def window_fits(rig):
+    """the viewer's window ("window-at X Y W H") inside the screen"""
+    scr = [ev.split()[1] for ev in rig.events() if ev.startswith("screen ")]
+    at = [ev.split()[1:5] for ev in rig.events() if ev.startswith("window-at ")]
+    if not scr or not at:
+        return False
+    width = int(scr[-1].split("x")[0])
+    x, y, w, h = (int(v) for v in at[-1])
+    ok = x >= 0 and x + w <= width
+    print("%s  the window %d..%d across, the screen %d" % ("ok  " if ok else "FAIL", x, x + w - 1, width))
+    return ok
+
+
+def arrow_click(where, ms, skew):
     """a click held ms on the viewer's track ("window-at X Y W H": its
     right edge, three quarters down) or its down arrow (above the sizer)"""
     def step(rig):
@@ -1092,9 +1107,9 @@ def arrow_click(where, ms):
         if not at:
             return False
         x, y, w, h = (int(v) for v in at[-1])
-        cell = 19                                   # an arrow box, 8x16 font on VGA
-        rig.press(("hold", x + w - cell // 2, y + h * 3 // 4 if where == "track" else y + h - cell - cell // 2,
-                   ms))
+        cell = 19                                   # an arrow box, the 8x16 font
+        ay = y + h * 3 // 4 if where == "track" else y + h - cell - cell // 2
+        rig.press(("hold", x + w - cell // 2 - skew, ay - skew, ms))
         return True
     return step
 
@@ -1107,25 +1122,32 @@ def arrow_tops(rig):
     return ok
 
 
-ARROW_STEPS = [
-    ([], ["window-at *", "page %s Main" % BIG]),
-    ([("home",), ("hover", 320, 300), ("still", 5)], []),   # (the pointers in step)
-    (arrow_click("track", 120), ["arrowed dnpage *", "!arrowed *"]),
-    (arrow_click("down", 120), ["arrowed dnline *", "!arrowed *"]),
-    (arrow_click("track", 20), ["arrowed dnpage *", "!arrowed *"]),
-    (arrow_tops, []),
-    ([("ctrl", Q)], ["quit"]),
-]
+def arrow_steps(machine):
+    skew = ST_SKEW if machine.startswith("ST") else 0
+    return [
+        ([], ["window-at *", "page %s Main" % BIG]),
+        (window_fits, []),
+        ([("home",), ("hover", 320, 300), ("still", 5)], []),   # (the pointers in step)
+        (arrow_click("track", 120, skew), ["arrowed dnpage *", "!arrowed *"]),
+        (arrow_click("down", 120, skew), ["arrowed dnline *", "!arrowed *"]),
+        (arrow_click("track", 20, skew), ["arrowed dnpage *", "!arrowed *"]),
+        (arrow_tops, []),
+        ([("ctrl", Q)], ["quit"]),
+    ]
 
 
 def arrowed():
-    d = copy_dir("arrowed", "PATHS=C:\\FIXT\n", start=BIG)
-    print("      arrowed on %s" % machines.Machine(ARROW_MACHINE, d).describe())
-    xvfb = start_xvfb()
-    try:
-        return run_scenario("arrowed", d, ARROW_STEPS, auto=LAUNCH, windowed=True, machine=ARROW_MACHINE)
-    finally:
-        xvfb.terminate()
+    ok = True
+    for machine in ARROW_MACHINES:
+        name = "arrowed-" + machine.split(":")[0].lower()
+        d = copy_dir(name, "PATHS=C:\\FIXT\n", start=BIG)
+        print("      %s on %s" % (name, machine and machines.Machine(machine, d).describe()))
+        xvfb = start_xvfb()
+        try:
+            ok = run_scenario(name, d, arrow_steps(machine), auto=LAUNCH, windowed=True, machine=machine) and ok
+        finally:
+            xvfb.terminate()
+    return ok
 
 
 # hypertexts filed under other subjects (Erez, 27 Oct 2026; the index is

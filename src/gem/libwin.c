@@ -1406,6 +1406,15 @@ static void log_search(void)
 	log_event("search", q, n);
 }
 
+/* a window that fitted the screen still fits after wind_x8 moved it up
+   to 7 pixels right (its text on the 8-pixel grid): as much narrower */
+static short fit_right(short x, short nx, short w)
+{
+	short right = (short) (desk_x + desk_w);
+
+	return (short) (x + w <= right && nx + w > right ? right - nx : w);
+}
+
 void libwin_open(void)
 {
 	short x, y, w, h;
@@ -1436,7 +1445,12 @@ void libwin_open(void)
 		y = (short) (desk_y + ch);
 		/* its text on the 8-pixel grid: the VDI draws it far faster (the
 		   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
-		x = wind_x8(LKIND, x, y, w, h);
+		{
+			short nx = wind_x8(LKIND, x, y, w, h);
+
+			w = fit_right(x, nx, w);
+			x = nx;
+		}
 		wind_set_str(lib_h, WF_NAME, lib_name);
 		info_shown[0] = '\x01';            /* a new window: none yet */
 		slider_shown[0] = slider_shown[1] = -1;
@@ -2354,7 +2368,12 @@ int libwin_message(short *msg)
 		}
 		w = msg[6] < 20 * cw ? (short) (20 * cw) : msg[6];
 		h = msg[7] < 6 * ch ? (short) (6 * ch) : msg[7];
-		wind_set(lib_h, WF_CURRXYWH, wind_x8(LKIND, msg[4], msg[5], w, h), msg[5], w, h);
+		{
+			short x = wind_x8(LKIND, msg[4], msg[5], w, h);
+
+			w = fit_right(msg[4], x, w);
+			wind_set(lib_h, WF_CURRXYWH, x, msg[5], w, h);
+		}
 		apply_layout();
 		clamp();
 		set_slider();

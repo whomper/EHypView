@@ -974,6 +974,15 @@ static short lines_h(short x, short y, short w, short h)
 	return page > ch ? (short) (h - page % ch) : h;
 }
 
+/* a window that fitted the screen still fits after wind_x8 moved it up
+   to 7 pixels right (its text on the 8-pixel grid): as much narrower */
+static short fit_right(short x, short nx, short w)
+{
+	short right = (short) (desk_x + desk_w);
+
+	return (short) (x + w <= right && nx + w > right ? right - nx : w);
+}
+
 static void open_window(void)
 {
 	short x, y, w, h, cols;
@@ -1016,7 +1025,12 @@ static void open_window(void)
 	}
 	/* its text on the 8-pixel grid: the VDI draws it far faster (the
 	   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
-	x = wind_x8(WKIND, x, y, w, h);
+	{
+		short nx = wind_x8(WKIND, x, y, w, h);
+
+		w = fit_right(x, nx, w);
+		x = nx;
+	}
 	h = lines_h(x, y, w, h);
 	view_title(&cur->view, cur->name, sizeof(cur->name));
 	wind_set_str(cur->h, WF_NAME, cur->name);
@@ -2590,7 +2604,12 @@ static void viewer_message(short *msg)
 			w = w < 12 * cw ? (short) (12 * cw) : w;
 			h = msg[7] < 6 * ch + tb_height(sys_ch) ? (short) (6 * ch + tb_height(sys_ch)) : msg[7];
 			h = lines_h(msg[4], msg[5], w, h);
-			wind_set(cur->h, WF_CURRXYWH, wind_x8(WKIND, msg[4], msg[5], w, h), msg[5], w, h);
+			{
+				short x = wind_x8(WKIND, msg[4], msg[5], w, h);
+
+				w = fit_right(msg[4], x, w);
+				wind_set(cur->h, WF_CURRXYWH, x, msg[5], w, h);
+			}
 			clamp_scroll();
 			set_sliders();
 			if (msg[0] == WM_SIZED)
