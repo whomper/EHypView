@@ -1029,6 +1029,12 @@ static void open_window(void)
 	set_sliders();
 	planning = 0;
 	wind_open(cur->h, x, y, w, h);
+	{
+		char at[32];
+
+		sprintf(at, "%d %d %d %d", x, y, w, h);
+		log_event("window-at", at, NULL);  /* for the tests: its arrows and track */
+	}
 	cur->fresh = 1;
 	if (is_acc)                        /* the desktop drops files on it */
 		av_window(cur->h, 1);
@@ -2606,6 +2612,14 @@ static void viewer_message(short *msg)
 			case WA_RTPAGE: scroll_to(cur->view.top, cur->view.left + cols); break;
 			case WA_LFLINE: scroll_to(cur->view.top, cur->view.left - 1); break;
 			case WA_RTLINE: scroll_to(cur->view.top, cur->view.left + 1); break;
+			}
+			{
+				static const char *const what[8] = { "uppage", "dnpage", "upline", "dnline",
+								     "lfpage", "rtpage", "lfline", "rtline" };
+				char top[16];
+
+				sprintf(top, "%ld", cur->view.top);
+				log_event("arrowed", msg[4] >= 0 && msg[4] < 8 ? what[msg[4]] : "?", top);
 			}
 		}
 		break;
