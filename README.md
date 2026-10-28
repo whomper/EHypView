@@ -463,9 +463,10 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
   its field shows, edited at its start and end), the alert for one that isn't there, and the library
   looked through again; `EHYPVIEW.INF` must then hold them. The long folder is typed again on the
   4 MB ST in mono with TOS 1.04 (`ST:mono`), with ⇧Left, ⇧Right and ⇧Clr/Home. On a Falcon of
-  4 MB with TOS 4.04 (`Falcon-4:16`), one click on the viewer's slider track must move it one page
-  and one on its arrow one line, each click a single `WM_ARROWED` (guidelines 5.1: TOS 4's AES sent
-  each click twice until common's `evnt_multi_` dropped the second). The
+  4 MB with TOS 4.04 (`Falcon-4:16`) and on the ST in mono, a wide hypertext's window must fit the
+  screen, and one click on its slider track must move it one page and one on its arrow one line,
+  each click a single `WM_ARROWED` (guidelines 5.1: TOS 4's AES sent each click twice, TOS 1.04 now
+  and then, until common's `evnt_multi_` dropped the second). The
   viewer reports what it does through NatFeats, and each step waits for it. `make accnvdi-test`, with Erez's NVDI
   (`AERA_WITH_NVDI=1`, `common/tools/machines.py`; skipped without it): the accessory picks a GDOS font in
   its own selector, by keyboard, is closed and opened again, and draws a page another program asked for
