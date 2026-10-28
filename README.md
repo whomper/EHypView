@@ -371,7 +371,7 @@ the AERA programs' shared code, a copy of [AERA-Atari](https://github.com/whompe
 EMail's) makes ST-Guide's source from it, `common/tools/helpfront.py` gives it the AERA programs' front
 page from `docs/front.json`, and `hcp` compiles it; `common/tools/build-hcp.sh DIR` builds `hcp`. The
 front page's window picture, `docs/help/WINDOW.IMG`, is committed: when the viewer changes, `make shots`
-takes it again in Hatari (`common/tools/helpfront.py thumb`), with the README's pictures: the Falcon
+takes it again in Hatari (`common/tools/helpfront.py thumb`), with the README's pictures: the Falcon in 256 colours (`Falcon:256`)
 with the AERA programs' guides from their latest releases (`tests/run_gui.py`, `SHOT_STEPS`). EHypView's own reader checks every page of the result (`hypdump check`).
 
 `build/host/hypdump` inspects any hypertext:

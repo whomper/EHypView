@@ -1111,9 +1111,11 @@ def refile():
 
 
 # the README's pictures (make shots): the family's guides from their latest
-# releases and EHypView's own in C:\\GUIDES, on the Falcon; each step's
-# screenshot named in SHOT_FILES goes to docs/
+# releases and EHypView's own in C:\\GUIDES, on the Falcon in 256 colours
+# (Erez, 28 Oct 2026: the pictures shown are the 256-colour ones; MACHINE=
+# another); each step's screenshot named in SHOT_FILES goes to docs/
 GUIDE = r"C:\GUIDES\EHYPVIEW.HYP"
+SHOT_MACHINE = os.environ.get("MACHINE", "Falcon:256")
 FAMILY = [("ECal", "ECAL"), ("EContact", "ECONTACT"), ("EMail", "EMAIL"), ("EFTP", "EFTP"),
           ("ClaudeST", "CLAUDEST")]
 LONGDIR = r"C:\HYPTEXT\PROGRAMS\DEVELOP\GEMLIB\MANUALS\ENGLISH"
@@ -1182,7 +1184,7 @@ def shots():
             os.remove(os.path.join(g, f))
     xvfb = start_xvfb()
     try:
-        ok = run_scenario("shots", d, SHOT_STEPS, auto=LAUNCH, windowed=True)
+        ok = run_scenario("shots", d, SHOT_STEPS, auto=LAUNCH, windowed=True, machine=SHOT_MACHINE)
     finally:
         xvfb.terminate()
     if ok:
