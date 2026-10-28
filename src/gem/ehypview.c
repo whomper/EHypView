@@ -123,7 +123,7 @@ static void wake(void);
 static int needs_index(const char *args);
 static void job_wait_index(void);
 static void job_load_index(void);
-static char start_dir[160];           /* where the program started: CRASH.LOG */
+static char start_dir[160];           /* the program's own folder: CRASH.LOG */
 static char home_dir[160];            /* FOLDER=: EHYPVIEW.IDX and .FNT */
 static char settings_path[40];        /* X:\EHYPVIEW.INF, the boot drive's root */
 static char *inf_boot;                 /* it, as the accessory's start read it (acc_heap) */
@@ -3019,7 +3019,7 @@ static void find_home(void)
 		f = own_inf != NULL ? inf_get(own_inf, "FOLDER") : NULL;
 		if (f == NULL || atari_casecmp(f, home_dir) != 0)
 			settings_put("FOLDER", home_dir, "where EHypView keeps its files (EHYPVIEW.IDX, the library; "
-				     "EHYPVIEW.FNT, the fonts measured): the program writes the folder it was started from");
+				     "EHYPVIEW.FNT, the fonts measured): the program writes its own folder");
 		if (own_inf == NULL || inf_get(own_inf, "START") == NULL)
 			settings_put("START", "opened", "when the accessory looks through the library: opened (when "
 				     "first opened or asked for a page), now (at boot), or seconds after boot");
@@ -3740,9 +3740,25 @@ int main(void)
 		return 1;
 	}
 
-	start_dir[0] = (char) ('A' + Dgetdrv());
-	start_dir[1] = ':';
-	Dgetpath(start_dir + 2, 0);
+	/* the program's own folder from the command it was started with, not
+	   the current one: TOS 1.04 and 4.04 leave that at the desktop's when
+	   another program starts this one (the Help key, EUpdate: the AERA
+	   guidelines, 6.1); written as before, "C:\EHYPVIEW" for FOLDER= */
+	if (!is_acc && strlen(app_dir()) < sizeof(start_dir))
+	{
+		size_t n;
+
+		strcpy(start_dir, app_dir());
+		n = strlen(start_dir);
+		if (n > 3 && start_dir[n - 1] == '\\')
+			start_dir[n - 1] = '\0';
+	}
+	else
+	{
+		start_dir[0] = (char) ('A' + Dgetdrv());
+		start_dir[1] = ':';
+		Dgetpath(start_dir + 2, 0);
+	}
 	if (start_dir[2] == '\0')
 		strcpy(start_dir + 2, "\\");
 	crash_install(start_dir, "EHypView", app_version);	/* the program only */

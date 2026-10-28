@@ -202,7 +202,7 @@ field Esc empties the field instead, as in every GEM dialog.
   you open it, or a program asks it for a page), **At start**, **After a minute** or **After 5
   minutes**. It takes effect at the next start. The program looks as it starts. Under it,
   EHypView's folder: where the library's index (`EHYPVIEW.IDX`) and the fonts measured
-  (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` was started from. Where the system draws
+  (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` is in. Where the system draws
   dialogs in 3D (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour), EHypView's dialogs and alerts are
   in 3D, as every other program's.
 - **Library:** its layout, **Outline** or **Two panes** (see [the library](#the-library)); up to
@@ -297,7 +297,7 @@ keeps the notes, and anything it doesn't know, when it writes the file. [Setting
 
 | Setting | What it is |
 |---|---|
-| `FOLDER=` | EHypView's folder, for `EHYPVIEW.IDX` and `EHYPVIEW.FNT`: the program writes the folder it was started from |
+| `FOLDER=` | EHypView's folder, for `EHYPVIEW.IDX` and `EHYPVIEW.FNT`: the program writes its own folder, wherever it was started from |
 | `START=` | when the accessory looks through the library: `opened`, `now`, or seconds after boot |
 | `LIBRARY=` | the library's layout: `outline` or `panes` |
 | `PANECOLS=` | the width of the Two panes layout's subjects, in characters, as its edge was dragged |
