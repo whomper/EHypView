@@ -1151,7 +1151,10 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 						vst_color(vdi_h, colour = fg);
 					if (effects != (fx & ~by_hand & ~twice))
 						vst_effects(vdi_h, effects = (short) (fx & ~by_hand & ~twice));
-					text_at((short) x, (short) y, run->text, run->len);
+					if (mode == MD_REPLACE && colour == 1 && effects == 0)
+						text_plain_at((short) x, (short) y, run->text, run->len);
+					else
+						text_at((short) x, (short) y, run->text, run->len);
 					if (by_hand)
 					{
 						text_fx_after((short) x, (short) y, run->text, run->len, by_hand, fg);

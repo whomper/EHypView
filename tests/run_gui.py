@@ -39,6 +39,7 @@ TAB, RETURN, BACKSPACE, HELP, UNDO, ESC = 15, 28, 14, 0x62, 0x61, 1
 RIGHT, LEFT, Q, L, W, U, I, F, CTRL, SHIFT = 0x4D, 0x4B, 0x10, 0x26, 0x11, 0x16, 0x17, 0x21, 29, 0x2A
 MINUS, EQUALS = 0x0C, 0x0D
 N, D, DELETE = 0x31, 0x20, 0x53
+C_KEY = 0x2E
 DOWN, UP = 0x50, 0x48
 IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
@@ -747,7 +748,24 @@ ACC_FASTRAM_STEPS = [
     ([("wait", 6), ("click", 18, 8), ("click", 60, 64)], ["library 0", "index 5 guides"]),
     ([("type", "image")], ['search "image" 1']),
     ([RETURN], ["page %s Main" % IMAGES, "pictures 3 st-ram"]),
+    # ^C in the accessory: the page to the clipboard (common's clip_put,
+    # its buffer from the accessory's heap); check_scrap reads it
+    ([("ctrl", C_KEY)], ["copy page *"]),
 ]
+
+
+def check_scrap(d):
+    """CLIPBRD\\SCRAP.TXT on C: as clip_put wrote it: text, lines ending CR LF"""
+    path = os.path.join(d, "CLIPBRD", "SCRAP.TXT")
+    try:
+        with open(path, "rb") as f:
+            got = f.read()
+    except OSError as e:
+        print("FAIL  the clipboard: %s" % e)
+        return False
+    ok = len(got) > 0 and b"\r\n" in got and b"\n" not in got.replace(b"\r\n", b"")
+    print("%s  the clipboard: SCRAP.TXT, %d bytes, lines ending CR LF" % ("ok  " if ok else "FAIL", len(got)))
+    return ok
 
 
 # The accessory with a GDOS font under NVDI (guidelines 2.2), for the hub's
@@ -1380,6 +1398,7 @@ def main():
             xvfb = start_xvfb()
             try:
                 ok = run_scenario("accfast", d, ACC_FASTRAM_STEPS, auto=None, windowed=True, extra=FASTRAM)
+                ok = ok and check_scrap(d)
             finally:
                 xvfb.terminate()
         else:

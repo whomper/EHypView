@@ -34,6 +34,9 @@ void fill(short color, short x1, short y1, short x2, short y2);
    underline on plain text just drawn in MD_REPLACE on a white ground,
    where text_fx_fast(fx, mode) says so */
 void text_at(short x, short y, const char *s, long n);
+/* text_at for plain text (MD_REPLACE, pen 1, no effects set): common's
+   text_plain, straight into TOS's own screen where it can, else text_n */
+void text_plain_at(short x, short y, const char *s, long n);
 void clip_on(const short *c);
 void clip_off(void);
 void text_fx_after(short x, short y, const char *s, long n, short fx, short colour);

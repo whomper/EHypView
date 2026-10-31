@@ -425,6 +425,14 @@ void text_at(short x, short y, const char *s, long n)
 	text_n(vdi_h, x, y, s, n);
 }
 
+/* plain text, MD_REPLACE in pen 1 with no effects (the guidelines'
+   Speed, text_plain): on TOS's own screen the system font's glyphs go
+   straight into it, some three times the VDI's speed on an ST */
+void text_plain_at(short x, short y, const char *s, long n)
+{
+	text_plain(vdi_h, x, y, s, n);
+}
+
 void clip_on(const short *c)
 {
 	text_clip(vdi_h, c);
@@ -1176,7 +1184,8 @@ void viewer_show(const char *path, const char *node, unsigned short line)
 
 /*
  * The page moved up by dy pixels (down when dy < 0): what stays in view
- * is copied on the screen (vro_cpyfm) when the whole work area shows,
+ * is moved on the screen (common's scr_rows: by the CPU on TOS's own
+ * screen, else vro_cpyfm) when the whole work area shows,
  * and only the strip that comes in is drawn (EContact's win_scroll);
  * otherwise the area is drawn again.
  */
@@ -1198,10 +1207,8 @@ static void scroll_area(short x, short y, short w, short h, long dy)
 	if (rx <= x && ry <= y && rx + rw >= x + w && ry + rh >= y + h &&
 		x >= desk_x && y >= desk_y && x + w <= desk_x + desk_w && y + h <= desk_y + desk_h)
 	{
-		MFDB scr;
 		short pxy[8], clip[4];
 
-		memset(&scr, 0, sizeof(scr));
 		pxy[0] = pxy[4] = x;
 		pxy[2] = pxy[6] = (short) (x + w - 1);
 		pxy[1] = (short) (y + (dy > 0 ? ady : 0));
@@ -1214,7 +1221,7 @@ static void scroll_area(short x, short y, short w, short h, long dy)
 		clip[3] = (short) (y + h - 1);
 		graf_mouse(M_OFF, NULL);
 		text_clip(vdi_h, clip);           /* NVDI clips raster copies */
-		vro_cpyfm(vdi_h, 3, pxy, &scr, &scr);
+		scr_rows(vdi_h, pxy);
 		text_noclip(vdi_h);
 		graf_mouse(M_ON, NULL);
 		whole = 1;
@@ -2319,10 +2326,7 @@ static int bar_press(const toolbar *t, int b)
 		return 1;
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, NULL);
-	vswr_mode(vdi_h, MD_XOR);
-	vsf_interior(vdi_h, FIS_SOLID);
-	vsf_color(vdi_h, 1);
-	vr_recfl(vdi_h, pxy);
+	scr_xor(vdi_h, pxy);                   /* common's: by the CPU on TOS's screen */
 	graf_mouse(M_ON, NULL);
 	for (;;)
 	{
@@ -2331,8 +2335,7 @@ static int bar_press(const toolbar *t, int b)
 		if (now != in)
 		{
 			graf_mouse(M_OFF, NULL);
-			vswr_mode(vdi_h, MD_XOR);
-			vr_recfl(vdi_h, pxy);
+			scr_xor(vdi_h, pxy);
 			graf_mouse(M_ON, NULL);
 			in = now;
 		}
@@ -2343,8 +2346,7 @@ static int bar_press(const toolbar *t, int b)
 	if (in)
 	{
 		graf_mouse(M_OFF, NULL);
-		vswr_mode(vdi_h, MD_XOR);
-		vr_recfl(vdi_h, pxy);
+		scr_xor(vdi_h, pxy);
 		graf_mouse(M_ON, NULL);
 	}
 	vswr_mode(vdi_h, MD_REPLACE);

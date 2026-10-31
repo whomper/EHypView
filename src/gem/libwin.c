@@ -640,7 +640,10 @@ static long put(short x, short y, const char *s, long room, short color, short e
 		vswr_mode(vdi_h, white_ground && color != 0 ? MD_REPLACE : MD_TRANS);
 		vst_color(vdi_h, color);
 		vst_effects(vdi_h, (short) (effects & ~by_hand & ~twice));
-		text_at(x, y, s, n);
+		if (white_ground && color == 1 && !(effects & ~by_hand & ~twice))
+			text_plain_at(x, y, s, n);   /* MD_REPLACE, pen 1, plain */
+		else
+			text_at(x, y, s, n);
 		if (twice)
 		{
 			vst_effects(vdi_h, (short) (effects & ~1 & ~8));
