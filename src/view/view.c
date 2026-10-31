@@ -719,6 +719,72 @@ unsigned long view_page_text(const ehv_view *v, char *buf, unsigned long size)
 	return n;
 }
 
+int view_park(ehv_view *v, view_parked *p)
+{
+	memset(p, 0, sizeof(*p));
+	if (v->page != NULL)
+	{
+		p->here.path = dupstr(v->doc->path);
+		p->here.title = dupstr(hyp_page_title(v->doc, v->page));
+		if (p->here.path == NULL || p->here.title == NULL)
+		{
+			hist_free(&p->here);
+			memset(p, 0, sizeof(*p));
+			return -1;
+		}
+		p->here.node = v->page->num;
+		p->here.top = v->top;
+	}
+	p->left = v->left;
+	p->hist = v->hist;
+	p->nhist = v->nhist;
+	p->cap_hist = v->cap_hist;
+	p->fwd = v->fwd;
+	p->nfwd = v->nfwd;
+	p->cap_fwd = v->cap_fwd;
+	v->hist = v->fwd = NULL;
+	v->nhist = v->cap_hist = v->nfwd = v->cap_fwd = 0;
+	view_free(v);                 /* the page and hypertext; v empty */
+	return 0;
+}
+
+int view_unpark(ehv_view *v, view_parked *p)
+{
+	int rc = VIEW_OK;
+
+	view_free(v);
+	v->hist = p->hist;
+	v->nhist = p->nhist;
+	v->cap_hist = p->cap_hist;
+	v->fwd = p->fwd;
+	v->nfwd = p->nfwd;
+	v->cap_fwd = p->cap_fwd;
+	p->hist = p->fwd = NULL;
+	p->nhist = p->cap_hist = p->nfwd = p->cap_fwd = 0;
+	if (p->here.path != NULL)
+	{
+		rc = show_hist(v, &p->here);
+		if (rc == VIEW_OK)
+			v->left = p->left;
+	}
+	view_parked_free(p);
+	return rc;
+}
+
+void view_parked_free(view_parked *p)
+{
+	unsigned long i;
+
+	hist_free(&p->here);
+	for (i = 0; i < p->nhist; i++)
+		hist_free(&p->hist[i]);
+	free(p->hist);
+	for (i = 0; i < p->nfwd; i++)
+		hist_free(&p->fwd[i]);
+	free(p->fwd);
+	memset(p, 0, sizeof(*p));
+}
+
 void view_title(const ehv_view *v, char *buf, unsigned long size)
 {
 	const char *db, *pt;

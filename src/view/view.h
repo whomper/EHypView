@@ -139,6 +139,29 @@ long view_run_line(const ehv_view *v, long r);
    how many were written */
 unsigned long view_page_text(const ehv_view *v, char *buf, unsigned long size);
 
+/*
+ * A tab put away (tabs in a window, Erez 31 Oct 2026): the page it
+ * showed, by place, and its history both ways; its hypertext and page
+ * are let go, and read again when it comes to the front.
+ */
+typedef struct {
+	view_hist here;              /* its page; path NULL: none */
+	long left;
+	view_hist *hist;
+	unsigned long nhist, cap_hist;
+	view_hist *fwd;
+	unsigned long nfwd, cap_fwd;
+} view_parked;
+
+/* v's page and lists into p, its hypertext let go, v left empty (no
+   page); -1 out of memory, v as it was */
+int view_park(ehv_view *v, view_parked *p);
+/* p's page shown in v (empty) and its lists taken, p emptied; VIEW_ERROR
+   when the page can't be shown again (v->status says why; the lists are
+   taken all the same) */
+int view_unpark(ehv_view *v, view_parked *p);
+void view_parked_free(view_parked *p);
+
 /* "database - page title" for the window name */
 void view_title(const ehv_view *v, char *buf, unsigned long size);
 

@@ -36,10 +36,12 @@
 #include "pagedraw.h"
 #include "menu.h"
 #include "toolbar.h"
+#include "tabs.h"
 #include "stmem.h"
 #include "accmem.h"
 #include "crash.h"
 #include "av.h"
+#include "notify.h"                /* BUBBLEGEM_SHOW */
 #include "grect.h"
 #include "popup.h"
 #include "aboutbox.h"
@@ -93,6 +95,11 @@ typedef struct {
 	char name[160], info[200];
 	ehv_view view;
 	playout lay;                   /* the page laid out (pagedraw.c)  */
+	/* its tabs (Erez, 31 Oct 2026): `view` is the one in front; the
+	   others are put away, their place and history kept, their page
+	   read again when one comes to the front. Two or more: the strip */
+	short ntabs, front;
+	view_parked tabs[TABS_MAX];    /* tabs[front] unused */
 } viewer;
 
 #define MAX_VIEWERS 6
@@ -234,10 +241,22 @@ static viewer *viewer_new(void)
 			memset(v, 0, sizeof(*v));
 			v->h = -1;
 			v->used = 1;
+			v->ntabs = 1;
 			view_init(&v->view, idx);
 			return v;
 		}
 	return NULL;
+}
+
+/* the tabs put away let go of: the one in front stays, alone */
+static void tabs_drop(viewer *v)
+{
+	int i;
+
+	for (i = 0; i < TABS_MAX; i++)
+		view_parked_free(&v->tabs[i]);
+	v->ntabs = 1;
+	v->front = 0;
 }
 
 /* let a viewer go (its window is closed already) */
@@ -245,8 +264,10 @@ static void viewer_drop(viewer *v)
 {
 	layout_free(&v->lay);
 	view_free(&v->view);
+	tabs_drop(v);
 	memset(v, 0, sizeof(*v));
 	v->h = -1;
+	v->ntabs = 1;
 }
 
 static short top_window(void);
@@ -300,9 +321,15 @@ static void bar(toolbar *t)
 static short planned[4];
 static int planning;
 
+/* the toolbar's height, and the tab strip's under it when there is one */
+static short head_h(void)
+{
+	return (short) (tb_height(sys_ch) + (cur->ntabs > 1 ? tabs_height(sys_ch) : 0));
+}
+
 static void work_area(short *x, short *y, short *w, short *h)
 {
-	short th = tb_height(sys_ch);
+	short th = head_h();
 
 	if (planning)
 	{
@@ -649,7 +676,92 @@ static void draw_bar(short cx, short cy, short cw_, short ch_)
 	text_noclip(vdi_h);
 }
 
-/* the work area within one rectangle: the toolbar, the page */
+/* tab i's title: its page's, as the window's name has it */
+static const char *tab_title(int i)
+{
+	if (i == cur->front)
+		return cur->view.page != NULL ? hyp_page_title(cur->view.doc, cur->view.page) : "EHypView";
+	return cur->tabs[i].here.title != NULL ? cur->tabs[i].here.title : "EHypView";
+}
+
+/* the tab strip of the current viewer's window, laid out */
+static void strip(tabstrip *s)
+{
+	short x, y, w, h, len[TABS_MAX];
+	int i;
+
+	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);
+	for (i = 0; i < cur->ntabs && i < TABS_MAX; i++)
+		len[i] = (short) strlen(tab_title(i));
+	tabs_layout(s, x, (short) (y + tb_height(sys_ch)), w, sys_cw, sys_ch, cur->ntabs, len);
+}
+
+/*
+ * The tab strip within one rectangle: each tab framed on three sides,
+ * its title in the system font; the one in front white, its title bold,
+ * open to the page below it; the others on the strip's ground (light
+ * grey with 16 colours or more, else white)
+ */
+static void draw_strip(short cx, short cy, short cw_, short ch_)
+{
+	tabstrip s;
+	short clip[4], p[8], ground = ncolors >= 16 ? ui_colour(8) : 0, base;
+	int i;
+
+	strip(&s);
+	base = (short) (s.y + s.h - 1);
+	clip[0] = cx;
+	clip[1] = cy;
+	clip[2] = (short) (cx + cw_ - 1);
+	clip[3] = (short) (cy + ch_ - 1);
+	text_clip(vdi_h, clip);
+	fill(ground, s.x, s.y, (short) (s.x + s.w - 1), base);
+	font_sys_push();
+	for (i = 0; i < s.n; i++)
+	{
+		short x1 = s.tx[i], x2 = (short) (s.tx[i] + s.tw[i] - 1), front = (short) (i == cur->front);
+		short y1 = (short) (s.y + (front ? 1 : 2)), n = s.shown[i];
+		char t[TABS_TITLE + 4];
+
+		fill(front ? 0 : ground, (short) (x1 + 1), (short) (y1 + 1), (short) (x2 - 1), base);
+		vswr_mode(vdi_h, MD_REPLACE);
+		vsl_color(vdi_h, 1);
+		vsl_type(vdi_h, 1);
+		p[0] = p[2] = x1;
+		p[1] = p[7] = base;
+		p[3] = p[5] = y1;
+		p[4] = p[6] = x2;
+		v_pline(vdi_h, 4, p);
+		memcpy(t, tab_title(i), (size_t) n);
+		if (s.dots[i] == 1)
+		{
+			memcpy(t + n, "...", 3);
+			n = (short) (n + 3);
+		}
+		vswr_mode(vdi_h, MD_TRANS);
+		vst_color(vdi_h, 1);
+		vst_effects(vdi_h, 0);
+		text_at((short) (x1 + sys_cw), (short) (s.y + 3), t, n);
+		if (front)
+			text_bold_strike(vdi_h, (short) (x1 + sys_cw), (short) (s.y + 3), t, n);
+	}
+	font_sys_pop();
+	/* the strip's foot, open under the tab in front */
+	vswr_mode(vdi_h, MD_REPLACE);
+	vsl_color(vdi_h, 1);
+	p[1] = p[3] = base;
+	p[0] = s.x;
+	p[2] = (short) (s.tx[cur->front] - 1);
+	if (p[2] >= p[0])
+		v_pline(vdi_h, 2, p);
+	p[0] = (short) (s.tx[cur->front] + s.tw[cur->front]);
+	p[2] = (short) (s.x + s.w - 1);
+	if (p[2] >= p[0])
+		v_pline(vdi_h, 2, p);
+	text_noclip(vdi_h);
+}
+
+/* the work area within one rectangle: the toolbar, the tabs, the page */
 static void draw_rect(short cx, short cy, short cw_, short ch_)
 {
 	short x, y, w, h, ix = cx, iy = cy, iw = cw_, ih = ch_;
@@ -657,6 +769,12 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);
 	if (intersect(&ix, &iy, &iw, &ih, x, y, w, tb_height(sys_ch)))
 		draw_bar(ix, iy, iw, ih);
+	ix = cx;
+	iy = cy;
+	iw = cw_;
+	ih = ch_;
+	if (cur->ntabs > 1 && intersect(&ix, &iy, &iw, &ih, x, (short) (y + tb_height(sys_ch)), w, tabs_height(sys_ch)))
+		draw_strip(ix, iy, iw, ih);
 	work_area(&x, &y, &w, &h);
 	ix = cx;
 	iy = cy;
@@ -801,6 +919,7 @@ static void page_changed(void)
 
 static void after(int rc);
 static void close_window(void);
+static void close_view(void);
 static void recent_save(void);
 static int library_layout(void);
 
@@ -951,10 +1070,10 @@ static void after(int rc)
 {
 	if (rc == VIEW_CLOSE)
 	{
-		/* a "quit" link: its window closes; the program quits with its
-		   last one (the accessory stays) */
-		if (is_acc || viewer_windows() > 1)
-			close_window();
+		/* a "quit" link: its tab closes, its window with the last; the
+		   program quits with its last window (the accessory stays) */
+		if (is_acc || viewer_windows() > 1 || cur->ntabs > 1)
+			close_view();
 		else
 			quit_now = 1;
 		return;
@@ -978,7 +1097,7 @@ static short lines_h(short x, short y, short w, short h)
 	short wx, wy, ww, wh, page;
 
 	wind_calc(WC_WORK, WKIND, x, y, w, h, &wx, &wy, &ww, &wh);
-	page = (short) (wh - tb_height(sys_ch));
+	page = (short) (wh - head_h());
 	return page > ch ? (short) (h - page % ch) : h;
 }
 
@@ -1088,6 +1207,7 @@ static void close_window(void)
 		recent_save();
 	}
 	cur->h = -1;
+	tabs_drop(cur);                    /* its tabs aren't kept (Erez, 31 Oct 2026) */
 	/* the accessory's last window gone: the pictures kept for going back
 	   let go of (its ST RAM is the pages') */
 	if (is_acc && viewer_windows() == 0)
@@ -1555,6 +1675,202 @@ static void new_window(int follow)
 	page_read();
 }
 
+/* ---------------------------------------------------------------- */
+/* tabs (Erez, 31 Oct 2026): several pages in one window              */
+
+static void set_status(const char *text);
+
+/* for the tests: the strip's middle row and each tab's middle */
+static void log_strip(void)
+{
+	tabstrip s;
+	char b[80];
+	int i, k;
+
+	if (cur->ntabs < 2 || cur->h <= 0)
+		return;
+	strip(&s);
+	k = sprintf(b, "%d", s.y + s.h / 2);
+	for (i = 0; i < s.n; i++)
+		k += sprintf(b + k, " %d", s.tx[i] + s.tw[i] / 2);
+	log_event("strip", b, NULL);
+}
+
+/* the page in front put away into its tab: 0, or -1 out of memory (it
+   stays as it was) */
+static int tab_park(void)
+{
+	layout_free(&cur->lay);           /* it points into the page */
+	if (view_park(&cur->view, &cur->tabs[cur->front]) == 0)
+		return 0;
+	make_layout();
+	set_status("Out of memory");
+	return -1;
+}
+
+/* the tab now in front shown: its page read again */
+static void tab_unpark(void)
+{
+	int rc;
+
+	graf_mouse(BUSYBEE, NULL);
+	rc = view_unpark(&cur->view, &cur->tabs[cur->front]);
+	graf_mouse(ARROW, NULL);
+	page_changed();
+	if (rc != VIEW_OK)
+	{
+		log_event("status", cur->view.status, NULL);
+		update_info();
+	}
+}
+
+/* tab i to the front */
+static void tab_show(int i)
+{
+	char n[8];
+
+	if (i < 0 || i >= cur->ntabs || i == cur->front || tab_park() < 0)
+		return;
+	cur->front = (short) i;
+	sprintf(n, "%d", i + 1);
+	log_event("tab", "show", n);
+	tab_unpark();
+	log_strip();
+}
+
+/* Control+Tab, Shift+Control+Tab: the next tab, the one before, round */
+static void tab_step(int dir)
+{
+	if (cur->h > 0 && !cur->icon && cur->ntabs > 1)
+		tab_show((cur->front + dir + cur->ntabs) % cur->ntabs);
+}
+
+/* the selected link in a new tab, after the one in front, and to the
+   front (Control+click, Control+Return, Link in new tab) */
+static void new_tab(void)
+{
+	ehv_view nv;
+	int rc = VIEW_ERROR, i;
+	char n[8];
+
+	if (cur->h <= 0 || cur->view.page == NULL || selected_link() < 0)
+		return;
+	if (cur->ntabs < 1)
+		cur->ntabs = 1;
+	if (cur->ntabs >= TABS_MAX)
+	{
+		char k[8];
+
+		log_event("alert", "eight-tabs", NULL);
+		sprintf(k, "%d", alert(1, "[1][EHypView shows at most|eight tabs in a window.|Close one first.][ OK ]"));
+		log_event("alert-closed", "eight-tabs", k);
+		return;
+	}
+	/* as a new window has it: the page the link is on, then the link,
+	   so Back in the new tab goes to where it was */
+	view_init(&nv, idx);
+	graf_mouse(BUSYBEE, NULL);
+	rc = view_open(&nv, cur->view.doc->path, cur->view.doc->entries[cur->view.page->num].name, 0);
+	if (rc == VIEW_OK)
+	{
+		nv.sel = cur->view.sel;
+		rc = view_follow_selected(&nv);
+	}
+	graf_mouse(ARROW, NULL);
+	if (rc != VIEW_OK)
+	{
+		/* a pop-up, or a link that leads nowhere: shown where it was;
+		   a "quit" link opens nothing */
+		view_free(&nv);
+		if (rc != VIEW_CLOSE)
+			after(view_follow_selected(&cur->view));
+		return;
+	}
+	if (tab_park() < 0)
+	{
+		view_free(&nv);
+		return;
+	}
+	for (i = cur->ntabs; i > cur->front + 1; i--)
+		cur->tabs[i] = cur->tabs[i - 1];
+	memset(&cur->tabs[cur->front + 1], 0, sizeof(view_parked));
+	cur->front++;
+	cur->ntabs++;
+	cur->view = nv;
+	sprintf(n, "%d", cur->ntabs);
+	log_event("tab", "new", n);
+	page_changed();
+	log_strip();
+}
+
+/* tab i closed; its window with its last one */
+static void close_tab_at(int i)
+{
+	char n[8];
+	int was_front = i == cur->front, at = i;
+
+	if (cur->ntabs <= 1)
+	{
+		close_window();
+		return;
+	}
+	if (i < 0 || i >= cur->ntabs)
+		return;
+	if (was_front)
+	{
+		layout_free(&cur->lay);
+		view_free(&cur->view);
+	} else
+		view_parked_free(&cur->tabs[i]);
+	for (; i < cur->ntabs - 1; i++)
+		cur->tabs[i] = cur->tabs[i + 1];
+	memset(&cur->tabs[cur->ntabs - 1], 0, sizeof(view_parked));
+	cur->ntabs--;
+	sprintf(n, "%d", cur->ntabs);
+	log_event("tab", "closed", n);
+	if (was_front)
+	{
+		/* the one after it to the front, else the one before */
+		if (cur->front >= cur->ntabs)
+			cur->front = (short) (cur->ntabs - 1);
+		tab_unpark();
+	} else
+	{
+		if (at < cur->front)
+			cur->front--;             /* it moved along with the rest */
+		redraw_all();
+	}
+	log_strip();
+}
+
+/* ^U, the closer, a "quit" link: the tab in front, the window with it
+   when it is the last */
+static void close_view(void)
+{
+	close_tab_at(cur->front);
+}
+
+/* every tab but i closed */
+static void close_other_tabs(int i)
+{
+	int k;
+	char n[8];
+
+	if (i != cur->front)
+		tab_show(i);
+	if (i != cur->front)
+		return;                       /* out of memory: as it was */
+	for (k = 0; k < TABS_MAX; k++)
+		if (k != cur->front)
+			view_parked_free(&cur->tabs[k]);
+	memset(&cur->tabs[cur->front], 0, sizeof(view_parked));
+	cur->ntabs = 1;
+	cur->front = 0;
+	sprintf(n, "%d", cur->ntabs);
+	log_event("tab", "closed", n);
+	redraw_all();
+}
+
 /* the bookmark of the current page, or -1 */
 static int page_bookmark(void)
 {
@@ -1690,7 +2006,7 @@ static void command(int cmd)
 		if (libwin_handle() > 0 && (top_window() == libwin_handle() || viewer_windows() == 0))
 			libwin_close();
 		else
-			close_window();
+			close_view();
 		return;
 	case CMD_NEXTWIN:
 		next_window();
@@ -1700,6 +2016,9 @@ static void command(int cmd)
 		return;
 	case CMD_LINKWIN:
 		new_window(1);
+		return;
+	case CMD_LINKTAB:
+		new_tab();
 		return;
 	case CMD_BM_ADD:
 		bookmark_add();
@@ -1787,6 +2106,8 @@ static void update_menu(void)
 			on = viewer_windows() < MAX_VIEWERS;
 		else if (c == CMD_LINKWIN)
 			on = cur->h > 0 && selected_link() >= 0 && viewer_windows() < MAX_VIEWERS;
+		else if (c == CMD_LINKTAB)
+			on = cur->h > 0 && selected_link() >= 0 && cur->ntabs < TABS_MAX;
 		else if (c == CMD_BM_ADD)
 			on = cur->h > 0 && cur->view.page != NULL && bookmarks.n < BM_MAX;
 		else if (c == CMD_BM_REMOVE)
@@ -1886,6 +2207,16 @@ static void key(short kstate, short kreturn)
 
 	if (ctrl && ascii != 0x09 && app_key(kstate, kreturn))
 		return;
+	if (ctrl && scan == 0x0f)          /* Control+Tab, Shift+Control+Tab: the tabs */
+	{
+		tab_step(shift ? -1 : 1);
+		return;
+	}
+	if (ctrl && (scan == 0x1c || scan == 0x72))   /* Control+Return: the link in a new tab */
+	{
+		command(CMD_LINKTAB);
+		return;
+	}
 	if (scan == 0x52)                  /* Insert: the right button's menu */
 	{
 		short x, y, w, h;
@@ -1983,6 +2314,7 @@ static void context_menu(short x, short y)
 		{ "  Back                  Undo", CMD_BACK },
 		{ "  Forward             \x01Undo", CMD_FORWARD },
 		{ "  Link in new window \x01Return", CMD_LINKWIN },
+		{ "  Link in new tab    ^Return", CMD_LINKTAB },
 		{ "-", CMD_NONE },
 		{ "  Main page            ^Home", CMD_HOME },
 		{ "  Contents                ^T", CMD_TOC },
@@ -2007,9 +2339,10 @@ static void context_menu(short x, short y)
 	{
 		int c = all[i].cmd, target = nav_target(c), grey;
 
-		if (c == CMD_LINKWIN && selected_link() < 0)
+		if ((c == CMD_LINKWIN || c == CMD_LINKTAB) && selected_link() < 0)
 			continue;                  /* only on a link */
 		grey = (target >= 0 && !view_can(&cur->view, target)) ||
+			(c == CMD_LINKTAB && cur->ntabs >= TABS_MAX) ||
 			((c == CMD_NEWWIN || c == CMD_LINKWIN) && viewer_windows() >= MAX_VIEWERS) ||
 			(c == CMD_BM_ADD && (cur->view.page == NULL || page_bookmark() >= 0 || bookmarks.n >= BM_MAX));
 		lab[n] = all[i].label;
@@ -2239,17 +2572,88 @@ static void tip_hide(void)
 	}
 }
 
-static void tip_show(const toolbar *t, int b)
-{
-	const char *text = tb_tip(b);
-	short n = (short) strlen(text), wx, wy, ww, wh, clip[4];
+/* a tip's text where BubbleGEM can read it (global memory under MiNT
+   and MagiC, taken at the start: guidelines 2.2), two in turn: the one
+   before may still be shown */
+#define TIP_TEXT 160
+static char tip_local[2 * TIP_TEXT], *tip_buf = tip_local;
+static short tip_turn;
 
+/* the tip in BubbleGEM's bubble at the mouse (guidelines 3.4), when it
+   runs: 1, it shows it and takes it away itself */
+static int tip_bubble(const char *text, short mx, short my)
+{
+	short id = appl_find("BUBBLE  "), msg[8];
+	char *b;
+
+	if (id < 0)
+		return 0;
+	b = tip_buf + tip_turn * TIP_TEXT;
+	tip_turn ^= 1;
+	strncpy(b, text, TIP_TEXT - 1);
+	b[TIP_TEXT - 1] = '\0';
+	memset(msg, 0, sizeof(msg));
+	msg[0] = (short) BUBBLEGEM_SHOW;
+	msg[1] = ap_id;
+	msg[3] = mx;
+	msg[4] = my;
+	msg[5] = (short) ((unsigned long) b >> 16);
+	msg[6] = (short) (unsigned long) b;
+	appl_write(id, 16, msg);
+	return 1;
+}
+
+/* a tab's tip, when its title is cut: the whole title and its hypertext */
+static void tab_tip(int i, char *buf, size_t size)
+{
+	const char *path = i == cur->front ? (cur->view.doc != NULL ? cur->view.doc->path : NULL) : cur->tabs[i].here.path;
+
+	if (path != NULL)
+		snprintf(buf, size, "%s - %s", tab_title(i), fs_basename(path));
+	else
+		snprintf(buf, size, "%s", tab_title(i));
+}
+
+/* tip b (a toolbar button, or TB_COUNT + a tab) for the mouse at (mx,
+   my): BubbleGEM's bubble, else EHypView's own box below it */
+static void tip_show(int b, short mx, short my)
+{
+	char text[TIP_TEXT];
+	const char *name;
+	short n, wx, wy, ww, wh, clip[4], ax, ay;
+
+	if (b < TB_COUNT)
+	{
+		toolbar t;
+
+		bar(&t);
+		snprintf(text, sizeof(text), "%s", tb_tip(b));
+		name = tb_name(b);
+		ax = t.bx[b];
+		ay = (short) (t.by + t.bh + 3);
+	} else
+	{
+		tabstrip s;
+
+		strip(&s);
+		tab_tip(b - TB_COUNT, text, sizeof(text));
+		name = "tab";
+		ax = s.tx[b - TB_COUNT];
+		ay = (short) (s.y + s.h + 3);
+	}
+	tip.done = 1;
+	if (tip_bubble(text, mx, my))
+	{
+		log_event("tip", name, "bubble");
+		return;
+	}
+	n = (short) strlen(text);
 	wind_get(cur->h, WF_WORKXYWH, &wx, &wy, &ww, &wh);
 	font_sys_push();
 	tip.w = (short) ((n + 2) * cw);
 	tip.h = (short) (ch + 4);
-	tip.x = t->bx[b];
-	tip.y = (short) (t->by + t->bh + 3);
+	tip.x = ax;
+	tip.y = ay;
 	if (tip.x + tip.w > wx + ww)
 		tip.x = (short) (wx + ww - tip.w);
 	if (tip.x < wx)
@@ -2272,25 +2676,38 @@ static void tip_show(const toolbar *t, int b)
 	wind_update(END_UPDATE);
 	font_sys_pop();
 	tip.shown = 1;
-	tip.done = 1;
-	log_event("tip", tb_name(b), NULL);
+	log_event("tip", name, NULL);
 }
 
-/* after each event and timer tick: where the mouse rests */
+/* after each event and timer tick: where the mouse rests; on a toolbar
+   button, or on a tab whose title is cut, its tip after a second */
 static void tip_check(void)
 {
-	short top = top_window(), mx, my, mb, ks;
+	short top = top_window(), mx = 0, my = 0, mb, ks;
 	viewer *v = viewer_of(top), *keep = cur;
-	toolbar t;
 	int b = -1;
 
 	if (v != NULL && !v->icon)
 	{
+		toolbar t;
+
 		graf_mkstate(&mx, &my, &mb, &ks);
 		cur = v;
 		bar(&t);
 		if (mb == 0 && wind_find(mx, my) == top)
+		{
 			b = tb_hit(&t, mx, my);
+			if (b < 0 && cur->ntabs > 1)
+			{
+				tabstrip s;
+				int i;
+
+				strip(&s);
+				i = tabs_hit(&s, mx, my);
+				if (tabs_cut(&s, i))
+					b = TB_COUNT + i;
+			}
+		}
 		cur = keep;
 	}
 	if (b != tip.b || top != tip.win)
@@ -2307,7 +2724,7 @@ static void tip_check(void)
 	if (b >= 0 && !tip.done && tos_ms() - tip.since >= 1000)
 	{
 		cur = v;
-		tip_show(&t, b);
+		tip_show(b, mx, my);
 		cur = keep;
 	}
 }
@@ -2408,12 +2825,57 @@ static int bar_click(short mx, short my, short button)
 	return 1;
 }
 
+/* a tab's right-button menu: it, or every other one, closed */
+static void tab_menu(int i, short x, short y)
+{
+	static const char *const lab[] = { "  Close tab          ^U ", "  Close other tabs      " };
+	short r;
+
+	log_event("menu", "tab-popup", NULL);
+	r = popup(x, y, lab, 2);
+	if (r == 0)
+	{
+		log_event("menu", "close-tab", NULL);
+		close_tab_at(i);
+	} else if (r == 1)
+	{
+		log_event("menu", "close-other-tabs", NULL);
+		close_other_tabs(i);
+	}
+}
+
+/* a click on the tab strip: a tab to the front, or its menu; 0 when it
+   was elsewhere */
+static int strip_click(short mx, short my, short button)
+{
+	tabstrip s;
+	int i;
+
+	if (cur->ntabs < 2)
+		return 0;
+	strip(&s);
+	if (my < s.y || my >= s.y + s.h || mx < s.x || mx >= s.x + s.w)
+		return 0;
+	tip_hide();
+	tip.done = 1;
+	i = tabs_hit(&s, mx, my);
+	if (button & 2)
+	{
+		if (i >= 0)
+			tab_menu(i, mx, my);
+		else
+			context_menu(mx, my);
+	} else if (i >= 0)
+		tab_show(i);
+	return 1;
+}
+
 static void click(short mx, short my, short button, short kstate)
 {
 	short x, y, w, h;
 	long py, line, col, r;
 
-	if (bar_click(mx, my, button))
+	if (bar_click(mx, my, button) || strip_click(mx, my, button))
 		return;
 	if (button & 2)
 	{
@@ -2448,6 +2910,11 @@ static void click(short mx, short my, short button, short kstate)
 	if (kstate & K_SHIFT)
 	{
 		new_window(1);                 /* Shift+click: the link in a new window */
+		return;
+	}
+	if (kstate & K_CTRL)
+	{
+		new_tab();                     /* Control+click: in a new tab */
 		return;
 	}
 	graf_mouse(BUSYBEE, NULL);
@@ -2549,7 +3016,7 @@ static void viewer_message(short *msg)
 		break;
 	case WM_CLOSED:
 		if (msg[3] == cur->h)
-			close_window();
+			close_view();
 		break;
 	case WM_ICONIFY:
 	case WM_ALLICONIFY:
@@ -2604,7 +3071,7 @@ static void viewer_message(short *msg)
 			/* at least the toolbar's Back, Forward and menu, and a few lines */
 			w = msg[6] < 16 * sys_cw ? (short) (16 * sys_cw) : msg[6];
 			w = w < 12 * cw ? (short) (12 * cw) : w;
-			h = msg[7] < 6 * ch + tb_height(sys_ch) ? (short) (6 * ch + tb_height(sys_ch)) : msg[7];
+			h = msg[7] < 6 * ch + head_h() ? (short) (6 * ch + head_h()) : msg[7];
 			h = lines_h(msg[4], msg[5], w, h);
 			{
 				short x = wind_x8(WKIND, msg[4], msg[5], w, h);
@@ -3756,6 +4223,7 @@ int main(void)
 	tall_pixels = work_out[4] >= work_out[3] * 3 / 2;	/* pixel height, width (microns) */
 	vq_extnd(vdi_h, 1, work_out);
 	planes = work_out[4];
+	tip_buf = av_shared(tip_local, sizeof(tip_local));   /* BubbleGEM reads the tips there */
 	if (is_acc)
 		acc_heap();                    /* nothing malloc'd before it */
 	{
@@ -3822,6 +4290,7 @@ int main(void)
 			viewers[i].h = -1;
 	}
 	viewers[0].used = 1;
+	viewers[0].ntabs = 1;
 	view_init(&cur->view, NULL);
 	bg_init(is_acc ? start_when : BG_NOW);
 	if (!is_acc)
