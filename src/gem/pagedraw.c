@@ -367,7 +367,7 @@ static void pic_free(picjob *j)
 	if (j == NULL)
 		return;
 	hyp_unpack_free(j->u);
-	free(j->std);
+	st_free(j->std);                   /* the heap's or the pictures' (pic_unpacked) */
 	free(j->kbuf);
 	free(j->band);
 	free(j->pens);
@@ -451,7 +451,12 @@ static int pic_unpacked(picjob *j, gimage *im)
 	j->u = NULL;
 	if (data == NULL)
 		return -1;
+	/* the planes, while the picture is made: from the heap, else from the
+	   pictures' ST RAM, whose room a 1 MB machine has when its heap has
+	   none (a Falcon under EmuTOS: 26 KB left, 112 KB free there) */
 	j->std = malloc(j->plane * j->np);
+	if (j->std == NULL)
+		j->std = st_alloc((long) (j->plane * j->np));
 	if (j->std == NULL)
 	{
 		free(data);
