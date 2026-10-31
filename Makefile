@@ -44,7 +44,7 @@ HOST     = build/host
 CORE_OBJ = $(patsubst src/core/%.c,$(HOST)/%.o,$(CORE_SRC)) $(HOST)/view.o $(HOST)/library.o $(HOST)/fontpref.o $(HOST)/bookmark.o
 
 all: $(HOST)/hypdump $(HOST)/test_core $(HOST)/test_index $(HOST)/test_view $(HOST)/test_library \
-     $(HOST)/test_menu $(HOST)/test_toolbar $(HOST)/test_colour $(HOST)/test_stmem $(HOST)/test_stmem_acc $(HOST)/test_fonts $(HOST)/test_bookmark \
+     $(HOST)/test_menu $(HOST)/test_toolbar $(HOST)/test_tabs $(HOST)/test_colour $(HOST)/test_stmem $(HOST)/test_stmem_acc $(HOST)/test_fonts $(HOST)/test_bookmark \
      $(HOST)/test_fontsel $(HOST)/test_accmem $(HOST)/test_dialog
 
 $(HOST)/%.o: src/core/%.c src/core/*.h | $(HOST)
@@ -99,6 +99,10 @@ $(HOST)/test_menu: tests/test_menu.c src/gem/menu.c src/gem/menu.h src/view/book
 $(HOST)/test_toolbar: tests/test_toolbar.c src/gem/toolbar.c src/gem/toolbar.h | $(HOST)
 	$(CC) -Isrc/gem $(WARN) $(CFLAGS) -o $@ tests/test_toolbar.c src/gem/toolbar.c
 
+# and the tab strip's
+$(HOST)/test_tabs: tests/test_tabs.c src/gem/tabs.c src/gem/tabs.h | $(HOST)
+	$(CC) -Isrc/gem $(WARN) $(CFLAGS) -o $@ tests/test_tabs.c src/gem/tabs.c
+
 $(HOST)/test_colour: tests/test_colour.c src/gem/colour.c src/gem/colour.h | $(HOST)
 	$(CC) -Isrc/gem $(WARN) $(CFLAGS) -o $@ tests/test_colour.c src/gem/colour.c
 
@@ -118,6 +122,7 @@ test: all
 	$(HOST)/test_library tests/fixtures
 	$(HOST)/test_menu
 	$(HOST)/test_toolbar
+	$(HOST)/test_tabs
 	$(HOST)/test_colour
 	$(HOST)/test_stmem
 	$(HOST)/test_stmem_acc
@@ -136,7 +141,7 @@ asan:
 M68K_CC = m68k-linux-gnu-gcc
 M68K    = build/m68k-linux
 
-m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c src/gem/colour.c src/gem/stmem.c common/ui/mbar.c tests/test_menu.c tests/test_toolbar.c tests/test_colour.c tests/test_stmem.c tests/test_stmem_acc.c tests/test_fonts.c tests/test_bookmark.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
+m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c src/gem/tabs.c src/gem/colour.c src/gem/stmem.c common/ui/mbar.c tests/test_menu.c tests/test_toolbar.c tests/test_tabs.c tests/test_colour.c tests/test_stmem.c tests/test_stmem_acc.c tests/test_fonts.c tests/test_bookmark.c tests/test_core.c tests/test_index.c tests/test_view.c tests/test_library.c tools/hypdump.c
 	mkdir -p $(M68K)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_core tests/test_core.c $(CORE_SRC)
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_index tests/test_index.c $(CORE_SRC)
@@ -144,6 +149,7 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c
 	$(M68K_CC) $(CPPFLAGS) $(WARN) -O2 -static -o $(M68K)/test_library tests/test_library.c $(CORE_SRC) $(VIEW_SRC)
 	$(M68K_CC) -Isrc/gem -Isrc/view -Isrc/core -Icommon/ui -Icommon/atari $(WARN) -O2 -static -o $(M68K)/test_menu tests/test_menu.c src/gem/menu.c common/ui/mbar.c
 	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_toolbar tests/test_toolbar.c src/gem/toolbar.c
+	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_tabs tests/test_tabs.c src/gem/tabs.c
 	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_colour tests/test_colour.c src/gem/colour.c
 	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_stmem tests/test_stmem.c src/gem/stmem.c
 	$(M68K_CC) -Isrc/gem $(WARN) -O2 -static -o $(M68K)/test_stmem_acc tests/test_stmem_acc.c src/gem/stmem.c
@@ -158,6 +164,7 @@ m68k-test: $(CORE_SRC) $(VIEW_SRC) src/core/*.h src/gem/menu.c src/gem/toolbar.c
 	qemu-m68k-static $(M68K)/test_library tests/fixtures
 	qemu-m68k-static $(M68K)/test_menu
 	qemu-m68k-static $(M68K)/test_toolbar
+	qemu-m68k-static $(M68K)/test_tabs
 	qemu-m68k-static $(M68K)/test_colour
 	qemu-m68k-static $(M68K)/test_stmem
 	qemu-m68k-static $(M68K)/test_stmem_acc
@@ -253,11 +260,18 @@ $(HATARI_DIR)/LAUNCH.PRG: $(ATARI)/launch.elf common/tools/elf2tos.py
 	mkdir -p $(HATARI_DIR)
 	python3 common/tools/elf2tos.py $< $@
 
+# common's stand-in for BubbleGEM (tests/notify), run as an accessory:
+# gui-test's bubble scenario (the tooltips, guidelines 3.4)
+$(HATARI_DIR)/BUBBLE.ACC: common/tests/notify/fakebgem.c common/ui/notify.h
+	$(MAKE) -C common/tests/notify B=$(abspath build/bubble) $(abspath build/bubble)/BUBBLE.PRG
+	mkdir -p $(HATARI_DIR)
+	cp build/bubble/BUBBLE.PRG $@
+
 $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
-           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/settings.o $(ATARI)/ask.o \
+           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/tabs.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/settings.o $(ATARI)/ask.o \
            $(ATARI)/aboutbox.o $(ATARI)/aboutline.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/text.o $(ATARI)/colour.o \
            $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o $(ATARI)/panebar.o $(ATARI)/libbar.o
@@ -353,7 +367,7 @@ HYPCHECK = grep -q "EHYPVIEW.HYP $$(cat VERSION)" binary/EHYPVIEW.HYP || \
 	  { echo "binary/EHYPVIEW.HYP isn't version $$(cat VERSION): make help"; exit 1; }
 
 # drive EHYPVIEW.PRG in Hatari with the keyboard (screenshots in build/gui)
-gui-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG
+gui-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG $(HATARI_DIR)/BUBBLE.ACC
 	python3 tests/run_gui.py $(HATARI_DIR) build/gui
 
 # the accessory with a GDOS font under Erez's NVDI, alone (AERA_WITH_NVDI=1;

@@ -357,6 +357,49 @@ static void test_request(void)
 	ehv_index_free(idx);
 }
 
+/* a tab put away and brought back (tabs, 31 Oct 2026): its page, scroll
+   and history both ways, the hypertext let go meanwhile */
+static void test_park(void)
+{
+	ehv_view v, w;
+	view_parked p, q;
+	long r;
+
+	view_init(&v, NULL);
+	CHECK(view_park(&v, &p) == 0 && p.here.path == NULL);   /* nothing shown: nothing to keep */
+	CHECK(view_unpark(&v, &p) == VIEW_OK && !view_has_page(&v));
+	CHECK(view_open(&v, fx("basic.hyp"), NULL, 0) == VIEW_OK);
+	r = run_named(&v, "Second");
+	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_OK);
+	CHECK(view_back(&v) == VIEW_OK && v.nfwd == 1);
+	r = run_named(&v, "line 3");
+	CHECK(r >= 0 && view_follow(&v, &v.page->runs[r]) == VIEW_OK && v.top == 2 && v.nhist == 1);
+	v.left = 3;
+	CHECK(view_park(&v, &p) == 0);
+	CHECK(!view_has_page(&v) && v.doc == NULL && v.nhist == 0 && v.nfwd == 0);
+	CHECK(ends_with(p.here.path, "basic.hyp") && p.here.top == 2 && p.nhist == 1 && p.left == 3);
+	CHECK(p.here.title != NULL && p.here.title[0] != '\0');
+	/* another tab in the same view meanwhile, put away in its turn */
+	CHECK(view_open(&v, fx("other.hyp"), NULL, 0) == VIEW_OK && v.nhist == 0);
+	CHECK(view_park(&v, &q) == 0 && ends_with(q.here.path, "other.hyp"));
+	CHECK(view_unpark(&v, &p) == VIEW_OK);
+	CHECK(strcmp(page_name(&v), "Second") == 0 && v.top == 2 && v.left == 3 && v.nhist == 1);
+	CHECK(p.here.path == NULL && p.hist == NULL);
+	CHECK(view_back(&v) == VIEW_OK && strcmp(page_name(&v), "Main") == 0);
+	view_free(&v);
+	view_init(&w, NULL);
+	CHECK(view_unpark(&w, &q) == VIEW_OK && ends_with(w.doc->path, "other.hyp") && w.nhist == 0);
+	view_free(&w);
+	/* a tab whose hypertext went meanwhile: its lists come back, no page */
+	memset(&p, 0, sizeof(p));
+	p.here.path = malloc(32);
+	strcpy(p.here.path, "/no/such/file.hyp");
+	p.here.title = NULL;
+	view_init(&w, NULL);
+	CHECK(view_unpark(&w, &p) == VIEW_ERROR && !view_has_page(&w) && w.status[0] != '\0');
+	view_free(&w);
+}
+
 int main(int argc, char **argv)
 {
 	fixdir = argc > 1 ? argv[1] : "tests/fixtures";
@@ -368,6 +411,7 @@ int main(int argc, char **argv)
 	test_open_errors();
 	test_selection();
 	test_request();
+	test_park();
 	printf("%d checks, %d failures\n", checks, failures);
 	return failures ? 1 : 0;
 }

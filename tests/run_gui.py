@@ -63,6 +63,28 @@ def typed(text):
 
 
 # (keys to send, events expected afterwards, in order)
+def tab_click(i, button):
+    """a click on tab i of the strip ("strip Y X0 X1 ...")"""
+    def step(rig):
+        at = [ev.split()[1:] for ev in rig.events() if ev.startswith("strip ")]
+        if not at or len(at[-1]) < i + 2:
+            return False
+        rig.press((button, int(at[-1][i + 1]), int(at[-1][0])))
+        return True
+    return step
+
+
+def tab_menu_item(i, n):
+    """item n of the menu a right click on tab i put up (rows of 16 below it)"""
+    def step(rig):
+        at = [ev.split()[1:] for ev in rig.events() if ev.startswith("strip ")]
+        if not at:
+            return False
+        rig.press(("click", int(at[-1][i + 1]) + 24, int(at[-1][0]) + 15 + 16 * n))
+        return True
+    return step
+
+
 STEPS = [
     ([], ["font System font 16", "menu shown", "page %s Main" % BASIC]),  # on its command line
     ([], ["index 5 guides"]),                          # background scan done
@@ -368,6 +390,10 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             send("hatari-event keydown 0x%x" % SHIFT)
             mouse.click(k[1], k[2])
             send("hatari-event keyup 0x%x" % SHIFT)
+        elif isinstance(k, tuple) and k[0] == "cclick":       # with Control held
+            send("hatari-event keydown 0x%x" % CTRL)
+            mouse.click(k[1], k[2], "1" if len(k) < 4 else k[3])
+            send("hatari-event keyup 0x%x" % CTRL)
         elif isinstance(k, tuple) and k[0] == "dclick":
             mouse.move(k[1], k[2])
             mouse.xdo("click", "--repeat", "2", "--delay", "80", "1")
@@ -687,10 +713,22 @@ MOUSE_STEPS = [
     ([("rclick", vx(120), 142)], ["menu popup"]),               # on a link, the menu has
     ([("click", vx(150), 189)], ["menu link-window", "window new 2", "page %s Second" % BASIC]),
     ([("ctrl", U)], ["closed viewer"]),
+    # tabs (Erez, 31 Oct 2026): the link's menu has "Link in new tab"
+    ([("rclick", vx(120), 142)], ["menu popup"]),
+    ([("click", vx(150), 207)], ["menu link-tab", "tab new 2", "page %s Second" % BASIC, "strip *"]),
+    ([BACKSPACE], ["page %s Main" % BASIC]),                   # its Back: where the link was
+    ([("ctrl", TAB)], ["tab show 1", "page %s Main" % BASIC]),  # Control+Tab, round
+    ([("ctrl", TAB)], ["tab show 2", "page %s Main" % BASIC]),
+    (tab_click(0, "click"), ["tab show 1", "page %s Main" % BASIC]),
+    ([("ctrl+shift", TAB)], ["tab show 2"]),
+    (tab_click(0, "rclick"), ["menu tab-popup"]),               # a tab's menu:
+    (tab_menu_item(0, 1), ["menu close-other-tabs", "tab show 1", "tab closed 1"]),   # the others closed
+    ([("cclick", vx(120), 142)], ["tab new 2", "page %s Second" % BASIC]),           # Control+click
+    ([("ctrl", U)], ["tab closed 1", "page %s Main" % BASIC]),   # ^U: the tab, the window stays
     ([item(VIEW, 0)], ["menu font", "dialog font"]),        # the font selector
     ([ESC], []),
     ([item(EDIT, 1)], ["menu copy", "copy page *"]),       # the page to the clipboard
-    ([item(NAV, 7)], ["menu help", "page %s Help" % BASIC]),
+    ([item(NAV, 8)], ["menu help", "page %s Help" % BASIC]),
     ([item(NAV, 0)], ["menu back", "page %s Main" % BASIC]),
     ([item(FILE, 2)], ["menu library", "library 4"]),
     # a "quit" link with two windows open closes just its own
@@ -1117,6 +1155,50 @@ def window_fits(rig):
     return ok
 
 
+# the tooltips through BubbleGEM (guidelines 3.4): common's stand-in for
+# it (tests/notify, BUBBLE.ACC) says on the console what it was asked to
+# show ("BUBBLE show ID KIND TEXT"). A toolbar button's tip goes to it;
+# then eight tabs (Tab, Control+Return: a link in a new tab), a ninth not
+# taken (an alert), and the first tab's title, cut, given whole
+def bubble_said(text):
+    def step(rig):
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            with open(rig.log, errors="replace") as f:
+                said = [l.strip() for l in f if l.startswith("BUBBLE show")]
+            if any(text in l for l in said):
+                print("ok    the bubble: %s" % said[-1])
+                return True
+            time.sleep(0.5)
+        print("FAIL  the bubble didn't show %r" % text)
+        return False
+    return step
+
+
+BUBBLE_STEPS = [
+    ([], ["menu shown", "page %s Main" % BASIC]),
+    ([("hover",) + TB_LIBRARY, ("wait", 1)], ["tip library bubble", "!tip library"]),
+    (bubble_said("The library: every hypertext"), []),
+] + [([TAB, ("ctrl", RETURN)], ["tab new %d" % n]) for n in range(2, 9)] + [
+    ([TAB, ("ctrl", RETURN)], ["alert eight-tabs"]),
+    ([RETURN], ["alert-closed eight-tabs 1"]),
+    (tab_click(0, "hover"), []),
+    ([("wait", 1)], ["tip tab bubble"]),
+    (bubble_said("Basic test - main page - BASIC.HYP"), []),
+    ([("ctrl", Q)], ["quit"]),
+]
+
+
+def bubble():
+    d = copy_dir("bubble", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
+    shutil.copy(os.path.join(HDIR, "BUBBLE.ACC"), d)
+    xvfb = start_xvfb()
+    try:
+        return run_scenario("bubble", d, BUBBLE_STEPS, auto=LAUNCH, windowed=True)
+    finally:
+        xvfb.terminate()
+
+
 def arrow_click(where, ms, skew):
     """a click held ms on the viewer's track ("window-at X Y W H": its
     right edge, three quarters down) or its down arrow (above the sizer)"""
@@ -1320,9 +1402,20 @@ def main():
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
         print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "accnvdi")).describe())
         return 0 if acc_nvdi() else 1
+    if sys.argv[3:] == ["bubble"]:                  # the tips through BubbleGEM alone
+        return 0 if bubble() else 1
+    if sys.argv[3:] == ["mouse"]:                   # the mouse's scenario alone
+        d = copy_dir("mouse", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
+        xvfb = start_xvfb()
+        try:
+            return 0 if run_scenario("mouse", d, MOUSE_STEPS, auto=LAUNCH, windowed=True) else 1
+        finally:
+            xvfb.terminate()
     print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "viewer")).describe())
     d = copy_dir("viewer", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
     ok = run_scenario("viewer", d, STEPS, auto=LAUNCH)
+    if sys.argv[3:] == ["viewer"]:                  # the main scenario alone
+        return 0 if ok else 1
     if ok:
         ok = check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FONT=System font", "POINT=8", "FOLDER=C:\\",
                                                           "BOOKMARK1="])   # added, then removed
@@ -1389,6 +1482,11 @@ def main():
             ok = check_exists(os.path.join(d, "EHV", "EHYPVIEW.IDX"), "the program's index, in FOLDER=") and ok
         else:
             print("skip  twin: needs Xvfb and xdotool")
+    if ok:
+        if have_display():
+            ok = bubble()
+        else:
+            print("skip  bubble: needs Xvfb and xdotool")
     if ok:
         d = copy_dir("fastram", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=IMAGES)
         ok = run_scenario("fastram", d, FASTRAM_STEPS, auto=LAUNCH, extra=FASTRAM)

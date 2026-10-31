@@ -157,6 +157,17 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - Control shortcuts test `key_ctrl(kstate, key)` (common/atari/gem.h),
   never `kstate & K_CTRL` alone: a ^key typed while EHypView is busy
   arrives with kstate 0 (guidelines 3.2).
+- Tabs (Erez, 31 Oct 2026; his proposal answered "as proposed"): a viewer holds up to TABS_MAX (8)
+  pages, `viewer.view` the one in front, the others `view_parked` (src/view/view.c `view_park` /
+  `view_unpark`: place and history kept, hypertext and page let go, read again when shown; host
+  tested). src/gem/tabs.c lays the strip out (tests/test_tabs.c); it shows under the toolbar with
+  two tabs or more (`head_h()`). ^-click / ^Return / Link in new tab open one in front; ^Tab,
+  ⇧^Tab; ^U and the closer close the tab in front, the window with its last; tabs are dropped when
+  the window closes. gui-test's mouse scenario and bubble scenario check them.
+- Tooltips (guidelines 3.4): toolbar buttons, and a tab whose title is cut, after a second; through
+  BubbleGEM (`BUBBLEGEM_SHOW` to "BUBBLE  ", the text in `av_shared` memory taken before the first
+  event call) when it runs, else EHypView's own box. gui-test's bubble scenario runs common's
+  stand-in (tests/notify's BUBBLE.PRG as BUBBLE.ACC).
 - GUI events for the tests go out through NatFeats as "EHV ..." lines
   (log_event); tests/run_gui.py waits for them.
 - Only `atari/plat_tos.c` is EHypView's own runtime; the rest (start-up, C library, TOS, AES/VDI,

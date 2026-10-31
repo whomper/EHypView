@@ -57,6 +57,7 @@ static const MBAR_ITEM nav_items[] = {
 	{ "Back", "Undo", CMD_BACK },
 	{ "Forward", "\x01Undo", CMD_FORWARD },
 	{ "Link in new window", "\x01Return", CMD_LINKWIN },
+	{ "Link in new tab", "^Return", CMD_LINKTAB },
 	{ "-", NULL, CMD_NONE },
 	{ "Main page", "^Home", CMD_HOME },
 	{ "Contents", "^T", CMD_TOC },
@@ -140,7 +141,7 @@ const char *menu_command_name(int cmd)
 		"back", "home", "index", "toc", "help", "prev", "next",
 		"font", "larger", "smaller", "cut", "copy", "paste",
 		"new-window", "link-window", "bookmark-add", "bookmark-remove",
-		"forward", "see-also", "settings", "guide", "next-window"
+		"forward", "see-also", "settings", "guide", "next-window", "link-tab"
 	};
 
 	if (cmd >= CMD_BM0 && cmd < CMD_COUNT)

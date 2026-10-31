@@ -25,9 +25,11 @@ Help.
   colour, and black and white on a mono screen. Where the screen has too few colours they are
   dithered, and in ST medium pictures keep their shape.
 - **A toolbar:** Back and Forward (with the history on the right button), the main page, the page
-  before and after, Contents, Index, See also, the library and bookmarks, each with a tooltip.
-- **Several windows and bookmarks:** open a link in a new window (⇧-click) or the page in another
-  (^N), up to six; keep pages to come back to (^D), in the Bookmarks menu and the library.
+  before and after, Contents, Index, See also, the library and bookmarks, each with a tooltip
+  (in BubbleGEM's bubble when it runs).
+- **Tabs, windows and bookmarks:** open a link in a new tab (^-click), up to eight in a window, or in
+  a new window (⇧-click), up to six; keep pages to come back to (^D), in the Bookmarks menu and the
+  library.
 - **Your choice of font:** the system font, or any monospaced GDOS font with NVDI or SpeedoGDOS, in any
   size, changed at any time.
 - **Modern but Atari:** a program with a menu bar or a desk accessory, a shortcut for every menu item,
@@ -96,7 +98,8 @@ when one leads nowhere, the window's info line says so and suggests the closest 
 menus are **EHypView** (where other programs have Desk), **File**, **Edit**, **View**, **Navigate**,
 **Bookmarks**, **Options** and **Help**; most items have a key, shown beside them, and items you
 can't use right now are greyed out. The right mouse button, or Insert, opens a
-menu with **Back** and **Forward** first (and, on a link, **Link in new window**), then the pages,
+menu with **Back** and **Forward** first (and, on a link, **Link in new window** and **Link in new
+tab**), then the pages,
 **New window**, **Add bookmark**, **Copy page**, **Library and search**, **Font...**, and
 **About EHypView...** last.
 
@@ -116,13 +119,24 @@ menu with **Back** and **Forward** first (and, on a link, **Link in new window**
 | ≡ | a menu: **About EHypView...**, new window, open, library, copy, bookmark, fonts, settings, the guide, close, quit; the accessory, which has no menu bar, finds them here |
 
 A button that can't be used on the page shown is greyed out, and each one says what it does when the
-mouse rests on it for a second. In a narrow window the least needed buttons (See also, Index, ...)
-make room first; the ≡ menu and the keys still reach everything.
+mouse rests on it for a second, in BubbleGEM's bubble when BubbleGEM runs. In a narrow window the
+least needed buttons (See also, Index, ...) make room first; the ≡ menu and the keys still reach
+everything.
+
+**Tabs.** ^-click a link, or ^Return on the one chosen, and it opens in a new tab of the same
+window, in front, with its own Back and Forward. With two tabs or more a strip of them shows under
+the toolbar: click one, or ^Tab / ⇧^Tab, to bring it to the front. ^U and the window's closer close
+the tab in front (the window with its last), and a tab's right button has **Close tab** and **Close
+other tabs**. Up to eight in a window; a tab not in front keeps only its place and history, its page
+read again when it comes back, and a title cut short shows whole when the mouse rests on it. Tabs
+aren't kept when the window closes.
 
 | Keys | What they do |
 |---|---|
 | click a link, or Tab / ⇧Tab then Return | follow a link |
 | ⇧-click a link, or ⇧Return | follow it in a new window |
+| ^-click a link, or ^Return | follow it in a new tab |
+| ^Tab / ⇧^Tab | the next tab / the one before |
 | ^N | a new window, with the same page |
 | ^D | bookmark the page |
 | Backspace, Undo | back |

@@ -52,7 +52,8 @@ the names closest to it ("did you mean").
 - **Links** are underlined, and in colour on a screen with 16 colours or more (bold with fewer).
   Click one, or move to it with Tab and
   ⇧Tab and press Return. Links lead into any hypertext in the library, wherever it is.
-- **⇧-click a link**, or ⇧Return, to follow it in a new window.
+- **⇧-click a link**, or ⇧Return, to follow it in a new window; **^-click** it, or ^Return, to
+  follow it in a [new tab](#tabs).
 - **Back:** Backspace, Undo, the toolbar's back arrow, or the right button's menu. ⇧Undo goes
   forward again. The history has no limit.
 - **Pop-ups** (links to a `@pnode`) open as a small framed box below the link. A link in it can be
@@ -62,7 +63,7 @@ the names closest to it ("did you mean").
   and in ST medium they keep their shape.
 
 The right mouse button, or Insert, opens a menu: Back and Forward first (and **Link in new window**
-on a link), then the pages, **New window**, **Add bookmark**, **Copy page**, **Library and
+and **Link in new tab** on a link), then the pages, **New window**, **Add bookmark**, **Copy page**, **Library and
 search**, **Font...** and **About EHypView...**.
 
 ## The toolbar
@@ -81,8 +82,8 @@ At the top of each viewer window, drawn like the other AERA programs' toolbars:
 | ≡ | a menu of the menu bar's commands, About first: the accessory, which has no menu bar, finds them here |
 
 A button that can't be used on the page shown is greyed out, and each one says what it does when the
-mouse rests on it for a second. In a narrow window the least needed buttons make room first; the ≡
-menu and the keys still reach everything.
+mouse rests on it for a second. When BubbleGEM runs, it shows that in its bubble. In a narrow window
+the least needed buttons make room first; the ≡ menu and the keys still reach everything.
 
 ## The library
 
@@ -167,6 +168,23 @@ however many there are.
 Bookmarks menu lists them, up to ten, and opens one in the window in front; **Remove bookmark**
 forgets the page shown. They are first in the library too, where Return opens one and Delete
 removes it. They are kept in `EHYPVIEW.INF`, which the program and the accessory share.
+
+## Tabs
+
+A window can hold several pages, a tab each. **^-click** a link, or ^Return on the one chosen, or
+**Link in new tab** in the right button's menu (and **Navigate**): it opens in a new tab after the
+one in front, and comes to the front. Each tab has its own Back and Forward; Back in a new tab goes
+to the page its link was on.
+
+- **The strip** of tabs shows under the toolbar while the window has two or more, the one in front
+  white and its title bold. A title too long for its tab is cut, and shows whole, with its
+  hypertext, when the mouse rests on it.
+- **To change tabs,** click one, or ^Tab for the next and ⇧^Tab for the one before.
+- **To close one,** ^U or the window's closer close the tab in front, and the window closes with its
+  last. The right button on a tab gives **Close tab** and **Close other tabs**.
+- Up to eight in a window. A tab that isn't in front keeps only its place and its history; its page
+  is read again when it comes to the front, which saves memory on small machines.
+- Tabs aren't kept when the window closes, nor from one start to the next.
 
 ## Several windows
 
@@ -267,6 +285,8 @@ Most menu items have a key, shown beside them in the menu.
 |---|---|
 | click a link, or Tab / ⇧Tab then Return | follow a link |
 | ⇧-click a link, or ⇧Return | follow it in a new window |
+| ^-click a link, or ^Return | follow it in a new tab |
+| ^Tab / ⇧^Tab | the next tab / the one before |
 | Backspace, Undo | back |
 | ⇧Undo | forward again |
 | ^Left / ^Right | the page before / after |
@@ -284,7 +304,7 @@ Most menu items have a key, shown beside them in the menu.
 | ⇧^F | choose the font |
 | ^+ / ^- | larger / smaller text (on the keypad, or ^= and ^-) |
 | ^, | settings |
-| ^U | close the window in front |
+| ^U | close the tab in front, or the window with its last |
 | ^W | the next of EHypView's windows in front, in turn |
 | Esc | in the library, empty the search; in a dialog's field, empty it; in a dialog without one, cancel |
 | ^Q | quit (the accessory: close its windows) |
