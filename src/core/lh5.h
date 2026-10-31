@@ -13,7 +13,8 @@
  * Decode `srclen` bytes of LH5 data from `src` into exactly `dstlen`
  * bytes at `dst`.
  *
- * Returns 0 on success, -1 if the input is corrupt or ends early.
+ * Returns 0 on success, -1 if the input is corrupt or ends early (or,
+ * while a piece decoder is running, no memory for a second one).
  * Never writes outside dst[0 .. dstlen-1] and never reads outside
  * src[0 .. srclen-1].
  */

@@ -478,18 +478,11 @@ static void begin(lh5_state *s, const unsigned char *src, unsigned long srclen,
 	s->dstlen = dstlen;
 }
 
-int lh5_decode(const unsigned char *src, unsigned long srclen,
-               unsigned char *dst, unsigned long dstlen)
-{
-	static lh5_state st;             /* ~6 KB: keep it off the TOS stack */
-
-	begin(&st, src, srclen, dst, dstlen);
-	return run(&st, dstlen) == 1 ? 0 : -1;
-}
-
-/* one decoder kept for the pieces (a page's pictures are unpacked one
-   at a time): no ~11 KB taken from an accessory's heap for each; a
-   second at once gets its own */
+/* one decoder kept (~11 KB, off the TOS stack): a page's pictures are
+   unpacked one at a time, and a page between their steps; a second at
+   once gets its own from the heap. One, not one for pages and one for
+   pieces: 11 KB less of an accessory resident from the boot on, where
+   the family's first boot under NVDI is a few KB short (hub, 31 Oct) */
 static lh5_state piece_state;
 static int piece_used;
 
@@ -519,4 +512,17 @@ void lh5_end(lh5_state *s)
 		piece_used = 0;
 	else
 		free(s);
+}
+
+int lh5_decode(const unsigned char *src, unsigned long srclen,
+               unsigned char *dst, unsigned long dstlen)
+{
+	lh5_state *s = lh5_begin(src, srclen, dst, dstlen);
+	int r;
+
+	if (s == NULL)
+		return -1;
+	r = run(s, dstlen);
+	lh5_end(s);
+	return r == 1 ? 0 : -1;
 }
