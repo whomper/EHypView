@@ -168,8 +168,9 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   BubbleGEM (`BUBBLEGEM_SHOW` to "BUBBLE  ", the text in `av_shared` memory taken before the first
   event call) when it runs, else EHypView's own box. gui-test's bubble scenario runs common's
   stand-in (tests/notify's BUBBLE.PRG as BUBBLE.ACC).
-- Presses (guidelines 5.8, Erez 1 Nov 2026): the loop asks evnt_multi for one click (0x101, the
-  accessory too), a link, a library row or a Continue button is drawn chosen on the press (only
+- Presses (guidelines 5.8, Erez 1 Nov 2026): the program asks evnt_multi for one click (0x101; the
+  accessory two, as the AES counts its clicks for the desktop under TOS anyway; EHypView has no
+  double click), a link, a library row or a Continue button is drawn chosen on the press (only
   the rows or lines it left and took) and acted on when let go over it (`app_press`, common's
   `press_track` in src/gem/press.h); a library row moved 4 px while held is dragged (4.2). Buttons
   EHypView draws (the toolbar, a tab, Open and Index, a Subjects line while a search shows) go
