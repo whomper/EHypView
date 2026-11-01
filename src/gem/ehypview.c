@@ -812,6 +812,42 @@ int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short 
 	return 1;
 }
 
+/* wind_update(BEG_UPDATE) and END_UPDATE for drawing in a window, but
+   not while the left button is held on TOS: there the AES holds the
+   screen till it is let go (measured: 1.4 s of a 1.5 s press, TOS 1.04
+   and 4.04), so a row chosen on a press (the guidelines, 5.8) would
+   show only on its release. A single-tasking AES draws nothing of
+   another program's while EHypView makes no event call */
+static unsigned char upd_held[8];
+static short upd_depth;
+
+void app_update_begin(void)
+{
+	short mx, my, mb = 0, ks;
+	int held = 0;
+
+	if (aes_count() == 1)
+	{
+		graf_mkstate(&mx, &my, &mb, &ks);
+		held = mb & 1;
+	}
+	if (upd_depth < 8)
+		upd_held[upd_depth] = (unsigned char) held;
+	upd_depth++;
+	if (!held)
+		wind_update(BEG_UPDATE);
+}
+
+void app_update_end(void)
+{
+	int held = 0;
+
+	if (upd_depth > 0 && --upd_depth < 8)
+		held = upd_held[upd_depth];
+	if (!held)
+		wind_update(END_UPDATE);
+}
+
 /* redraw an area of the window through the AES rectangle list */
 static void redraw(short x, short y, short w, short h)
 {
@@ -824,7 +860,7 @@ static void redraw(short x, short y, short w, short h)
 		app_icon_redraw(cur->h, x, y, w, h);
 		return;
 	}
-	wind_update(BEG_UPDATE);
+	app_update_begin();
 	graf_mouse(M_OFF, NULL);
 	wind_get(cur->h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
 	while (rw > 0 && rh > 0)
@@ -837,7 +873,7 @@ static void redraw(short x, short y, short w, short h)
 		wind_get(cur->h, WF_NEXTXYWH, &rx, &ry, &rw, &rh);
 	}
 	graf_mouse(M_ON, NULL);
-	wind_update(END_UPDATE);
+	app_update_end();
 }
 
 static void redraw_all(void)
@@ -2761,7 +2797,7 @@ int app_press_box(short win, short x, short y, short w, short h)
 	pxy[1] = (short) (y + 1);
 	pxy[2] = (short) (x + w - 2);
 	pxy[3] = (short) (y + h - 2);
-	wind_update(BEG_UPDATE);
+	app_update_begin();
 	graf_mouse(M_OFF, NULL);
 	scr_xor(vdi_h, pxy);                   /* common's: by the CPU on TOS's screen */
 	graf_mouse(M_ON, NULL);
@@ -2787,7 +2823,7 @@ int app_press_box(short win, short x, short y, short w, short h)
 		graf_mouse(M_ON, NULL);
 	}
 	vswr_mode(vdi_h, MD_REPLACE);
-	wind_update(END_UPDATE);
+	app_update_end();
 	return in;
 }
 
@@ -2921,6 +2957,46 @@ static int strip_click(short mx, short my, short button)
 	return 1;
 }
 
+/* link r's columns on line (from col, or found when col < 0): 0 when it
+   isn't there */
+static int link_cols(long line, long r, long col, long *c0, long *c1)
+{
+	if (col < 0)
+		for (col = 0; col < 256 && view_link_at(&cur->view, line, col) != r; col++)
+			;
+	if (col >= 256 || view_link_at(&cur->view, line, col) != r)
+		return 0;
+	*c0 = *c1 = col;
+	while (*c0 > 0 && view_link_at(&cur->view, line, *c0 - 1) == r)
+		(*c0)--;
+	while (*c1 < *c0 + 255 && view_link_at(&cur->view, line, *c1 + 1) == r)
+		(*c1)++;
+	return 1;
+}
+
+/* link r drawn again, only its own cells (a press: the guidelines' Speed,
+   5.8); its box in *box when given */
+static void redraw_link(long r, long col, GRECT *box)
+{
+	short x, y, w, h;
+	long line = view_run_line(&cur->view, r), c0, c1, ly;
+	GRECT b;
+
+	if (line < cur->view.top || cur->lay.line_y == NULL || cur->icon || !link_cols(line, r, col, &c0, &c1))
+		return;
+	work_area(&x, &y, &w, &h);
+	ly = y + cur->lay.line_y[line] - cur->lay.gfx_y[cur->view.top];
+	if (ly >= y + h)
+		return;
+	b.x = (short) (x + MARGIN + (c0 - cur->view.left) * cw);
+	b.w = (short) ((c1 - c0 + 1) * cw);
+	b.y = (short) ly;
+	b.h = (short) (ly + ch > y + h ? y + h - ly : ch);
+	if (box != NULL)
+		*box = b;
+	redraw(b.x, b.y, b.w, b.h);
+}
+
 static void click(short mx, short my, short button, short kstate)
 {
 	short x, y, w, h;
@@ -2966,21 +3042,16 @@ static void click(short mx, short my, short button, short kstate)
 		   again; followed when let go over it (the guidelines, 5.8) */
 		viewer *v = cur;
 		const hyp_page *pg = cur->view.page;
-		long old = view_run_line(&cur->view, cur->view.sel), c0 = col, c1 = col;
+		long old = cur->view.sel;
 		GRECT box;
 
 		cur->view.sel = r;
-		if (old != line)
-			redraw_line(old);
-		redraw_line(line);
-		while (c0 > cur->view.left && view_link_at(&cur->view, line, c0 - 1) == r)
-			c0--;
-		while (c1 < c0 + 255 && view_link_at(&cur->view, line, c1 + 1) == r)
-			c1++;
-		box.x = (short) (x + MARGIN + (c0 - cur->view.left) * cw);
-		box.w = (short) ((c1 - c0 + 1) * cw);
-		box.y = (short) (y + cur->lay.line_y[line] - cur->lay.gfx_y[cur->view.top]);
-		box.h = (short) ch;
+		if (old >= 0 && old != r)
+			redraw_link(old, -1, NULL);
+		box.w = 0;
+		redraw_link(r, col, &box);
+		if (box.w <= 0)
+			return;
 		log_event("press", "link", NULL);
 		if (app_press(&box, mx, my, 0) != PRESS_IN)
 			return;
@@ -4457,11 +4528,9 @@ int main(void)
 			flags |= MU_TIMER;
 		pf_forget();
 		hyp_forget();
-		/* the program: one click, a press at once (5.8). The accessory: two,
-		   as the AES counts them for the desktop before it sees a press
-		   under TOS anyway (common's click.h, AERA-Atari fd8d9b8);
-		   EHypView has no double click of its own */
-		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, t, msg, &ev);
+		/* one click, the accessory too: a press at once (the guidelines,
+		   5.8, AERA-Atari 0371405); EHypView has no double click */
+		which = evnt_multi_(flags, 0x101, 3, 0, t, msg, &ev);
 		/* what holds the machine until the next event call, for the
 		   AESGAP lines of an -DAES_PROFILE build */
 		aes_profile_tag(which & (MU_MESAG | MU_KEYBD | MU_BUTTON) ? "event" : "idle");

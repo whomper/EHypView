@@ -43,6 +43,8 @@ void clip_off(void);
 void text_fx_after(short x, short y, const char *s, long n, short fx, short colour);
 int app_press_box(short win, short x, short y, short w, short h); /* a button pressed: 1 let go over it (5.8) */
 int app_press(const GRECT *r, short x, short y, int drag); /* a row pressed: PRESS_IN/OUT/DRAG (click.h) */
+void app_update_begin(void);              /* wind_update BEG/END_UPDATE, but not while the */
+void app_update_end(void);                /* button is held on TOS (it would wait for the release) */
 int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short w2, short h2);
 int scanning(void);                       /* the index is being rebuilt */
 unsigned long scan_found(void);           /* hypertexts found so far    */

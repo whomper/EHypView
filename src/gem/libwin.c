@@ -1234,7 +1234,7 @@ static void redraw(short x, short y, short w, short h)
 		app_icon_redraw(lib_h, x, y, w, h);
 		return;
 	}
-	wind_update(BEG_UPDATE);
+	app_update_begin();
 	graf_mouse(M_OFF, NULL);
 	wind_get(lib_h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
 	while (rw > 0 && rh > 0)
@@ -1247,7 +1247,7 @@ static void redraw(short x, short y, short w, short h)
 		wind_get(lib_h, WF_NEXTXYWH, &rx, &ry, &rw, &rh);
 	}
 	graf_mouse(M_ON, NULL);
-	wind_update(END_UPDATE);
+	app_update_end();
 }
 
 /* the iconified window as it was: the menu, ^L */
