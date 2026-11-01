@@ -4495,6 +4495,12 @@ int main(void)
 		if (which & MU_BUTTON)
 		{
 			short h = wind_find(ev.mx, ev.my);
+#ifdef AES_PROFILE
+			char at[24];
+
+			sprintf(at, "%d %d", ev.mx, ev.my);
+			log_event("button", at, NULL);     /* the speed rig's: where its press came */
+#endif
 			viewer *cv = viewer_of(h);
 
 			if (cv != NULL && !cv->icon)

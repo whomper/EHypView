@@ -164,6 +164,17 @@ class Mouse:
                 time.sleep(0.2)
         raise RuntimeError("no Hatari window")
 
+    def home(self):
+        """the Atari's pointer and ours in step (tests/run_gui.py's): a move
+        bigger than the screen to the window's top-left corner"""
+        wx, wy, ww, wh = self.window()
+        self.xdo("mousemove", str(wx + ww - 1), str(wy + wh - 1))
+        time.sleep(0.2)
+        for i in range(1, 25):
+            self.xdo("mousemove", str(wx + ww - 1 - (ww - 1) * i // 24), str(wy + wh - 1 - (wh - 1) * i // 24))
+            time.sleep(0.03)
+        time.sleep(0.4)
+
     def down(self):
         self.xdo("mousedown", "1")
 
@@ -385,7 +396,7 @@ def acc_case(spec, nvdi):
 
 
 def click_case(spec, nvdi):
-    """5.8: "Index" in BIG.HYP's first line (columns 32-36) pressed, then
+    """5.8: "Other" in BIG.HYP's first line (columns 42-46) pressed, then
     let go: each its own longest stretch"""
     d = os.path.join(OUT, slug(spec), "click")
     page = "C:\\FIXT\\BIG.HYP Main"
@@ -402,11 +413,19 @@ def click_case(spec, nvdi):
         x, y, cw, ch = (int(v) for v in at[-1])
         sw, sh = screen(run)
         mouse = Mouse(sw, sh)
-        mouse.click(x + 34 * cw + cw // 2, y + ch // 2, press=False)
-        note("a link pressed: drawn chosen", KEY, spec,
-             run.act(mouse.down, "press link", settle=1.0))
-        note("a link let go over: its page", WHOLE, spec,
-             run.act(mouse.up, "page C:\\FIXT\\BIG.HYP Index", settle=2.0))
+        mouse.home()
+        mouse.click(x + 44 * cw + cw // 2, y + ch // 2, press=False)
+        # Hatari's console reaches the file in blocks, and nothing more is
+        # written while the button is held: one action, the press and the
+        # release told apart by their stretches' tags (the press's turn
+        # "event", press_track's release "click")
+        def press_release():
+            mouse.down()
+            time.sleep(1.5)
+            mouse.up()
+        ok = run.act(press_release, "page C:\\FIXT\\BIG.HYP Other", settle=2.0) is not None
+        note("a link pressed: drawn chosen", KEY, spec, run.since(("event",)) if ok else None)
+        note("a link let go over: its page", WHOLE, spec, run.since(("click",)) if ok else None)
     finally:
         run.stop()
 
