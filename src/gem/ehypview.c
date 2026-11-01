@@ -816,7 +816,7 @@ int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short 
 static void redraw(short x, short y, short w, short h)
 {
 	short rx, ry, rw, rh;
-	int took;
+	int press = app_pressing, took = 1;
 
 	if (cur->h <= 0)
 		return;
@@ -825,7 +825,10 @@ static void redraw(short x, short y, short w, short h)
 		app_icon_redraw(cur->h, x, y, w, h);
 		return;
 	}
-	took = press_update_begin();       /* not while a press is held on TOS (5.8) */
+	if (press)
+		took = press_update_begin();   /* a press drawn while held on TOS (5.8) */
+	else
+		wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, NULL);
 	wind_get(cur->h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
 	while (rw > 0 && rh > 0)
@@ -838,7 +841,10 @@ static void redraw(short x, short y, short w, short h)
 		wind_get(cur->h, WF_NEXTXYWH, &rx, &ry, &rw, &rh);
 	}
 	graf_mouse(M_ON, NULL);
-	press_update_end(took);
+	if (press)
+		press_update_end(took);
+	else
+		wind_update(END_UPDATE);
 }
 
 static void redraw_all(void)
@@ -2800,6 +2806,11 @@ static int bar_press(const toolbar *t, int b)
 
 static void message(short *msg);
 
+/* set while a press on a row or a link is drawn: the redraws then use
+   common's press_update_begin (the AES's own presses, a window's arrows
+   and slider, keep wind_update: one held there scrolled twice) */
+short app_pressing;
+
 /* the messages that come while a press is held, handled as the loop
    would (common's press_track) */
 static void press_msg(short *m)
@@ -3012,10 +3023,12 @@ static void click(short mx, short my, short button, short kstate)
 		GRECT box;
 
 		cur->view.sel = r;
+		app_pressing = 1;
 		if (old >= 0 && old != r)
 			redraw_link(old, -1, NULL);
 		box.w = 0;
 		redraw_link(r, col, &box);
+		app_pressing = 0;
 		if (box.w <= 0)
 			return;
 		log_event("press", "link", NULL);

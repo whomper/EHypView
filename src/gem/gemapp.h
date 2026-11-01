@@ -43,6 +43,7 @@ void clip_off(void);
 void text_fx_after(short x, short y, const char *s, long n, short fx, short colour);
 int app_press_box(short win, short x, short y, short w, short h); /* a button pressed: 1 let go over it (5.8) */
 int app_press(const GRECT *r, short x, short y, int drag); /* a row pressed: PRESS_IN/OUT/DRAG (click.h) */
+extern short app_pressing;                /* a press on a row or link being drawn (press_update_begin) */
 int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short w2, short h2);
 int scanning(void);                       /* the index is being rebuilt */
 unsigned long scan_found(void);           /* hypertexts found so far    */
