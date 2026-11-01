@@ -2078,12 +2078,17 @@ static void rename_pane(long p)
 static void file_under(unsigned long g, short mx, short my)
 {
 	enum { MAXSUB = 60 };
-	static char lab[MAXSUB + 2][LIB_PANE_TEXT + 8];
+	typedef char label[LIB_PANE_TEXT + 8];
+	/* the labels from the heap while the menu shows: 3 KB less of the
+	   accessory resident (hub, 1 Nov 2026) */
+	label *lab = malloc((MAXSUB + 2) * sizeof(label));
 	const char *l[MAXSUB + 2];
 	long line[MAXSUB + 2];
 	short n = 0, r;
 	unsigned long k;
 
+	if (lab == NULL)
+		return;
 	for (k = 0; k < lib.npanes && n < MAXSUB; k++)
 	{
 		const lib_pane *p = &lib.panes[k];
@@ -2099,6 +2104,7 @@ static void file_under(unsigned long g, short mx, short my)
 		l[r] = lab[r];
 	log_event("menu", "file-under", NULL);
 	r = popup(mx, my, l, n);
+	free(lab);
 	redraw(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
 	if (r < 0)
 		return;

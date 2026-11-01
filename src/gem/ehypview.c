@@ -99,7 +99,9 @@ typedef struct {
 	   others are put away, their place and history kept, their page
 	   read again when one comes to the front. Two or more: the strip */
 	short ntabs, front;
-	view_parked tabs[TABS_MAX];    /* tabs[front] unused */
+	view_parked *tabs;             /* TABS_MAX, from the heap with the second tab
+	                                  (2 KB less of the accessory resident);
+	                                  tabs[front] unused */
 } viewer;
 
 #define MAX_VIEWERS 6
@@ -253,8 +255,11 @@ static void tabs_drop(viewer *v)
 {
 	int i;
 
-	for (i = 0; i < TABS_MAX; i++)
-		view_parked_free(&v->tabs[i]);
+	if (v->tabs != NULL)
+		for (i = 0; i < TABS_MAX; i++)
+			view_parked_free(&v->tabs[i]);
+	free(v->tabs);
+	v->tabs = NULL;
 	v->ntabs = 1;
 	v->front = 0;
 }
@@ -1700,6 +1705,11 @@ static void log_strip(void)
    stays as it was) */
 static int tab_park(void)
 {
+	if (cur->tabs == NULL && (cur->tabs = calloc(TABS_MAX, sizeof(view_parked))) == NULL)
+	{
+		set_status("Out of memory");
+		return -1;
+	}
 	layout_free(&cur->lay);           /* it points into the page */
 	if (view_park(&cur->view, &cur->tabs[cur->front]) == 0)
 		return 0;
@@ -1853,19 +1863,13 @@ static void close_view(void)
 /* every tab but i closed */
 static void close_other_tabs(int i)
 {
-	int k;
 	char n[8];
 
 	if (i != cur->front)
 		tab_show(i);
 	if (i != cur->front)
 		return;                       /* out of memory: as it was */
-	for (k = 0; k < TABS_MAX; k++)
-		if (k != cur->front)
-			view_parked_free(&cur->tabs[k]);
-	memset(&cur->tabs[cur->front], 0, sizeof(view_parked));
-	cur->ntabs = 1;
-	cur->front = 0;
+	tabs_drop(cur);                    /* the one in front stays, alone */
 	sprintf(n, "%d", cur->ntabs);
 	log_event("tab", "closed", n);
 	redraw_all();
