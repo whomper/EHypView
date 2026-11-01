@@ -4494,9 +4494,12 @@ int main(void)
 			flags |= MU_TIMER;
 		pf_forget();
 		hyp_forget();
-		/* one click, the accessory too: a press at once (the guidelines,
-		   5.8, AERA-Atari 0371405); EHypView has no double click */
-		which = evnt_multi_(flags, 0x101, 3, 0, t, msg, &ev);
+		/* the program: one click, a press at once (the guidelines, 5.8).
+		   The accessory: two for now, as the AES counts its clicks for
+		   the desktop on TOS (an accessory asking for one lost a double
+		   click's second press, ECal's 1 Nov 2026 runs; the hub's call
+		   for 1.38). EHypView has no double click of its own */
+		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, t, msg, &ev);
 		/* what holds the machine until the next event call, for the
 		   AESGAP lines of an -DAES_PROFILE build */
 		aes_profile_tag(which & (MU_MESAG | MU_KEYBD | MU_BUTTON) ? "event" : "idle");
