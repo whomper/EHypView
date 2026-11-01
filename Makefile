@@ -209,11 +209,12 @@ RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
 XHDRS    = $(wildcard src/core/*.h common/atari/*.h common/atari/include/*.h common/ui/*.h)
 
-# the stack: 16 KB, five times the deepest the rigs found (3.2 KB, a
-# STACK_PROBE build: make atari XEXTRA=-DSTACK_PROBE, then the "STACK"
-# lines of tests/run_gui.py's logs); crt0's default is 48 KB
-STACK_SIZE ?= 16384
-$(ATARI)/%.o: common/atari/%.S | $(ATARI)
+# the stack: 15 KB, four times the deepest the rigs found (3.7 KB after
+# an alert, 1 Nov 2026: a STACK_PROBE build, make gui-test
+# XEXTRA=-DSTACK_PROBE, then the "STACK" lines of its console logs);
+# crt0's default is 48 KB. Every KB here is the accessory's, resident
+STACK_SIZE ?= 15360
+$(ATARI)/%.o: common/atari/%.S Makefile | $(ATARI)
 	$(XCC) $(XCPU) -DSTACK_SIZE=$(STACK_SIZE) -c -o $@ $<
 $(ATARI)/crash_s.o: common/atari/crash.S | $(ATARI)
 	$(XCC) $(XCPU) -c -o $@ $<

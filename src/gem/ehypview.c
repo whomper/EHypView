@@ -154,7 +154,7 @@ static const char pagekb_note[] = "the memory the accessory's pages needed at th
 #ifdef STACK_PROBE
 /* a test build's stack, painted at start: how deep it has been, printed
    with each event (make STACK_PROBE=1: tests/run_*.py collect them) */
-#define PROBE_DEPTH 15360L               /* inside the stack: STACK_SIZE 16 KB (Makefile) */
+#define PROBE_DEPTH 14336L               /* inside the stack: STACK_SIZE 15 KB (Makefile) */
 static unsigned char *probe_top;
 
 static void probe_paint(void)
