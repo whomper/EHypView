@@ -25,12 +25,17 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
            scrolled
   front    ECal's guide from its release (the family's front page, 4.3)
   acc      EHYPVIEW.ACC opened from the Desk menu (Xvfb and xdotool)
+  click    a link in BIG.HYP pressed and let go (Xvfb and xdotool; the
+           guidelines, 5.8): the press, the link drawn chosen; the
+           release, the page it leads to
   help     the accessory asked for ECal's front page as a Help key asks
            (ASKHELP.PRG, VA_START)
 
 It prints a table: each action's longest stretch on each machine, marked
 "over" where it is over the guidelines' time, and fails when one is.
-SPEED_ONLY=page,acc runs only those.
+SPEED_ONLY=page,acc runs only those. SPEED_FONT="Courier,14" writes
+EHYPVIEW.INF's FONT= and POINT= (the font's name as the VDI gives it,
+trailing blanks off: a GDOS font, under NVDI); unset, the system font.
 """
 import os
 import re
@@ -49,6 +54,7 @@ FIX = os.path.join(ROOT, "tests", "fixtures")
 DISPLAY = ":97"
 SPECS = os.environ.get("SPEED_MACHINES", "ST:mono,ST:med,Falcon-4:16").split(",")
 ONLY = os.environ.get("SPEED_ONLY")
+FONT = os.environ.get("SPEED_FONT")
 GUIDES = 60
 
 ESC, TAB, RETURN, DOWN, CTRL, SHIFT = 1, 15, 28, 0x50, 29, 0x2A
@@ -113,6 +119,10 @@ def make_drive(d, nvdi, start=None, acc=False, ask=None):
                         os.path.join(fixt, "MANY", "G%03d.%s" % (i, ext.upper())))
     with open(os.path.join(d, "ST-GUIDE.INF"), "w", newline="") as f:
         f.write("PATHS=C:\\FIXT\r\n")
+    if FONT:
+        name, _, point = FONT.rpartition(",")
+        with open(os.path.join(d, "EHYPVIEW.INF"), "w", newline="") as f:
+            f.write("FONT=%s\r\nPOINT=%s\r\n" % (name or point, point if name else "0"))
     if acc:
         shutil.copy(os.path.join(BDIR, "EHYPVIEW.ACC"), d)
     else:
@@ -154,7 +164,24 @@ class Mouse:
                 time.sleep(0.2)
         raise RuntimeError("no Hatari window")
 
-    def click(self, x, y):
+    def home(self):
+        """the Atari's pointer and ours in step (tests/run_gui.py's): a move
+        bigger than the screen to the window's top-left corner"""
+        wx, wy, ww, wh = self.window()
+        self.xdo("mousemove", str(wx + ww - 1), str(wy + wh - 1))
+        time.sleep(0.2)
+        for i in range(1, 25):
+            self.xdo("mousemove", str(wx + ww - 1 - (ww - 1) * i // 24), str(wy + wh - 1 - (wh - 1) * i // 24))
+            time.sleep(0.03)
+        time.sleep(0.4)
+
+    def down(self):
+        self.xdo("mousedown", "1")
+
+    def up(self):
+        self.xdo("mouseup", "1")
+
+    def click(self, x, y, press=True):
         wx, wy, ww, wh = self.window()
         x, y = wx + x * ww // self.sw, wy + y * wh // self.sh
         loc = dict(l.split("=") for l in self.xdo("getmouselocation", "--shell").split())
@@ -163,8 +190,9 @@ class Mouse:
             self.xdo("mousemove", str(x0 + (x - x0) * i // 12), str(y0 + (y - y0) * i // 12))
             time.sleep(0.03)
         time.sleep(0.4)
-        self.xdo("click", "1")
-        time.sleep(0.4)
+        if press:
+            self.xdo("click", "1")
+            time.sleep(0.4)
 
 
 class Run:
@@ -367,6 +395,41 @@ def acc_case(spec, nvdi):
         run.stop()
 
 
+def click_case(spec, nvdi):
+    """5.8: "Other" in BIG.HYP's first line (columns 42-46) pressed, then
+    let go: each its own longest stretch"""
+    d = os.path.join(OUT, slug(spec), "click")
+    page = "C:\\FIXT\\BIG.HYP Main"
+    m = make_drive(os.path.join(d, "c"), nvdi, start="C:\\FIXT\\BIG.HYP")
+    run = Run(os.path.join(slug(spec), "click"), m, r"C:\LAUNCH.PRG", windowed=True)
+    try:
+        ok = run.wait("page " + page, 180, 0)
+        time.sleep(5)                   # (the index goes on in its slices, never in a press's turn)
+        at = [e.split()[1:5] for e in run.events(0) if e.startswith("text-at ")]
+        if not ok or not at:
+            note("a link pressed: drawn chosen", KEY, spec, None)
+            note("a link let go over: its page", WHOLE, spec, None)
+            return
+        x, y, cw, ch = (int(v) for v in at[-1])
+        sw, sh = screen(run)
+        mouse = Mouse(sw, sh)
+        mouse.home()
+        mouse.click(x + 44 * cw + cw // 2, y + ch // 2, press=False)
+        # Hatari's console reaches the file in blocks, and nothing more is
+        # written while the button is held: one action, the press and the
+        # release told apart by their stretches' tags (the press's turn
+        # "event", press_track's release "click")
+        def press_release():
+            mouse.down()
+            time.sleep(1.5)
+            mouse.up()
+        ok = run.act(press_release, "page C:\\FIXT\\BIG.HYP Other", settle=2.0) is not None
+        note("a link pressed: drawn chosen", KEY, spec, run.since(("event",)) if ok else None)
+        note("a link let go over: its page", WHOLE, spec, run.since(("click",)) if ok else None)
+    finally:
+        run.stop()
+
+
 def help_case(spec, nvdi):
     d = os.path.join(OUT, slug(spec), "help")
     page = "C:\\FIXT\\ECAL.HYP Main"
@@ -405,7 +468,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     xvfb = None
     want = lambda c: not ONLY or c in ONLY.split(",")
-    if want("acc") and shutil.which("Xvfb") and shutil.which("xdotool"):
+    if (want("acc") or want("click")) and shutil.which("Xvfb") and shutil.which("xdotool"):
         xvfb = machines.xvfb(DISPLAY)
     try:
         for spec in SPECS:
@@ -428,6 +491,11 @@ def main():
                     acc_case(spec, nvdi)
                 else:
                     print("skip  acc: needs Xvfb and xdotool")
+            if want("click"):
+                if xvfb is not None or os.environ.get("DISPLAY") is None and shutil.which("xdotool"):
+                    click_case(spec, nvdi)
+                else:
+                    print("skip  click: needs Xvfb and xdotool")
             if want("help"):
                 help_case(spec, nvdi)
     finally:

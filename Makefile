@@ -209,11 +209,12 @@ RT_OBJ   = $(addprefix $(ATARI)/,$(addsuffix .o,$(RUNTIME)))
 XCORE_OBJ = $(patsubst src/core/%.c,$(ATARI)/core_%.o,$(CORE_PORT))
 XHDRS    = $(wildcard src/core/*.h common/atari/*.h common/atari/include/*.h common/ui/*.h)
 
-# the stack: 16 KB, five times the deepest the rigs found (3.2 KB, a
-# STACK_PROBE build: make atari XEXTRA=-DSTACK_PROBE, then the "STACK"
-# lines of tests/run_gui.py's logs); crt0's default is 48 KB
-STACK_SIZE ?= 16384
-$(ATARI)/%.o: common/atari/%.S | $(ATARI)
+# the stack: 15 KB, four times the deepest the rigs found (3.7 KB after
+# an alert, 1 Nov 2026: a STACK_PROBE build, make gui-test
+# XEXTRA=-DSTACK_PROBE, then the "STACK" lines of its console logs);
+# crt0's default is 48 KB. Every KB here is the accessory's, resident
+STACK_SIZE ?= 15360
+$(ATARI)/%.o: common/atari/%.S Makefile | $(ATARI)
 	$(XCC) $(XCPU) -DSTACK_SIZE=$(STACK_SIZE) -c -o $@ $<
 $(ATARI)/crash_s.o: common/atari/crash.S | $(ATARI)
 	$(XCC) $(XCPU) -c -o $@ $<
@@ -274,7 +275,7 @@ GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookm
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/tabs.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/settings.o $(ATARI)/ask.o \
            $(ATARI)/aboutbox.o $(ATARI)/aboutline.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/text.o $(ATARI)/colour.o \
-           $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o $(ATARI)/panebar.o $(ATARI)/libbar.o
+           $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o $(ATARI)/panebar.o $(ATARI)/libbar.o $(ATARI)/click.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
 # and the build never writes it. Every build shows it as it is in the

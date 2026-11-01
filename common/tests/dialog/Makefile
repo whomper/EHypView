@@ -8,10 +8,14 @@ B      := build
 
 $(B)/test_dialog: test_dialog.c ../../ui/dialog.c ../../ui/dialog.h ../../ui/field.c ../../ui/field.h | $(B)
 	cc $(CFLAGS) -o $@ test_dialog.c ../../ui/dialog.c ../../ui/field.c
+# and with -DDLG_CLICK: one click asked for, the double click timed (click.c's stood in for)
+$(B)/test_dialog_click: test_dialog.c ../../ui/dialog.c ../../ui/dialog.h ../../ui/field.c ../../ui/field.h | $(B)
+	cc $(CFLAGS) -DDLG_CLICK -o $@ test_dialog.c ../../ui/dialog.c ../../ui/field.c
 $(B):
 	mkdir -p $@
-test: $(B)/test_dialog
+test: $(B)/test_dialog $(B)/test_dialog_click
 	./$(B)/test_dialog
+	./$(B)/test_dialog_click
 clean:
 	rm -rf $(B)
 .PHONY: test clean
@@ -49,3 +53,24 @@ $(T)/%.o: $(A)/%.S | $(T)
 $(T):
 	mkdir -p $@
 .PHONY: prg
+
+# DLGCMP.PRG, dlg_draw's fast way against objc_draw, byte for byte and
+# timed: make cmp, then python3 run_cmp.py WORK MACHINE
+C       := $(B)/cmp
+CCFLAGS := $(filter-out -DDLG_TRACE,$(TCFLAGS)) -DDLG_FAST_TIMES -DDLG_CPU
+cmp: $(C)/DLGCMP.PRG
+$(C)/DLGCMP.PRG: $(C)/dlgcmp.elf ../../tools/elf2tos.py
+	python3 ../../tools/elf2tos.py $< $@
+$(C)/dlgcmp.elf: $(C)/crt0.o $(C)/dlgcmp.o $(C)/dialog.o $(C)/text.o $(C)/gem.o $(C)/libc.o $(C)/tos.o $(C)/nf.o
+	$(CROSS)gcc $(TLDFLAGS) -o $@ $^ -lgcc
+$(C)/dlgcmp.o: dlgcmp.c $(U)/dialog.h $(U)/text.h | $(C)
+	$(CROSS)gcc $(CCFLAGS) -c -o $@ $<
+$(C)/%.o: $(U)/%.c $(U)/dialog.h $(U)/text.h | $(C)
+	$(CROSS)gcc $(CCFLAGS) -c -o $@ $<
+$(C)/%.o: $(A)/%.c | $(C)
+	$(CROSS)gcc $(CCFLAGS) -c -o $@ $<
+$(C)/%.o: $(A)/%.S | $(C)
+	$(CROSS)gcc -m68000 -c -o $@ $<
+$(C):
+	mkdir -p $@
+.PHONY: cmp

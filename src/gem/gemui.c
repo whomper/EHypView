@@ -28,7 +28,10 @@ void fill(GRECT *r, short color)
 	vsf_interior(vdi_h, FIS_SOLID);
 	vsf_color(vdi_h, color);
 	vsf_perimeter(vdi_h, 0);
-	vr_recfl(vdi_h, pxy);
+	if ((color == 0 || color == 1) && scr_cpu_wins())
+		scr_fill(vdi_h, pxy, color);   /* an ST: by the CPU (common's text.c) */
+	else
+		vr_recfl(vdi_h, pxy);
 }
 
 void line_col(short x1, short y1, short x2, short y2, short color)

@@ -43,6 +43,8 @@
 #include "av.h"
 #include "notify.h"                /* BUBBLEGEM_SHOW */
 #include "grect.h"
+#include "press.h"                 /* press_track (5.8) */
+#include "panebar.h"               /* pb_vdi */
 #include "popup.h"
 #include "aboutbox.h"
 #include "alert.h"
@@ -99,7 +101,9 @@ typedef struct {
 	   others are put away, their place and history kept, their page
 	   read again when one comes to the front. Two or more: the strip */
 	short ntabs, front;
-	view_parked tabs[TABS_MAX];    /* tabs[front] unused */
+	view_parked *tabs;             /* TABS_MAX, from the heap with the second tab
+	                                  (2 KB less of the accessory resident);
+	                                  tabs[front] unused */
 } viewer;
 
 #define MAX_VIEWERS 6
@@ -150,7 +154,7 @@ static const char pagekb_note[] = "the memory the accessory's pages needed at th
 #ifdef STACK_PROBE
 /* a test build's stack, painted at start: how deep it has been, printed
    with each event (make STACK_PROBE=1: tests/run_*.py collect them) */
-#define PROBE_DEPTH 46000L
+#define PROBE_DEPTH 14336L               /* inside the stack: STACK_SIZE 15 KB (Makefile) */
 static unsigned char *probe_top;
 
 static void probe_paint(void)
@@ -253,8 +257,11 @@ static void tabs_drop(viewer *v)
 {
 	int i;
 
-	for (i = 0; i < TABS_MAX; i++)
-		view_parked_free(&v->tabs[i]);
+	if (v->tabs != NULL)
+		for (i = 0; i < TABS_MAX; i++)
+			view_parked_free(&v->tabs[i]);
+	free(v->tabs);
+	v->tabs = NULL;
 	v->ntabs = 1;
 	v->front = 0;
 }
@@ -441,7 +448,12 @@ void fill(short color, short x1, short y1, short x2, short y2)
 	vsf_interior(vdi_h, FIS_SOLID);
 	vsf_color(vdi_h, color);
 	vsf_perimeter(vdi_h, 0);
-	vr_recfl(vdi_h, pxy);
+	/* white and black by the CPU where it wins (an ST: the guidelines'
+	   Speed, common's scr_fill); the attributes set as before either way */
+	if ((color == 0 || color == 1) && scr_cpu_wins())
+		scr_fill(vdi_h, pxy, color);
+	else
+		vr_recfl(vdi_h, pxy);
 }
 
 /* text through common's text.c (the guidelines' Speed, "Text through
@@ -1175,6 +1187,9 @@ static void open_window(void)
 
 		sprintf(at, "%d %d %d %d", x, y, w, h);
 		log_event("window-at", at, NULL);  /* for the tests: its arrows and track */
+		work_area(&x, &y, &w, &h);
+		sprintf(at, "%d %d %d %d", x + MARGIN, y, cw, ch);
+		log_event("text-at", at, NULL);    /* and its text's first cell, for a press on a link */
 	}
 	cur->fresh = 1;
 	if (is_acc)                        /* the desktop drops files on it */
@@ -1700,6 +1715,11 @@ static void log_strip(void)
    stays as it was) */
 static int tab_park(void)
 {
+	if (cur->tabs == NULL && (cur->tabs = calloc(TABS_MAX, sizeof(view_parked))) == NULL)
+	{
+		set_status("Out of memory");
+		return -1;
+	}
 	layout_free(&cur->lay);           /* it points into the page */
 	if (view_park(&cur->view, &cur->tabs[cur->front]) == 0)
 		return 0;
@@ -1853,19 +1873,13 @@ static void close_view(void)
 /* every tab but i closed */
 static void close_other_tabs(int i)
 {
-	int k;
 	char n[8];
 
 	if (i != cur->front)
 		tab_show(i);
 	if (i != cur->front)
 		return;                       /* out of memory: as it was */
-	for (k = 0; k < TABS_MAX; k++)
-		if (k != cur->front)
-			view_parked_free(&cur->tabs[k]);
-	memset(&cur->tabs[cur->front], 0, sizeof(view_parked));
-	cur->ntabs = 1;
-	cur->front = 0;
+	tabs_drop(cur);                    /* the one in front stays, alone */
 	sprintf(n, "%d", cur->ntabs);
 	log_event("tab", "closed", n);
 	redraw_all();
@@ -2731,16 +2745,22 @@ static void tip_check(void)
 
 /* a button held down: shown pressed while the mouse is on it; 1 when
    let go there */
-static int bar_press(const toolbar *t, int b)
+/* a button EHypView draws itself pressed at (x, y, w, h), in the window
+   in front (the toolbar's, a tab, the library's Open and Index, the
+   Continue buttons): shown pressed at once, and again as the mouse comes
+   back over it; 1 when let go over it, its action then (the guidelines,
+   5.8). Window win covered: 1, nothing drawn on it */
+int app_press_box(short win, short x, short y, short w, short h)
 {
-	short x = t->bx[b], y = t->by, w = t->bw[b], h = t->bh, mx, my, mb, ks, in = 1, now, pxy[4];
+	short mx, my, mb, ks, in = 1, now, pxy[4];
+
+	if (top_window() != win)
+		return 1;
 
 	pxy[0] = (short) (x + 1);
 	pxy[1] = (short) (y + 1);
 	pxy[2] = (short) (x + w - 2);
 	pxy[3] = (short) (y + h - 2);
-	if (top_window() != cur->h)            /* covered: no drawing on it */
-		return 1;
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, NULL);
 	scr_xor(vdi_h, pxy);                   /* common's: by the CPU on TOS's screen */
@@ -2769,6 +2789,37 @@ static int bar_press(const toolbar *t, int b)
 	vswr_mode(vdi_h, MD_REPLACE);
 	wind_update(END_UPDATE);
 	return in;
+}
+
+static int bar_press(const toolbar *t, int b)
+{
+	return app_press_box(cur->h, t->bx[b], t->by, t->bw[b], t->bh);
+}
+
+static void message(short *msg);
+
+/* the messages that come while a press is held, handled as the loop
+   would (common's press_track) */
+static void press_msg(short *m)
+{
+	if (!libwin_message(m))
+		message(m);
+}
+
+/* a press on a row or a link, held (the guidelines, 5.8): PRESS_IN let
+   go over r, PRESS_OUT elsewhere, PRESS_DRAG moved while held (drag: 0,
+   then it waits on for the release, and a drag ends in neither) */
+int app_press(const GRECT *r, short x, short y, int drag)
+{
+	short dx, dy;
+	int k;
+
+	while ((k = press_track(r, x, y, NULL, press_msg, &dx, &dy)) == PRESS_DRAG && !drag)
+	{
+		x = (short) (x + dx);
+		y = (short) (y + dy);
+	}
+	return k;
 }
 
 /* a click on the toolbar: 0 when it was elsewhere */
@@ -2865,8 +2916,8 @@ static int strip_click(short mx, short my, short button)
 			tab_menu(i, mx, my);
 		else
 			context_menu(mx, my);
-	} else if (i >= 0)
-		tab_show(i);
+	} else if (i >= 0 && i != cur->front && app_press_box(cur->h, s.tx[i], s.y, s.tw[i], s.h))
+		tab_show(i);                   /* let go over it (the guidelines, 5.8) */
 	return 1;
 }
 
@@ -2884,8 +2935,13 @@ static void click(short mx, short my, short button, short kstate)
 
 		if (l >= 0 && l != cur->view.sel)
 		{
+			long old = view_run_line(&cur->view, cur->view.sel), line_l;
+
 			cur->view.sel = l;
-			redraw_all();
+			line_l = view_run_line(&cur->view, l);
+			if (old != line_l)
+				redraw_line(old);
+			redraw_line(line_l);
 		}
 		context_menu(mx, my);
 		return;
@@ -2905,8 +2961,33 @@ static void click(short mx, short my, short button, short kstate)
 	r = view_link_at(&cur->view, line, col);
 	if (r < 0)
 		return;
-	cur->view.sel = r;
-	redraw_all();
+	{
+		/* chosen on the press, only its line and the one it left drawn
+		   again; followed when let go over it (the guidelines, 5.8) */
+		viewer *v = cur;
+		const hyp_page *pg = cur->view.page;
+		long old = view_run_line(&cur->view, cur->view.sel), c0 = col, c1 = col;
+		GRECT box;
+
+		cur->view.sel = r;
+		if (old != line)
+			redraw_line(old);
+		redraw_line(line);
+		while (c0 > cur->view.left && view_link_at(&cur->view, line, c0 - 1) == r)
+			c0--;
+		while (c1 < c0 + 255 && view_link_at(&cur->view, line, c1 + 1) == r)
+			c1++;
+		box.x = (short) (x + MARGIN + (c0 - cur->view.left) * cw);
+		box.w = (short) ((c1 - c0 + 1) * cw);
+		box.y = (short) (y + cur->lay.line_y[line] - cur->lay.gfx_y[cur->view.top]);
+		box.h = (short) ch;
+		log_event("press", "link", NULL);
+		if (app_press(&box, mx, my, 0) != PRESS_IN)
+			return;
+		if (!v->used || v->h <= 0 || v->view.page != pg || v->view.sel != r)
+			return;                    /* the page changed meanwhile */
+		cur = v;
+	}
 	if (kstate & K_SHIFT)
 	{
 		new_window(1);                 /* Shift+click: the link in a new window */
@@ -4223,6 +4304,7 @@ int main(void)
 	tall_pixels = work_out[4] >= work_out[3] * 3 / 2;	/* pixel height, width (microns) */
 	vq_extnd(vdi_h, 1, work_out);
 	planes = work_out[4];
+	pb_vdi(vdi_h);                     /* the Subjects pane's bar: its fast way (common's panebar) */
 	tip_buf = av_shared(tip_local, sizeof(tip_local));   /* BubbleGEM reads the tips there */
 	if (is_acc)
 		acc_heap();                    /* nothing malloc'd before it */
@@ -4375,6 +4457,10 @@ int main(void)
 			flags |= MU_TIMER;
 		pf_forget();
 		hyp_forget();
+		/* the program: one click, a press at once (5.8). The accessory: two,
+		   as the AES counts them for the desktop before it sees a press
+		   under TOS anyway (common's click.h, AERA-Atari fd8d9b8);
+		   EHypView has no double click of its own */
 		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, t, msg, &ev);
 		/* what holds the machine until the next event call, for the
 		   AESGAP lines of an -DAES_PROFILE build */
@@ -4409,6 +4495,12 @@ int main(void)
 		if (which & MU_BUTTON)
 		{
 			short h = wind_find(ev.mx, ev.my);
+#ifdef AES_PROFILE
+			char at[24];
+
+			sprintf(at, "%d %d", ev.mx, ev.my);
+			log_event("button", at, NULL);     /* the speed rig's: where its press came */
+#endif
 			viewer *cv = viewer_of(h);
 
 			if (cv != NULL && !cv->icon)

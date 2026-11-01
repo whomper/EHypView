@@ -47,6 +47,21 @@ const char *pic_why_text(int why);
    PNG); it is checked before anything is decoded. */
 PIC *pic_decode(const unsigned char *d, long n, int w, int h, long max_px, int *why);
 void pic_free(PIC *p);
+/* a JPEG read a piece at a time and made a row at a time at w x h, never
+   whole in memory (TJpgDec's builds: a 1 MB ST's): fill(fu, buf, n) gives
+   the file's next bytes (0 at the end), row(ru, y, px, alpha) each row
+   shown, y from 0 to h - 1 (px w pixels 5-6-5, alpha w bytes), the same
+   pixels as pic_decode's: a program can show them as they come, the
+   picture from the top down. 1 done; 0 not (why); -1 not a JPEG made
+   this way (progressive, CMYK, ...; libjpeg's builds): pic_decode */
+int pic_jpeg_rows(long (*fill)(void *u, unsigned char *buf, long n), void *fu, int w, int h,
+		  void (*row)(void *u, long y, const unsigned short *px, const unsigned char *alpha), void *ru, int *why);
+#ifdef PIC_CHECK_HEADERS
+/* the tests' (libjpeg's builds): JPEGs whose headers libjpeg and pic.c's
+   own reader for the DSP (a TJpgDec build's) read the same, those only
+   libjpeg gives the DSP (extended sequential), those that differ */
+extern long pic_hdr_same, pic_hdr_lj_only, pic_hdr_differ;
+#endif
 /* called now and then while decoding; 0 stops it (PIC_STOPPED). NULL:
    never */
 extern int (*pic_poll)(void);
@@ -124,5 +139,15 @@ int pic_pal_nearest(PIC_PAL *pal, int r, int g, int b);
    0 (they aren't drawn) and carry no error. pic_poll is called every 16
    rows: 1 done, 0 when it stopped it (out then partly made) */
 int pic_dither(const PIC *p, PIC_PAL *pal, unsigned char *out);
+/* the same a row at a time, for a picture that isn't whole in memory: rows
+   of w pixels (5-6-5, alpha or NULL) given top to bottom, each one's pens
+   to out (w bytes); the same pens as pic_dither's for the same rows (not
+   the DSP's way). NULL when its state (some 150 bytes) can't be had;
+   without room for two rows' errors, each pixel's nearest pen, as
+   pic_dither then does */
+typedef struct pic_dither_rows PIC_DITHER;
+PIC_DITHER *pic_dither_open(long w, PIC_PAL *pal);
+void pic_dither_row(PIC_DITHER *dt, const unsigned short *px, const unsigned char *alpha, unsigned char *out);
+void pic_dither_close(PIC_DITHER *dt);
 
 #endif

@@ -30,6 +30,7 @@
 #include "tos.h"
 #include "gem.h"
 #include "gemapp.h"
+#include "press.h"
 #include "alert.h"
 #include "hypfile.h"
 #include "library.h"
@@ -2078,12 +2079,17 @@ static void rename_pane(long p)
 static void file_under(unsigned long g, short mx, short my)
 {
 	enum { MAXSUB = 60 };
-	static char lab[MAXSUB + 2][LIB_PANE_TEXT + 8];
+	typedef char label[LIB_PANE_TEXT + 8];
+	/* the labels from the heap while the menu shows: 3 KB less of the
+	   accessory resident (hub, 1 Nov 2026) */
+	label *lab = malloc((MAXSUB + 2) * sizeof(label));
 	const char *l[MAXSUB + 2];
 	long line[MAXSUB + 2];
 	short n = 0, r;
 	unsigned long k;
 
+	if (lab == NULL)
+		return;
 	for (k = 0; k < lib.npanes && n < MAXSUB; k++)
 	{
 		const lib_pane *p = &lib.panes[k];
@@ -2099,6 +2105,7 @@ static void file_under(unsigned long g, short mx, short my)
 		l[r] = lab[r];
 	log_event("menu", "file-under", NULL);
 	r = popup(mx, my, l, n);
+	free(lab);
 	redraw(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
 	if (r < 0)
 		return;
@@ -2221,11 +2228,21 @@ void libwin_click(short mx, short my, short button)
 		for (i = 0; i < nchips_shown; i++)
 			if (mx >= chip_x[i] && mx < chip_x[i] + chip_w[i])
 			{
+				/* chosen on the press, opened when let go over it
+				   (the guidelines, 5.8) */
 				long os = lib.sel, ot = lib.top;
+				GRECT box;
 
 				lib_select(&lib, i);
 				sel_moved(os, ot);
-				activate();
+				box.x = chip_x[i];
+				box.y = (short) (y + header_h());
+				box.w = chip_w[i];
+				box.h = strip_h();
+				log_event("press", "continue", NULL);
+				if (app_press(&box, mx, my, 0) == PRESS_IN && lib.sel == i)
+					activate();
+				break;
 			}
 		return;
 	}
@@ -2252,7 +2269,11 @@ void libwin_click(short mx, short my, short button)
 			return;
 		if (lib.query[0] != '\0')
 		{
-			/* the pane's own rows again: the window drawn once */
+			/* the pane's own rows again, the search let go of: when let
+			   go over the line (the guidelines, 5.8), the window drawn
+			   once */
+			if (!app_press_box(lib_h, x, pane_y(i), pane_w(), pane_line_h()))
+				return;
 			lib_set_query(&lib, "");
 			log_search();
 			lib_pane_select(&lib, i);
@@ -2283,18 +2304,26 @@ void libwin_click(short mx, short my, short button)
 		if (mx < bx || mx >= bx + bw)
 			return;
 		if (my >= oy && my < oy + bh && can_open())
-			activate();
-		else if (my >= iy && my < iy + bh)
-			open_index();
+		{
+			if (app_press_box(lib_h, bx, oy, bw, bh))   /* let go over it (5.8) */
+				activate();
+		} else if (my >= iy && my < iy + bh)
+		{
+			if (app_press_box(lib_h, bx, iy, bw, bh))
+				open_index();
+		}
 		return;
 	}
 	list_area(&lx, &ly, &lw, &lh);
 	if ((row = row_at(my, &h)) < 0)
 		return;
-	if (drag_row(row, mx, my, h))      /* held and moved: filed elsewhere */
-		return;
 	{
+		/* chosen on the press (only the rows it left and took drawn
+		   again), opened when let go over it, filed elsewhere when
+		   moved while held (the guidelines, 5.8 and 4.2) */
 		long os = lib.sel, ot = lib.top;
+		GRECT box;
+		int k;
 
 		if (lib_select(&lib, row) != row)
 			return;
@@ -2306,6 +2335,22 @@ void libwin_click(short mx, short my, short button)
 		sel_moved(os, ot);
 		if (os == lib.sel)
 			refresh_row(lib.sel);
+		if (row_at(my, &box.y) != row)
+			return;                    /* moved under the mouse */
+		box.x = lx;
+		box.w = lw;
+		box.h = row_h(row);
+		log_event("press", "row", NULL);
+		k = app_press(&box, mx, my, lib.rows[row].kind == LIB_GUIDE);
+		if ((unsigned long) row >= lib.nrows || lib.sel != row)
+			return;                    /* the rows changed meanwhile */
+		if (k == PRESS_DRAG)
+		{
+			drag_row(row, mx, my, box.y);
+			return;
+		}
+		if (k != PRESS_IN)
+			return;
 	}
 	activate();
 }
