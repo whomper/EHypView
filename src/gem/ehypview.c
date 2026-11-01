@@ -812,46 +812,11 @@ int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short 
 	return 1;
 }
 
-/* wind_update(BEG_UPDATE) and END_UPDATE for drawing in a window, but
-   not while the left button is held on TOS: there the AES holds the
-   screen till it is let go (measured: 1.4 s of a 1.5 s press, TOS 1.04
-   and 4.04), so a row chosen on a press (the guidelines, 5.8) would
-   show only on its release. A single-tasking AES draws nothing of
-   another program's while EHypView makes no event call */
-static unsigned char upd_held[8];
-static short upd_depth;
-
-void app_update_begin(void)
-{
-	short mx, my, mb = 0, ks;
-	int held = 0;
-
-	if (aes_count() == 1)
-	{
-		graf_mkstate(&mx, &my, &mb, &ks);
-		held = mb & 1;
-	}
-	if (upd_depth < 8)
-		upd_held[upd_depth] = (unsigned char) held;
-	upd_depth++;
-	if (!held)
-		wind_update(BEG_UPDATE);
-}
-
-void app_update_end(void)
-{
-	int held = 0;
-
-	if (upd_depth > 0 && --upd_depth < 8)
-		held = upd_held[upd_depth];
-	if (!held)
-		wind_update(END_UPDATE);
-}
-
 /* redraw an area of the window through the AES rectangle list */
 static void redraw(short x, short y, short w, short h)
 {
 	short rx, ry, rw, rh;
+	int took;
 
 	if (cur->h <= 0)
 		return;
@@ -860,7 +825,7 @@ static void redraw(short x, short y, short w, short h)
 		app_icon_redraw(cur->h, x, y, w, h);
 		return;
 	}
-	app_update_begin();
+	took = press_update_begin();       /* not while a press is held on TOS (5.8) */
 	graf_mouse(M_OFF, NULL);
 	wind_get(cur->h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
 	while (rw > 0 && rh > 0)
@@ -873,7 +838,7 @@ static void redraw(short x, short y, short w, short h)
 		wind_get(cur->h, WF_NEXTXYWH, &rx, &ry, &rw, &rh);
 	}
 	graf_mouse(M_ON, NULL);
-	app_update_end();
+	press_update_end(took);
 }
 
 static void redraw_all(void)
@@ -2789,6 +2754,7 @@ static void tip_check(void)
 int app_press_box(short win, short x, short y, short w, short h)
 {
 	short mx, my, mb, ks, in = 1, now, pxy[4];
+	int took;
 
 	if (top_window() != win)
 		return 1;
@@ -2797,7 +2763,7 @@ int app_press_box(short win, short x, short y, short w, short h)
 	pxy[1] = (short) (y + 1);
 	pxy[2] = (short) (x + w - 2);
 	pxy[3] = (short) (y + h - 2);
-	app_update_begin();
+	took = press_update_begin();
 	graf_mouse(M_OFF, NULL);
 	scr_xor(vdi_h, pxy);                   /* common's: by the CPU on TOS's screen */
 	graf_mouse(M_ON, NULL);
@@ -2823,7 +2789,7 @@ int app_press_box(short win, short x, short y, short w, short h)
 		graf_mouse(M_ON, NULL);
 	}
 	vswr_mode(vdi_h, MD_REPLACE);
-	app_update_end();
+	press_update_end(took);
 	return in;
 }
 

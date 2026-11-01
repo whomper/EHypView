@@ -1226,6 +1226,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 static void redraw(short x, short y, short w, short h)
 {
 	short rx, ry, rw, rh;
+	int took;
 
 	if (lib_h <= 0)
 		return;
@@ -1234,7 +1235,7 @@ static void redraw(short x, short y, short w, short h)
 		app_icon_redraw(lib_h, x, y, w, h);
 		return;
 	}
-	app_update_begin();
+	took = press_update_begin();       /* not while a press is held on TOS (5.8) */
 	graf_mouse(M_OFF, NULL);
 	wind_get(lib_h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
 	while (rw > 0 && rh > 0)
@@ -1247,7 +1248,7 @@ static void redraw(short x, short y, short w, short h)
 		wind_get(lib_h, WF_NEXTXYWH, &rx, &ry, &rw, &rh);
 	}
 	graf_mouse(M_ON, NULL);
-	app_update_end();
+	press_update_end(took);
 }
 
 /* the iconified window as it was: the menu, ^L */
