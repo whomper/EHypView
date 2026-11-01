@@ -30,7 +30,9 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
 
 It prints a table: each action's longest stretch on each machine, marked
 "over" where it is over the guidelines' time, and fails when one is.
-SPEED_ONLY=page,acc runs only those.
+SPEED_ONLY=page,acc runs only those. SPEED_FONT="Courier,14" writes
+EHYPVIEW.INF's FONT= and POINT= (the font's name as the VDI gives it,
+trailing blanks off: a GDOS font, under NVDI); unset, the system font.
 """
 import os
 import re
@@ -49,6 +51,7 @@ FIX = os.path.join(ROOT, "tests", "fixtures")
 DISPLAY = ":97"
 SPECS = os.environ.get("SPEED_MACHINES", "ST:mono,ST:med,Falcon-4:16").split(",")
 ONLY = os.environ.get("SPEED_ONLY")
+FONT = os.environ.get("SPEED_FONT")
 GUIDES = 60
 
 ESC, TAB, RETURN, DOWN, CTRL, SHIFT = 1, 15, 28, 0x50, 29, 0x2A
@@ -113,6 +116,10 @@ def make_drive(d, nvdi, start=None, acc=False, ask=None):
                         os.path.join(fixt, "MANY", "G%03d.%s" % (i, ext.upper())))
     with open(os.path.join(d, "ST-GUIDE.INF"), "w", newline="") as f:
         f.write("PATHS=C:\\FIXT\r\n")
+    if FONT:
+        name, _, point = FONT.rpartition(",")
+        with open(os.path.join(d, "EHYPVIEW.INF"), "w", newline="") as f:
+            f.write("FONT=%s\r\nPOINT=%s\r\n" % (name or point, point if name else "0"))
     if acc:
         shutil.copy(os.path.join(BDIR, "EHYPVIEW.ACC"), d)
     else:
