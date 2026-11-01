@@ -1226,6 +1226,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 static void redraw(short x, short y, short w, short h)
 {
 	short rx, ry, rw, rh;
+	int press = app_pressing, took = 1;
 
 	if (lib_h <= 0)
 		return;
@@ -1234,7 +1235,10 @@ static void redraw(short x, short y, short w, short h)
 		app_icon_redraw(lib_h, x, y, w, h);
 		return;
 	}
-	wind_update(BEG_UPDATE);
+	if (press)
+		took = press_update_begin();   /* a press drawn while held on TOS (5.8) */
+	else
+		wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, NULL);
 	wind_get(lib_h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
 	while (rw > 0 && rh > 0)
@@ -1247,7 +1251,10 @@ static void redraw(short x, short y, short w, short h)
 		wind_get(lib_h, WF_NEXTXYWH, &rx, &ry, &rw, &rh);
 	}
 	graf_mouse(M_ON, NULL);
-	wind_update(END_UPDATE);
+	if (press)
+		press_update_end(took);
+	else
+		wind_update(END_UPDATE);
 }
 
 /* the iconified window as it was: the menu, ^L */
@@ -2233,8 +2240,10 @@ void libwin_click(short mx, short my, short button)
 				long os = lib.sel, ot = lib.top;
 				GRECT box;
 
+				app_pressing = 1;
 				lib_select(&lib, i);
 				sel_moved(os, ot);
+				app_pressing = 0;
 				box.x = chip_x[i];
 				box.y = (short) (y + header_h());
 				box.w = chip_w[i];
@@ -2327,6 +2336,7 @@ void libwin_click(short mx, short my, short button)
 
 		if (lib_select(&lib, row) != row)
 			return;
+		app_pressing = 1;
 		if (panes() && focus_left)
 		{
 			focus_left = 0;            /* the rows take the keys */
@@ -2335,6 +2345,7 @@ void libwin_click(short mx, short my, short button)
 		sel_moved(os, ot);
 		if (os == lib.sel)
 			refresh_row(lib.sel);
+		app_pressing = 0;
 		if (row_at(my, &box.y) != row)
 			return;                    /* moved under the mouse */
 		box.x = lx;
