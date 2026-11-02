@@ -3058,7 +3058,7 @@ static void click(short mx, short my, short button, short kstate)
    folder, else wherever the library has it; else where to put it */
 void app_guide(const char *page)
 {
-	char *p = fs_join(home_dir, "EHYPVIEW.HYP"), req[240];
+	char *p = fs_join(home_dir, "ehypview.hyp"), req[240];
 	const char *file = NULL;
 	pf_info st;
 	unsigned long hit;
@@ -3068,8 +3068,8 @@ void app_guide(const char *page)
 	else
 	{
 		job_wait_index();
-		if (idx != NULL && ehv_index_find_guides(idx, "EHYPVIEW.HYP", &hit, 1) > 0)
-			file = "*:\\EHYPVIEW.HYP";
+		if (idx != NULL && ehv_index_find_guides(idx, "ehypview.hyp", &hit, 1) > 0)
+			file = "*:\\ehypview.hyp";
 	}
 	if (file != NULL)
 	{
@@ -3630,10 +3630,10 @@ static void find_home(void)
 	pf_info st;
 
 	settings_path[0] = (char) ('A' + boot_drive());
-	strcpy(settings_path + 1, ":\\EHYPVIEW.INF");
+	strcpy(settings_path + 1, ":\\ehypview.inf");
 	if (!is_acc)
 	{
-		char *old = fs_join(start_dir, "EHYPVIEW.INF");
+		char *old = fs_join(start_dir, "ehypview.inf");
 
 		strcpy(home_dir, start_dir);
 		/* EHYPVIEW.INF from before, next to the program: to the root,
@@ -3726,7 +3726,7 @@ static void job_begin(void)
 		return;
 	inf = read_inf();
 	n = ehv_default_roots(inf, own_inf != NULL ? inf_get(own_inf, "PATHS") : NULL, &roots);
-	p = fs_join(home_dir, "EHYPVIEW.IDX");
+	p = fs_join(home_dir, "ehypview.idx");
 	if (p != NULL)
 	{
 		strncpy(cache_path, p, sizeof(cache_path) - 1);
@@ -4103,7 +4103,7 @@ static long inf_boot_read(char *buf)
 	long n = -1;
 
 	settings_path[0] = (char) ('A' + boot_drive());
-	strcpy(settings_path + 1, ":\\EHYPVIEW.INF");
+	strcpy(settings_path + 1, ":\\ehypview.inf");
 	if ((h = pf_open(settings_path, PF_READ)) < 0)
 		return -1;
 	if (pf_finfo(h, &inf_boot_info) == 0 && inf_boot_info.size < INF_BOOT_MAX &&

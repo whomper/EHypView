@@ -187,7 +187,7 @@ BOOT_WAIT = (120 if MACHINE.startswith("Falcon-4") else 90) if os.environ.get("A
 
 
 def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=(), machine=None):
-    for name in (fifo, os.path.join(hdir, "EHYPVIEW.IDX")):
+    for name in (fifo, machines.ci_path(hdir, "ehypview.idx")):
         if os.path.exists(name):
             os.remove(name)
     m = machines.Machine(machine or MACHINE, hdir)
@@ -287,7 +287,7 @@ def accessory_smoke():
     shutil.copy(os.path.join(HDIR, "EHYPVIEW.ACC"), ACC_DIR)
     with open(os.path.join(ACC_DIR, "ST-GUIDE.INF"), "w") as f:
         f.write("PATHS=C:\\FIXT\r\nREF=C:\\FIXT\\ALL.REF\r\n")
-    with open(os.path.join(ACC_DIR, "EHYPVIEW.INF"), "w") as f:
+    with open(os.path.join(ACC_DIR, "ehypview.inf"), "w") as f:
         f.write("START=now\r\n")
     fifo = os.path.join(OUT, "acc.fifo")
     log_path = os.path.join(OUT, "acc.log")
@@ -560,7 +560,7 @@ def copy_dir(name, inf, settings=None, start=None):
         with open(os.path.join(d, "LAUNCH.TXT"), "w") as f:
             f.write("C:\\EHYPVIEW.PRG\r\n%s\r\n" % start)
     if settings is not None:
-        with open(os.path.join(d, "EHYPVIEW.INF"), "w") as f:
+        with open(os.path.join(d, "ehypview.inf"), "w") as f:
             f.write(settings.replace("\n", "\r\n"))
     return d
 
@@ -917,7 +917,7 @@ def acc_nvdi_dir():
         f.write("PATHS=C:\\FIXT\r\nREF=C:\\FIXT\\ALL.REF\r\n")
     # EHypView's folder from the start, so the accessory (booted before the
     # program writes it) finds the program's EHYPVIEW.FNT under 1.13's rule
-    with open(os.path.join(d, "EHYPVIEW.INF"), "w") as f:
+    with open(os.path.join(d, "ehypview.inf"), "w") as f:
         f.write("; where EHypView keeps its files (EHYPVIEW.IDX, the library; EHYPVIEW.FNT, the fonts "
                 "measured): the program writes the folder it was started from\r\nFOLDER=C:\\EHV\r\n")
     return d
@@ -934,7 +934,7 @@ def acc_nvdi():
     xvfb = start_xvfb()
     try:
         ok = run_scenario("accnvdi1", d, ACC_NVDI_BOOT1, auto=r"C:\EHV\EHYPVIEW.PRG", windowed=True)
-        ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FONT=%s" % ACC_NVDI.get("font", "?")])
+        ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=%s" % ACC_NVDI.get("font", "?")])
         ok = ok and run_scenario("accnvdi2", d, ACC_NVDI_BOOT2, auto=r"C:\ASKHELP.PRG", windowed=True)
     finally:
         xvfb.terminate()
@@ -1038,7 +1038,7 @@ def st_field():
         ok = run_scenario("stfield", d, ST_FIELD_STEPS, auto=LAUNCH, windowed=True, machine="ST:mono")
     finally:
         xvfb.terminate()
-    return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["PATHS=" + LONG])
+    return ok and check_inf(machines.ci_path(d, "ehypview.inf"), ["PATHS=" + LONG])
 
 
 # the dialogs' look (guidelines 5.6): 3D wherever the AES draws it (TOS 4,
@@ -1073,7 +1073,7 @@ def look():
     with open(os.path.join(OUT, "look.log"), errors="replace") as f:
         flat = "EHV settings-look no-3d" in f.read()
     print("      the AES %s" % ("draws no 3D" if flat else "draws 3D"))
-    return ok and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["!DIALOGS3D"])
+    return ok and check_inf(machines.ci_path(d, "ehypview.inf"), ["!DIALOGS3D"])
 
 
 # the Subjects pane's bar (guidelines 5.1: AES objects, common/ui/panebar.c):
@@ -1287,10 +1287,10 @@ def refile():
         ok = run_scenario("refile", d, REFILE_STEPS, windowed=True)
     finally:
         xvfb.terminate()
-    with open(os.path.join(d, "EHYPVIEW.IDX"), "rb") as f:
+    with open(machines.ci_path(d, "ehypview.idx"), "rb") as f:
         held = f.read().count(b"tools/EHypVie")
     print("%s  EHYPVIEW.IDX files %d hypertexts under tools/EHypVie" % ("ok  " if held == 2 else "FAIL", held))
-    return ok and held == 2 and check_inf(os.path.join(d, "EHYPVIEW.INF"), ["PANECOLS=*"])
+    return ok and held == 2 and check_inf(machines.ci_path(d, "ehypview.inf"), ["PANECOLS=*"])
 
 
 # the README's pictures (make shots): the family's guides from their latest
@@ -1358,8 +1358,10 @@ def shots():
     tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common", "tools", "getrelease.py")
     for app, base in FAMILY:
         for f in (base + ".HYP", base + ".REF"):          # EFTP's release has no .REF
-            subprocess.run([sys.executable, tool, app, g, f], stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
+            for n in (f.lower(), f):                       # lowercase from 6.6 on, else as older ones
+                if subprocess.run([sys.executable, tool, app, g, n], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL).returncode == 0:
+                    break
     for f in ("EHYPVIEW.HYP", "EHYPVIEW.REF"):
         shutil.copy(os.path.join("binary", f), g)
     for f in os.listdir(g):
@@ -1417,7 +1419,7 @@ def main():
     if sys.argv[3:] == ["viewer"]:                  # the main scenario alone
         return 0 if ok else 1
     if ok:
-        ok = check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FONT=System font", "POINT=8", "FOLDER=C:\\",
+        ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=System font", "POINT=8", "FOLDER=C:\\",
                                                           "BOOKMARK1="])   # added, then removed
     if ok:
         # DEFHYP is ST-Guide's: EHypView starts in its library all the same
@@ -1435,7 +1437,7 @@ def main():
                      "; the font\nFONT=System font\n; its size\nPOINT=8\n; the layout\nLIBRARY=panes\n"
                      "; a page read lately\nRECENT1=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail\n")
         ok = run_scenario("panes", d, PANES_STEPS)
-        ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
+        ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"),
                               ["LIBRARY=panes", "RECENT1=C:\\FIXT\\BASIC.HYP|Main|*",
                                "RECENT2=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail"])
     if ok:
@@ -1446,7 +1448,7 @@ def main():
                 ok = run_scenario("mouse", d, MOUSE_STEPS, auto=LAUNCH, windowed=True)
             finally:
                 xvfb.terminate()
-            ok = ok and check_inf(os.path.join(d, "EHYPVIEW.INF"),
+            ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"),
                                   ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG, "LIBRARY=panes"])
             ok = ok and st_field()
             ok = ok and look()
@@ -1478,8 +1480,8 @@ def main():
                 ok = run_scenario("twin", d, TWIN_STEPS, auto=TWIN_AUTO, windowed=True)
             finally:
                 xvfb.terminate()
-            ok = check_inf(os.path.join(d, "EHYPVIEW.INF"), ["FOLDER=C:\\EHV", "POINT=8"]) and ok
-            ok = check_exists(os.path.join(d, "EHV", "EHYPVIEW.IDX"), "the program's index, in FOLDER=") and ok
+            ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FOLDER=C:\\EHV", "POINT=8"]) and ok
+            ok = check_exists(machines.ci_path(d, "EHV/ehypview.idx"), "the program's index, in FOLDER=") and ok
         else:
             print("skip  twin: needs Xvfb and xdotool")
     if ok:

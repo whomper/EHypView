@@ -201,7 +201,7 @@ static void join(char *out, size_t size, const char *dir, const char *name)
 void font_init(const char *dir, const char *inf, const char *text, const pf_info *info, int is_acc)
 {
 	snprintf(inf_path, sizeof(inf_path), "%s", inf);
-	join(fnt_path, sizeof(fnt_path), dir, "EHYPVIEW.FNT");
+	join(fnt_path, sizeof(fnt_path), dir, "ehypview.fnt");   /* (6.6: our files in lowercase) */
 	inf_seen = text != NULL ? stamp_of(info) : 0;
 	fontpref_parse(&pref, text);
 	acc = is_acc;

@@ -1,7 +1,7 @@
 name: Release
 
 # Builds EHypView and its guide and publishes them as a GitHub Release:
-# each file on its own, and all of them in EHYPVIEW-x.y.zip. Two ways to start it:
+# each file on its own, and all of them in ehypview-x.y.zip. Two ways to start it:
 # - Actions > Release > Run workflow, on main, with the notes: it tags
 #   main's commit vX.Y, from VERSION;
 # - push a tag vX.Y that matches VERSION: the tag's message

@@ -94,11 +94,14 @@ def longest(lines, tags=None):
 def ecal_guide():
     """ECal's guide from its latest release (guidelines 1.2): the family's front page"""
     d = os.path.join(OUT, "ecal")
-    path = os.path.join(d, "ECAL.HYP")
+    path = machines.ci_path(d, "ecal.hyp")
     if not os.path.exists(path):
         os.makedirs(d, exist_ok=True)
-        subprocess.run([sys.executable, os.path.join(ROOT, "common", "tools", "getrelease.py"),
-                        "ECal", d, "ECAL.HYP"], check=True, stdout=subprocess.DEVNULL)
+        for n in ("ecal.hyp", "ECAL.HYP"):     # lowercase from 6.6 on, else an older release's
+            if subprocess.run([sys.executable, os.path.join(ROOT, "common", "tools", "getrelease.py"),
+                               "ECal", d, n], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+                break
+        path = machines.ci_path(d, "ecal.hyp")
     return path
 
 
@@ -121,7 +124,7 @@ def make_drive(d, nvdi, start=None, acc=False, ask=None):
         f.write("PATHS=C:\\FIXT\r\n")
     if FONT:
         name, _, point = FONT.rpartition(",")
-        with open(os.path.join(d, "EHYPVIEW.INF"), "w", newline="") as f:
+        with open(os.path.join(d, "ehypview.inf"), "w", newline="") as f:
             f.write("FONT=%s\r\nPOINT=%s\r\n" % (name or point, point if name else "0"))
     if acc:
         shutil.copy(os.path.join(BDIR, "EHYPVIEW.ACC"), d)
