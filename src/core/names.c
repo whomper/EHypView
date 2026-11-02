@@ -646,7 +646,7 @@ int ehv_index_build_to(ehv_index *idx, const char *cache)
 		return -1;
 	free(b->runs);
 	free(b->target);
-	b->runs = beside(cache, "RUN");
+	b->runs = beside(cache, "run");
 	b->target = pf_tmp_name(cache);
 	if (b->runs == NULL || b->target == NULL)
 	{

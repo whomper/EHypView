@@ -98,7 +98,7 @@ def make_drive(fam):
 
 
 def inf(start, paths="C:\\LIB1;C:\\LIB2"):
-    with open(os.path.join(C, "EHYPVIEW.INF"), "wb") as f:
+    with open(os.path.join(C, "ehypview.inf"), "wb") as f:
         f.write(b"START=%s\r\n" % start.encode())
         if paths:
             f.write(b"PATHS=%s\r\n" % paths.encode())
@@ -317,7 +317,7 @@ def main():
     rest = not_inf(calls)
     check(count(rest, "Frename") == 1 and count(rest, "Fwrite") == 2,
           "1: the index written in two goes: its names, its head")
-    with open(os.path.join(C, "EHYPVIEW.INF"), "rb") as f:
+    with open(machines.ci_path(C, "ehypview.inf"), "rb") as f:
         memkb = [l for l in f.read().decode("latin-1").splitlines() if l.startswith("MEMKB=")]
     check(len(memkb) == 1 and inf_written(calls) and count(calls, "Frename") == 2,
           "1: the memory it needs written once, %s" % (memkb[0] if memkb else "no MEMKB="))
@@ -338,7 +338,7 @@ def main():
     # 4. one changed, one added
     shutil.copy(os.path.join(FIX, "big.hyp"), os.path.join(C, "LIB2", "BIG2.HYP"))
     shutil.copy(os.path.join(FIX, "other.hyp"), os.path.join(C, "LIB2", "NEW.HYP"))
-    old = os.path.getsize(os.path.join(C, "EHYPVIEW.IDX"))
+    old = os.path.getsize(machines.ci_path(C, "ehypview.idx"))
     tr, seen = boot("s4", ["index saved"])
     calls, across, events = parse(tr)
     each("4. one guide changed, one added", calls, across, events, seen,
@@ -379,7 +379,7 @@ def main():
         calls, across, events = parse(tr)
         each("6a. 60 guides, first index", calls, across, events, seen,
              "first event call to 'index saved': " + took(seen, "started", "index saved"))
-        size = os.path.getsize(os.path.join(C, "EHYPVIEW.IDX"))
+        size = os.path.getsize(machines.ci_path(C, "ehypview.idx"))
         # the names sorted in batches of 24 KB: each batch to EHYPVIEW.RUN
         # in a write or two, then read back while they are merged into the
         # ID$, written 16 KB at a time; then its head in one write

@@ -121,7 +121,7 @@ def make_drive(d, nvdi, start=None, acc=False, ask=None):
         f.write("PATHS=C:\\FIXT\r\n")
     if FONT:
         name, _, point = FONT.rpartition(",")
-        with open(os.path.join(d, "EHYPVIEW.INF"), "w", newline="") as f:
+        with open(os.path.join(d, "ehypview.inf"), "w", newline="") as f:
             f.write("FONT=%s\r\nPOINT=%s\r\n" % (name or point, point if name else "0"))
     if acc:
         shutil.copy(os.path.join(BDIR, "EHYPVIEW.ACC"), d)

@@ -211,7 +211,7 @@ def main():
         d = os.path.join(OUT, "c")
         make_drive(d)
         print("      on %s, %d hypertexts" % (machines.Machine(MACHINE, d).describe(), GUIDES))
-        idx = os.path.join(d, "EHYPVIEW.IDX")
+        idx = machines.ci_path(d, "ehypview.idx")
 
         # 1. the first boot: no index yet
         b, a, evs, took = boot(d, "first", ["index %d guides" % GUIDES, "index saved"])

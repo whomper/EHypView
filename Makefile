@@ -19,7 +19,7 @@
 #                   the guidelines' times (tests/hatari/speed.py)
 #   make icons      the icon again from common/icons/EHYPVIEW.txt: src/gem/icon*.h,
 #                   docs/icon*.png, icons/ (python3-pil for the PNGs)
-#   make dist       a release's files in dist/: each file, and EHYPVIEW-x.y.zip
+#   make dist       a release's files in dist/: each file, and ehypview-x.y.zip
 #
 # binary/ is what make builds, never committed: releases carry the
 # programs (.github/workflows/release.yml).
@@ -423,17 +423,20 @@ hatari-test: atari $(HOST)/ehvcheck
 	MACHINE=ST:mono sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 
 # a release's files: each one in dist/, and all of them in
-# dist/EHYPVIEW-x.y.zip (the icons in icons/), for the release workflow
+# dist/ehypview-x.y.zip (the icons in icons/), for the release workflow;
+# every name in lowercase (the guidelines, 6.6: MiNT's ext2 tells the
+# cases apart)
 DIST    := binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPVIEW.HYP binary/EHYPVIEW.REF
 ICONS   := icons/EHYPVIEW.RSC icons/EHYPVNV.RSC icons/EHYPVIEW.ICN icons/EHYPVWMK.ICN
+lower    = $$(basename $(1) | tr A-Z a-z)
 dist: atari help
 	@$(HYPCHECK)
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	cp $(DIST) $(ICONS) dist/
-	cp $(DIST) dist/zip/
-	cp $(ICONS) dist/zip/icons/
-	cd dist/zip && zip -q -9 -r ../EHYPVIEW-$(VERSION_STR).zip .
+	for f in $(DIST) $(ICONS); do cp $$f dist/$(call lower,$$f); done
+	for f in $(DIST); do cp $$f dist/zip/$(call lower,$$f); done
+	for f in $(ICONS); do cp $$f dist/zip/icons/$(call lower,$$f); done
+	cd dist/zip && zip -q -9 -r ../ehypview-$(VERSION_STR).zip .
 	rm -rf dist/zip
 
 clean:
