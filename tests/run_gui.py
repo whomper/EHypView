@@ -1358,10 +1358,8 @@ def shots():
     tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common", "tools", "getrelease.py")
     for app, base in FAMILY:
         for f in (base + ".HYP", base + ".REF"):          # EFTP's release has no .REF
-            for n in (f.lower(), f):                       # lowercase from 6.6 on, else as older ones
-                if subprocess.run([sys.executable, tool, app, g, n], stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL).returncode == 0:
-                    break
+            subprocess.run([sys.executable, tool, app, g, f], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
     for f in ("EHYPVIEW.HYP", "EHYPVIEW.REF"):
         shutil.copy(os.path.join("binary", f), g)
     for f in os.listdir(g):

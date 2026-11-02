@@ -74,14 +74,10 @@ def family():
     tool = os.path.join(ROOT, "common", "tools", "getrelease.py")
     got = []
     for app, hyp in FAMILY:
-        if not os.path.exists(machines.ci_path(d, hyp)):
-            # lowercase from 6.6 on, else as an older release names them
-            for n in (hyp.lower(), hyp):
-                if subprocess.run([sys.executable, tool, app, d, n], capture_output=True, text=True).returncode == 0:
-                    ref = n[:-4] + (".ref" if n == hyp.lower() else ".REF")
-                    subprocess.run([sys.executable, tool, app, d, ref], capture_output=True, text=True)
-                    break
-        if os.path.exists(machines.ci_path(d, hyp)):
+        if not os.path.exists(os.path.join(d, hyp)):
+            subprocess.run([sys.executable, tool, app, d, hyp], capture_output=True, text=True)
+            subprocess.run([sys.executable, tool, app, d, hyp[:-4] + ".REF"], capture_output=True, text=True)
+        if os.path.exists(os.path.join(d, hyp)):
             v = os.path.join(d, app.upper() + ".VERSION")
             got.append("%s %s" % (app, open(v).read().strip() if os.path.exists(v) else "?"))
     return d, got

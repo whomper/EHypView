@@ -393,13 +393,8 @@ def front_pages():
     os.makedirs(helps, exist_ok=True)
     tool = os.path.join(HERE, "..", "common", "tools", "getrelease.py")
     for app, hyp in APPS:
-        # its release's name in lowercase (the guidelines, 6.6), else as an
-        # older release has it
-        for n in (hyp.lower(), hyp):
-            path = os.path.join(helps, n)
-            got = subprocess.run([sys.executable, tool, app, helps, n], capture_output=True, text=True)
-            if got.returncode == 0 and os.path.exists(path):
-                break
+        path = os.path.join(helps, hyp)
+        got = subprocess.run([sys.executable, tool, app, helps, hyp], capture_output=True, text=True)
         if got.returncode != 0 or not os.path.exists(path):
             check(False, "%s's help: fetched from its release (%s)" % (app, (got.stderr or got.stdout).strip()[-200:]))
             continue
