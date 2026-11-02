@@ -1537,7 +1537,7 @@ static void open_file_selector(void)
 		path[0] = (char) ('A' + Dgetdrv());
 		path[1] = ':';
 		Dgetpath(path + 2, 0);
-		strcat(path, "\\*.HYP");
+		strcat(path, "\\*.hyp");     /* the family's guides in lowercase (6.6) */
 	}
 	if (fsel_exinput(path, name, &button, "Open hypertext") && button && name[0] != '\0')
 	{
