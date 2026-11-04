@@ -8,8 +8,9 @@
 PROFILE_DIR holds an EHYPVIEW.ACC built with -DAES_PROFILE=40 (make
 quiet-test): every stretch of 40 ms or more between its event calls goes
 to the emulator's console as "AESGAP <ms> ms <tag>".  The accessory boots
-on the family's Falcon:16 (common/tools/machines.py; MACHINE=ST:mono and
-QUIET_GUIDES=20 for an ST) with a
+on the family's Falcon:16 (common/tools/machines.py; MACHINE= another,
+but not ST or Falcon-4: the accessory on those 4 MB machines is no
+longer a test configuration, Erez, 4 Nov 2026) with a
 library of 60 hypertexts, 6,720 pages, in C:\\GUIDES (tests/fixtures/many,
 copied), and is opened from the Desk menu with the mouse (Xvfb and
 xdotool, as tests/run_gui.py does):

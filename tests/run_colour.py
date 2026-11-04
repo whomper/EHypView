@@ -87,10 +87,11 @@ MODES = [
     ("tt-medium", "TT:ttmed", [], None, TT16, "prg"),
     ("tt-low", "TT:ttmed", ["--tos-res", "ttlow"], None, TT16 + ring()[:239] + [0x000000], "acc"),
     ("tt-high", "TT:mono", [], None, None, "prg"),
-    # the 68000: an ST of 1 MB in high and medium, and the accessory in 4 MB
+    # the 68000: an ST of 1 MB in high and medium (the accessory on the
+    # 4 MB ST is no longer a test configuration: Erez, 4 Nov 2026,
+    # AERA-Atari 21ba998)
     ("st-high-1mb", "ST-1:mono", [], None, None, "prg"),
     ("st-medium-1mb", "ST-1:med", [], None, ST4, "prg"),
-    ("st-medium-4mb", "ST:med", [], None, ST4, "acc"),
 ]
 
 

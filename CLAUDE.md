@@ -124,7 +124,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   on an ST too. Code an ST runs per pixel or per byte avoids 32-bit multiplies
   and long shifts (tos.c does those in software).
 - Pictures and text colours go through src/gem/colour.c (no VDI; tested on
-  the host). `make colour-test` checks them pixel by pixel in twelve screen
+  the host). `make colour-test` checks them pixel by pixel in eleven screen
   modes, the ST's too, and the family's help front pages (from their
   releases) on 1 MB machines; in TT low and the Falcon's 320-wide true
   colour only the accessory runs (guideline 5.2), asked by tests/askhelp.c.
