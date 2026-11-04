@@ -315,11 +315,10 @@ Rules for `src/core`:
   `tests/test_stmem.c` and `test_stmem_acc.c` the pictures' ST RAM (blocks
   apart and intact, joined when freed, the accessory's one block).
 - `make colour-test` opens `tests/fixtures/colour.hyp` (the 16 pens in
-  stripes, a picture with a dither mask, text in colours) in twelve modes:
+  stripes, a picture with a dither mask, text in colours) in eleven modes:
   the Falcon in 4, 16 and 256 colours, ST medium (set in Hatari's NVRAM)
   and true colour (640 x 200 on RGB, and 320 x 480 on VGA), the TT in
-  medium, low and high, an ST of 1 MB in high and medium and of 4 MB in
-  medium (the accessory; the ST shows full colour as 0xEE). The viewer says where it drew each picture; every
+  medium, low and high, an ST of 1 MB in high and medium (the ST shows full colour as 0xEE). The viewer says where it drew each picture; every
   pixel of them in the screenshot must be what the mode's palette shows:
   the colour, the nearest the palette has, the Bayer dither with 4
   colours, black or white by brightness or the mask on mono, two rows

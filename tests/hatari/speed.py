@@ -25,6 +25,9 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
            scrolled
   front    ECal's guide from its release (the family's front page, 4.3)
   acc      EHYPVIEW.ACC opened from the Desk menu (Xvfb and xdotool)
+           (acc and help skip ST and Falcon-4: the accessory on those
+           4 MB machines is no longer a test configuration, Erez, 4 Nov
+           2026, AERA-Atari 21ba998)
   click    a link in BIG.HYP pressed and let go (Xvfb and xdotool; the
            guidelines, 5.8): the press, the link drawn chosen; the
            release, the page it leads to
@@ -486,7 +489,10 @@ def main():
                     SPEC_NAME = spec[:-5] if nvdi else spec
             if want("front"):
                 front_case(spec, nvdi)
-            if want("acc"):
+            retired = SPEC_NAME.split(":")[0] in ("ST", "Falcon-4")   # the accessory there: 4 Nov 2026
+            if want("acc") and retired:
+                print("skip  acc on %s: no longer a test configuration for the accessory" % spec)
+            elif want("acc"):
                 if xvfb is not None or os.environ.get("DISPLAY") is None and shutil.which("xdotool"):
                     acc_case(spec, nvdi)
                 else:
@@ -496,7 +502,7 @@ def main():
                     click_case(spec, nvdi)
                 else:
                     print("skip  click: needs Xvfb and xdotool")
-            if want("help"):
+            if want("help") and not retired:
                 help_case(spec, nvdi)
     finally:
         if xvfb is not None:
