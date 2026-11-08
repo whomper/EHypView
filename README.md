@@ -494,9 +494,9 @@ make colour-test  # pictures and coloured text in every screen mode, pixel by pi
 - **`make colour-test`** opens a page of pictures and coloured text in eleven screen modes: the Falcon
   in 4, 16 and 256 colours, ST medium and true colour, the TT in medium, low and high, and an ST of 1
   MB in high and medium, each in Hatari. It checks every pixel of the pictures, and the text's
-  colours, against what the mode's palette should show. Then it opens the front page of each AERA
-  program's help, from its latest release (`common/tools/getrelease.py`), on a 1 MB ST and a 1 MB
-  Falcon: both pictures must show (`tests/run_colour.py`; screenshots in `build/colour`).
+  colours, against what the mode's palette should show. Then it opens the family's help front page,
+  from a test guide kept here (`tests/fixtures/front`), on a 1 MB ST and a 1 MB Falcon: both pictures
+  must show (`tests/run_colour.py`; screenshots in `build/colour`).
 
 The Hatari rigs run on the family's test machines (`ST`, `ST-1`, `TT`, `Falcon` and their screens,
 from `common/tools/machines.py`; the guidelines, The machines). Each run names its machine and TOS.
