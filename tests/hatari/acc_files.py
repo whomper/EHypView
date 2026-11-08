@@ -8,9 +8,10 @@ from Hatari's GEMDOS and AES trace:
 
 DIR holds EHYPVIEW.ACC and ASKHELP.PRG (make acc-files-test: build/hatari).
 MACHINE is common/tools/machines.py's, Falcon:16 by default (ST-1 for the
-smallest ST; AERA_TOS picks the TOS as there). The library is the
-family's six guides, each from its latest release (getrelease.py), in
-C:\\LIB1, and two big ones in C:\\LIB2 (PATHS= in EHYPVIEW.INF).
+smallest ST; AERA_TOS picks the TOS as there). The library is five of
+the repository's test guides (tests/fixtures, the family's front page
+among them; no other AERA program's files, guidelines 1.2) in C:\\LIB1,
+and two big ones in C:\\LIB2 (PATHS= in EHYPVIEW.INF).
 
 Only the calls made from the accessory's own code count: those whose PC
 is in its program, from the loader's Mshrink of its basepage. Hatari's
@@ -49,8 +50,8 @@ DIR, OUT = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
 MACHINE = sys.argv[3] if len(sys.argv) > 3 else "Falcon:16"
 FIX = os.path.join(ROOT, "tests", "fixtures")
 IDLE = int(os.environ.get("ACC_FILES_IDLE", "300"))
-FAMILY = [("ECal", "ECAL.HYP"), ("EContact", "ECONTACT.HYP"), ("EMail", "EMAIL.HYP"),
-          ("EFTP", "EFTP.HYP"), ("ClaudeST", "CLAUDEST.HYP"), ("EHypView", "EHYPVIEW.HYP")]
+# the test guides in C:\\LIB1, each with its .REF
+LIB1 = ["basic", "other", "colour", "big", os.path.join("front", "front")]
 C = os.path.join(OUT, "c")
 fails = 0
 report = []
@@ -68,19 +69,14 @@ def check(ok, what):
 
 
 def family():
-    """the family's guides (and .REFs), from their releases, in OUT/family"""
-    d = os.path.join(OUT, "family")
-    os.makedirs(d, exist_ok=True)
-    tool = os.path.join(ROOT, "common", "tools", "getrelease.py")
-    got = []
-    for app, hyp in FAMILY:
-        if not os.path.exists(os.path.join(d, hyp)):
-            subprocess.run([sys.executable, tool, app, d, hyp], capture_output=True, text=True)
-            subprocess.run([sys.executable, tool, app, d, hyp[:-4] + ".REF"], capture_output=True, text=True)
-        if os.path.exists(os.path.join(d, hyp)):
-            v = os.path.join(d, app.upper() + ".VERSION")
-            got.append("%s %s" % (app, open(v).read().strip() if os.path.exists(v) else "?"))
-    return d, got
+    """the test guides (and .REFs) for C:\\LIB1, in OUT/lib1"""
+    d = os.path.join(OUT, "lib1")
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d)
+    for g in LIB1:
+        for ext in (".hyp", ".ref"):
+            shutil.copy(os.path.join(FIX, g + ext), os.path.join(d, os.path.basename(g) + ext))
+    return d, [os.path.basename(g) for g in LIB1]
 
 
 def make_drive(fam):

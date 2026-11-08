@@ -52,10 +52,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
   How it is made is the team's, without asking: code, structure, shared code, tests, measurements,
   fixes, docs and releases inside an approved phase.
-- **Testing with another AERA program uses its latest release**, what Erez runs, never a build of its
-  `main`: `common/tools/getrelease.py APP DIR FILE...` fetches it. Only for a change both programs are
-  still making, test against the other's `main` at a named commit, say so, and test again against its
-  release when it is out.
+- **No app tests with another AERA program or accessory** (Erez, 8 Nov 2026; guidelines 1.2). This
+  app's tests run it alone: nothing else AERA is loaded beside it, started by it or fetched for it
+  (`getrelease.py` is not used here). What it does with another program is tested against a stand-in
+  this repo owns; the real programs together are the hub's family checks.
 - **Every new source file starts with the SPDX line and copyright** (see any `.c` file); a generator
   writes them into the files it makes.
 - **The name** reads "AERA | Erez Yaary" wherever it is given: copyright lines
@@ -125,8 +125,8 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   and long shifts (tos.c does those in software).
 - Pictures and text colours go through src/gem/colour.c (no VDI; tested on
   the host). `make colour-test` checks them pixel by pixel in eleven screen
-  modes, the ST's too, and the family's help front pages (from their
-  releases) on 1 MB machines; in TT low and the Falcon's 320-wide true
+  modes, the ST's too, and the family's help front page (a test guide,
+  tests/fixtures/front, made by tests/regen.sh) on 1 MB machines; in TT low and the Falcon's 320-wide true
   colour only the accessory runs (guideline 5.2), asked by tests/askhelp.c.
 - The accessory starts quietly (guideline 2.2): nothing but set-up before
   its first event call, and the index (src/core/libjob.c) in short steps

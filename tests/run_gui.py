@@ -1293,14 +1293,14 @@ def refile():
     return ok and held == 2 and check_inf(machines.ci_path(d, "ehypview.inf"), ["PANECOLS=*"])
 
 
-# the README's pictures (make shots): the family's guides from their latest
-# releases and EHypView's own in C:\\GUIDES, on the Falcon in 256 colours
+# the README's pictures (make shots): the hypertexts in SHOT_GUIDES (a folder
+# the person taking them gives: nothing is fetched, no other AERA program's
+# files come from here, guidelines 1.2) and EHypView's own in C:\\GUIDES,
+# on the Falcon in 256 colours
 # (Erez, 28 Oct 2026: the pictures shown are the 256-colour ones; MACHINE=
 # another); each step's screenshot named in SHOT_FILES goes to docs/
 GUIDE = r"C:\GUIDES\EHYPVIEW.HYP"
 SHOT_MACHINE = os.environ.get("MACHINE", "Falcon:256")
-FAMILY = [("ECal", "ECAL"), ("EContact", "ECONTACT"), ("EMail", "EMAIL"), ("EFTP", "EFTP"),
-          ("ClaudeST", "CLAUDEST")]
 LONGDIR = r"C:\HYPTEXT\PROGRAMS\DEVELOP\GEMLIB\MANUALS\ENGLISH"
 
 
@@ -1355,16 +1355,15 @@ def shots():
     g = os.path.join(d, "GUIDES")
     os.makedirs(g)
     os.makedirs(os.path.join(d, *LONGDIR[3:].split("\\")))
-    tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common", "tools", "getrelease.py")
-    for app, base in FAMILY:
-        for f in (base + ".HYP", base + ".REF"):          # EFTP's release has no .REF
-            subprocess.run([sys.executable, tool, app, g, f], stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
+    src = os.environ.get("SHOT_GUIDES")
+    if not src or not os.path.isdir(src):
+        print("FAIL  shots: SHOT_GUIDES= names no folder of hypertexts (the pictures show six guides)")
+        return False
+    for f in os.listdir(src):
+        if f.upper().endswith((".HYP", ".REF")):
+            shutil.copy(os.path.join(src, f), os.path.join(g, f.upper()))
     for f in ("EHYPVIEW.HYP", "EHYPVIEW.REF"):
         shutil.copy(os.path.join("binary", f), g)
-    for f in os.listdir(g):
-        if f.endswith(".VERSION"):
-            os.remove(os.path.join(g, f))
     xvfb = start_xvfb()
     try:
         ok = run_scenario("shots", d, SHOT_STEPS, auto=LAUNCH, windowed=True, machine=SHOT_MACHINE)

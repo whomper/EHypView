@@ -31,7 +31,7 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
   click    a link in BIG.HYP pressed and let go (Xvfb and xdotool; the
            guidelines, 5.8): the press, the link drawn chosen; the
            release, the page it leads to
-  help     the accessory asked for ECal's front page as a Help key asks
+  help     the accessory asked for a front page (tests/fixtures/front) as a Help key asks
            (ASKHELP.PRG, VA_START)
 
 It prints a table: each action's longest stretch on each machine, marked
@@ -94,17 +94,6 @@ def longest(lines, tags=None):
     return max([g for g, t in gaps(lines) if tags is None or t in tags] or [0])
 
 
-def ecal_guide():
-    """ECal's guide from its latest release (guidelines 1.2): the family's front page"""
-    d = os.path.join(OUT, "ecal")
-    path = os.path.join(d, "ECAL.HYP")
-    if not os.path.exists(path):
-        os.makedirs(d, exist_ok=True)
-        subprocess.run([sys.executable, os.path.join(ROOT, "common", "tools", "getrelease.py"),
-                        "ECal", d, "ECAL.HYP"], check=True, stdout=subprocess.DEVNULL)
-    return path
-
-
 def make_drive(d, nvdi, start=None, acc=False, ask=None):
     if os.path.exists(d):
         shutil.rmtree(d)
@@ -115,7 +104,9 @@ def make_drive(d, nvdi, start=None, acc=False, ask=None):
     shutil.copy(os.path.join(FIX, "big.ref"), os.path.join(fixt, "BIG.REF"))
     shutil.copy(os.path.join(FIX, "colour.hyp"), os.path.join(fixt, "COLOUR.HYP"))
     shutil.copy(os.path.join(FIX, "images.hyp"), os.path.join(fixt, "IMAGES", "IMAGES.HYP"))
-    shutil.copy(ecal_guide(), os.path.join(fixt, "ECAL.HYP"))
+    # the family's front page, as a test guide of the repository's (no other
+    # AERA program's files, guidelines 1.2)
+    shutil.copy(os.path.join(FIX, "front", "front.hyp"), os.path.join(fixt, "FRONT.HYP"))
     for i in range(GUIDES):
         for ext in ("hyp", "ref"):
             shutil.copy(os.path.join(FIX, "many", "many." + ext),
@@ -435,7 +426,7 @@ def click_case(spec, nvdi):
 
 def help_case(spec, nvdi):
     d = os.path.join(OUT, slug(spec), "help")
-    page = "C:\\FIXT\\ECAL.HYP Main"
+    page = "C:\\FIXT\\FRONT.HYP Main"
     m = make_drive(os.path.join(d, "c"), nvdi, acc=True, ask=page)
     run = Run(os.path.join(slug(spec), "help"), m, r"C:\ASKHELP.PRG")
     try:
@@ -446,14 +437,14 @@ def help_case(spec, nvdi):
         ok = run.wait("page " + page, 120, 0)
         run.wait("pictures", 30, 0)
         time.sleep(3)
-        note("Help key: ECal's front page in the accessory (longest stretch)", WHOLE, spec,
+        note("Help key: a front page in the accessory (longest stretch)", WHOLE, spec,
              longest(run.lines()[run.mark:]) if ok else None)
     finally:
         run.stop()
 
 
 def front_case(spec, nvdi):
-    picture_case(spec, nvdi, "front", "C:\\FIXT\\ECAL.HYP", "ECal's front page (program)")
+    picture_case(spec, nvdi, "front", "C:\\FIXT\\FRONT.HYP", "a front page (program)")
 
 
 def slug(spec):

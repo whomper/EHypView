@@ -38,6 +38,11 @@ for src in basic other images big colour; do
 	"$HCP" -q -o "$FIX/$src.hyp" "$src.stg" >/dev/null
 	"$HCP" -q -c -o "$FIX/${src}_raw.hyp" "$src.stg" >/dev/null
 done
+# the family's front page (guidelines 4.3) on a test guide, in a folder of
+# its own (the rigs show it instead of another AERA program's help)
+python3 "$TOP/common/tools/helpfront.py" page front.json front.stg "$HOME/FRONT.STG"
+mkdir -p "$FIX/front"
+(cd "$HOME" && "$HCP" -q -o "$FIX/front/front.hyp" FRONT.STG >/dev/null)
 # a guide of a large library (tests/run_quiet.py), in a folder of its own
 # so that the golden files below leave it out
 mkdir -p "$FIX/many"

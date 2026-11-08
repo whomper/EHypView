@@ -376,10 +376,10 @@ def run_mode(name, spec, opts, vmode, pal, how):
         name, ", ".join("%s %06X" % (l, c) for l, c in want.items()), "" if not missing else ": missing " + ", ".join(missing)))
 
 
-# the family's help front pages (guidelines 4.3: a banner and a window
-# picture), from each program's latest release (guidelines 1.2), on the
-# smallest machines: they must show both pictures
-APPS = [("EMail", "EMAIL.HYP"), ("EContact", "ECONTACT.HYP"), ("EFTP", "EFTP.HYP"), ("ECal", "ECAL.HYP")]
+# the family's help front page (guidelines 4.3: a banner and a window
+# picture), from a test guide of the repository's (tests/fixtures/front: no
+# other AERA program's files, guidelines 1.2), on the smallest machines:
+# it must show both pictures
 # (a Falcon cut down to 1 MB of ST RAM and no TT RAM: the least a Falcon has)
 FALCON_1MB = ["--memsize", "1", "--ttram", "0"]
 SMALL = [
@@ -392,36 +392,29 @@ SMALL = [
 def front_pages():
     helps = os.path.join(OUT, "help")
     os.makedirs(helps, exist_ok=True)
-    tool = os.path.join(HERE, "..", "common", "tools", "getrelease.py")
-    for app, hyp in APPS:
-        path = os.path.join(helps, hyp)
-        got = subprocess.run([sys.executable, tool, app, helps, hyp], capture_output=True, text=True)
-        if got.returncode != 0 or not os.path.exists(path):
-            check(False, "%s's help: fetched from its release (%s)" % (app, (got.stderr or got.stdout).strip()[-200:]))
-            continue
-        with open(os.path.join(helps, app.upper() + ".VERSION")) as f:
-            version = f.read().strip()
-        for name, spec, opts, how in SMALL:
-            out, shot, m = boot("%s-%s" % (app.lower(), name), spec, opts, None, how, path)
-            evs = [l[4:] for l in out if l.startswith("EHV ")]
-            pics = [e.split()[1:] for e in evs if e.startswith("picture ")]
-            shown = any(e.startswith("pictures 2 ") for e in evs)
-            blank = []
-            if shown and shot is not None and len(pics) >= 2:
-                scr = next(e.split()[1:] for e in evs if e.startswith("screen "))
-                W, H = map(int, scr[0].split("x"))
-                sw, sh, px = read_bmp(shot)
-                for pos, size in pics[-2:]:
-                    x0, y0 = map(int, pos.split(","))
-                    w, h = map(int, size.split("x"))
-                    seen = set(px(min(sw - 1, (x0 + x) * sw // W), min(sh - 1, (y0 + y) * sh // H))
-                               for y in range(0, h, 3) for x in range(0, w, 3))
-                    if len(seen) < 2:
-                        blank.append(size)
-            check(shown and not blank and shot is not None,
-                  "%s %s's front page on %s (%s; %s): both pictures%s" % (
-                      app, version, name, how, m.describe(), "" if shown and not blank else
-                      (": blank " + ", ".join(blank) if blank else ": not loaded")))
+    path = os.path.join(helps, "FRONT.HYP")
+    shutil.copy(os.path.join(HERE, "fixtures", "front", "front.hyp"), path)
+    for name, spec, opts, how in SMALL:
+        out, shot, m = boot("front-%s" % name, spec, opts, None, how, path)
+        evs = [l[4:] for l in out if l.startswith("EHV ")]
+        pics = [e.split()[1:] for e in evs if e.startswith("picture ")]
+        shown = any(e.startswith("pictures 2 ") for e in evs)
+        blank = []
+        if shown and shot is not None and len(pics) >= 2:
+            scr = next(e.split()[1:] for e in evs if e.startswith("screen "))
+            W, H = map(int, scr[0].split("x"))
+            sw, sh, px = read_bmp(shot)
+            for pos, size in pics[-2:]:
+                x0, y0 = map(int, pos.split(","))
+                w, h = map(int, size.split("x"))
+                seen = set(px(min(sw - 1, (x0 + x) * sw // W), min(sh - 1, (y0 + y) * sh // H))
+                           for y in range(0, h, 3) for x in range(0, w, 3))
+                if len(seen) < 2:
+                    blank.append(size)
+        check(shown and not blank and shot is not None,
+              "the front page test guide on %s (%s; %s): both pictures%s" % (
+                  name, how, m.describe(), "" if shown and not blank else
+                  (": blank " + ", ".join(blank) if blank else ": not loaded")))
 
 
 def main():
