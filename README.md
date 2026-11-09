@@ -9,9 +9,14 @@ Atari programs come with, as a program or a desk accessory, and is the viewer th
 
 - **Finds every hypertext by itself:** your folders and `ST-GUIDE.INF`'s, `\GUIDES` on every drive, indexed in the background.
 - **A library with one search box:** grouped by subject; page names at once, the full text on Return.
+- **Links that lead somewhere:** into any hypertext in the index; a broken one suggests the closest names.
 - **Help for your other programs:** installed as `ST-GUIDE.ACC`, it answers every program's Help key.
-- **Pages as they were written:** styled text, links, pictures and colour in every screen mode.
-- **Modern but Atari:** tabs, windows, bookmarks, a toolbar, right-click menus, any GDOS font, iconify.
+- **Pages as they were written:** styled text, links, lines, boxes and pictures, with unlimited history.
+- **Colour in every mode:** 4 to 256 colours, true colour and mono, dithered where colours are few.
+- **Tabs, windows and bookmarks:** up to eight tabs a window and six windows; bookmarks on ^D.
+- **A toolbar** with tooltips (in BubbleGEM's bubble when it runs), and the history on the right button.
+- **Your choice of font:** the system font or any monospaced GDOS font, in any size.
+- **Modern but Atari:** program or accessory, right-click menus, drag and drop, the clipboard, iconify.
 
 ![EHypView on a Falcon: the library, as an outline, lists the AERA programs' guides by subject over the viewer, which shows a page of EHypView's own guide under its toolbar](docs/screenshot.png)
 
@@ -57,31 +62,16 @@ Releases, hypdump and the guide: [docs/DEVELOPING.md](docs/DEVELOPING.md).
 ## Source
 
 ```
-src/core/   .HYP files, pages, the scanner, the index, links and search (no GEM)
-src/view/   the viewer and the library without GEM
-src/gem/    the GEM program: windows, drawing, menus, dialogs
-atari/      the core's file access on GEMDOS
+src/        the core (.HYP files, the index, search), the viewer, and the GEM program
 common/     the AERA programs' shared code (from AERA-Atari)
-tests/      unit and golden tests, fixtures, the Hatari rigs
-tools/      hypdump, mkhelp.py, bump.py, sync-common.sh
-docs/       the guide's source, design, file format, pictures
+tests/      unit and golden tests, the Hatari rigs
+docs/       the guide's source, design, file formats; the rest of this README
 ```
-
-Design and roadmap: [docs/DESIGN.md](docs/DESIGN.md); file formats: [docs/FORMAT.md](docs/FORMAT.md).
 
 ## Tests
 
-```sh
-make test         # unit and golden tests on this computer
-make asan         # the same with AddressSanitizer and UBSan
-make m68k-test    # the suite as big-endian code under QEMU
-make hatari-test  # EHVCHECK.PRG in Hatari, on a Falcon and an ST
-make gui-test     # the program driven in Hatari, keyboard and mouse
-make quiet-test   # the accessory's start and indexing, timed
-make colour-test  # pictures and colours in eleven screen modes
-```
-
-What each one checks: [docs/DEVELOPING.md](docs/DEVELOPING.md#tests).
+`make test` runs the unit and golden tests on this computer; the Hatari rigs and what each checks are
+in [docs/DEVELOPING.md](docs/DEVELOPING.md#tests).
 
 ## Licence
 
@@ -90,4 +80,4 @@ The test fixtures are compiled with [HypView](https://github.com/th-otto/hypview
 
 ---
 
-Part of **AERA** for Atari: [ECal](https://github.com/whomper/ECal) · [EContact](https://github.com/whomper/EContact) · [EMail](https://github.com/whomper/EMail) · [EFTP](https://github.com/whomper/EFTP) · [EHypView](https://github.com/whomper/EHypView) · [ClaudeST](https://github.com/whomper/ClaudeST) · [EWeb](https://github.com/whomper/EWeb) · [EUpdate](https://github.com/whomper/EUpdate) · 8-bit: [EDOS](https://github.com/whomper/EDOS) · [EFTP_XL](https://github.com/whomper/EFTP_XL) · Pi: [AERA-Gateway](https://github.com/whomper/AERA-Gateway)
+Part of **AERA** for Atari: [ECal](https://github.com/whomper/ECal) · [EContact](https://github.com/whomper/EContact) · [EMail](https://github.com/whomper/EMail) · [EFTP](https://github.com/whomper/EFTP) · [EHypView](https://github.com/whomper/EHypView) · [ClaudeST](https://github.com/whomper/ClaudeST) · [EWeb](https://github.com/whomper/EWeb) · [EUpdate](https://github.com/whomper/EUpdate) · [EPDF](https://github.com/whomper/EPDF) · 8-bit: [EDOS](https://github.com/whomper/EDOS) · [EFTP_XL](https://github.com/whomper/EFTP_XL) · Gateway: [AERA-Gateway](https://github.com/whomper/AERA-Gateway)
