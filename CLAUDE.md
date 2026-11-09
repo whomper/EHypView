@@ -221,3 +221,6 @@ Every GEM release still passes the speed rig. When one is done, send the hub one
     arrows to the pane under the pointer (D37); waits for the hub.
 
 Nothing to do: the toolbar's look and behaviour (D33), About first in the ≡ menu, Insert opens the menu.
+
+**The next release is 2.0** (Erez, 9 Nov 2026): `tools/bump.py major` (1.39 to 2.0) in its release
+commit, "2.0" in the notes' first line with what is new. VERSION stays 1.39 until then.
