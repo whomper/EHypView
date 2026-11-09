@@ -196,3 +196,28 @@ EHypView is in maintenance mode while EWeb, EPDF and EPlay go to 1.0 (AERA-Atari
 - Work on `main` that isn't released stays unreleased.
 - Nothing runs in the background; the session waits for Erez or the hub.
 - Only Erez's explicit word ends this mode, for instance that every app is to take the latest shared code and release. The hub passes it on quoting him.
+
+### UI backlog (Erez's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
+
+Nothing here starts in maintenance mode. Take it with a release made anyway (a fault fix, or one Erez
+asked for) without growing its risk: S items freely, H only if that release is otherwise untouched.
+Every GEM release still passes the speed rig. When one is done, send the hub one line with the commit.
+1. Font... from View to Options, no key; ⇧^F goes (D6, MD2). S.
+2. Index leaves ^I (D2, MD13). S. The new key is still open: change nothing until the hub passes Erez's answer.
+3. File: Close window, Next window, Quit, a line above the group and none inside it (MD8, MD9). S.
+4. Help: the guide item reads `EHypView help` with no key, and `Keys...` is added; the Help key still
+   shows the hypertext's own help page (D10, D11, MG5, MD4). H.
+5. The asks (`[ Keep |Change]` and the like) get a black title band (D22, C4). H. Alert padding waits
+   for the hub (C19); "Look there anyway?" is still open.
+6. The viewer's first window on the whole desk (D39, W11). S. Further viewers' place is still open.
+7. INF: `FONT=name` and `POINT=pt` become `FONT=name,points`, `POINT=` read once (D43, D44, W18). S.
+   `PANECOLS=` and saving `WINDOW=` are not decided: leave them.
+8. Clipboard: `Copied to the clipboard.` for `The page is on the clipboard.` (D50, W17). S.
+9. A disabled toolbar button drawn as the AES's DISABLED, not the dim pattern (W2). S.
+10. Arrows and Shift+Up/Down page `rows - 1` (W5). S; waits for the hub (key_shift).
+11. The library window handles `WM_BOTTOMED` (W13). S.
+12. Build with `-DDLG_CLICK` (C16). S.
+13. Tooltips from the shared tooltip.c, 0.7 s for 1 s (D18, MD21, W19). S; waits for the hub. Window
+    arrows to the pane under the pointer (D37); waits for the hub.
+
+Nothing to do: the toolbar's look and behaviour (D33), About first in the ≡ menu, Insert opens the menu.
