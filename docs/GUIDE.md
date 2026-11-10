@@ -23,7 +23,7 @@ when you press Help.
   viewer for every program**, copy it there as `ST-GUIDE.ACC` instead (in place of any accessory with
   that name): that is the name programs look for when you press Help.
 - **This guide:** copy `EHYPVIEW.HYP` and `EHYPVIEW.REF` into `C:\GUIDES\` (or any folder
-  EHypView looks in), or next to `EHYPVIEW.PRG`. **Help > EHypView guide** opens it.
+  EHypView looks in), or next to `EHYPVIEW.PRG`. **Help > EHypView help** opens it, and **Help > Keys...** its list of keys.
 - **Your hypertexts:** keep each `.HYP` with its `.REF` where EHypView looks for them, with all
   their subfolders: `\GUIDES` and `\GEMSYS\GUIDES` on every drive, the folders in `PATHS`,
   `HYPFOLD` and `REF` from `ST-GUIDE.INF`, and the folders you add in [Settings](#settings).

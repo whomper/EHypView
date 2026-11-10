@@ -2068,6 +2068,9 @@ static void command(int cmd)
 	case CMD_GUIDE:
 		app_guide(NULL);
 		return;
+	case CMD_KEYS:                     /* the family's Keys...: here the guide's own page (D11) */
+		app_guide("Keys");
+		return;
 	case CMD_LARGER:
 	case CMD_SMALLER:
 		if (!font_step(cmd == CMD_LARGER ? 1 : -1))
@@ -2524,7 +2527,8 @@ static void bar_menu(short x, short y)
 		{ "Settings...", "^,", CMD_SETTINGS },
 		{ "Font...", NULL, CMD_FONT },
 		{ "-", NULL, CMD_NONE },
-		{ "EHypView guide", NULL, CMD_GUIDE },
+		{ "EHypView help", NULL, CMD_GUIDE },
+		{ "Keys...", NULL, CMD_KEYS },
 		{ "-", NULL, CMD_NONE },
 		{ "Close window", "^U", CMD_CLOSE },
 		{ "Next window", "^W", CMD_NEXTWIN },
@@ -3046,7 +3050,7 @@ static void click(short mx, short my, short button, short kstate)
 }
 
 /* EHypView's own guide at page (NULL: its front page), for Help >
-   EHypView guide and the library's Help key: EHYPVIEW.HYP in EHypView's
+   EHypView help, Keys... and the library's Help key: EHYPVIEW.HYP in EHypView's
    folder, else wherever the library has it; else where to put it */
 void app_guide(const char *page)
 {

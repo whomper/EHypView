@@ -47,7 +47,8 @@ static const MBAR_ITEM opt_items[] = {
 };
 
 static const MBAR_ITEM help_items[] = {
-	{ "EHypView guide", NULL, CMD_GUIDE },
+	{ "EHypView help", NULL, CMD_GUIDE },
+	{ "Keys...", NULL, CMD_KEYS },
 	{ NULL, NULL, CMD_NONE }
 };
 
@@ -139,7 +140,7 @@ const char *menu_command_name(int cmd)
 		"back", "home", "index", "toc", "help", "prev", "next",
 		"font", "larger", "smaller", "cut", "copy", "paste",
 		"new-window", "link-window", "bookmark-add", "bookmark-remove",
-		"forward", "see-also", "settings", "guide", "next-window", "link-tab"
+		"forward", "see-also", "settings", "guide", "next-window", "link-tab", "keys"
 	};
 
 	if (cmd >= CMD_BM0 && cmd < CMD_COUNT)

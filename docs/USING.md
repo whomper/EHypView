@@ -32,7 +32,7 @@ each file on its own, and all of them together in `ehypview-x.y.zip` (the files 
    - `\GUIDES` and `\GEMSYS\GUIDES` on every drive from C: on
 
    Copy `EHYPVIEW.HYP` and `EHYPVIEW.REF` into one of them too (or next to `EHYPVIEW.PRG`): **Help >
-   EHypView guide** opens it.
+   EHypView help** opens it, and **Help > Keys...** its list of keys.
 
    EHypView looks through these folders in the background, in short steps that pause while you use
    the mouse or keyboard. Its index (`EHYPVIEW.IDX`) has the hypertexts ready without reading them

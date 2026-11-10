@@ -45,6 +45,7 @@ enum {
 	CMD_GUIDE,                     /* EHypView's own guide, EHYPVIEW.HYP */
 	CMD_NEXTWIN,                   /* ^W: the next of its windows on top */
 	CMD_LINKTAB,                   /* the selected link in a new tab */
+	CMD_KEYS,                      /* Keys...: the guide's Keys page */
 	CMD_BM0,                       /* open bookmark 0 ... */
 	CMD_COUNT = CMD_BM0 + BM_MAX
 };
