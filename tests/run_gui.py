@@ -745,7 +745,7 @@ MOUSE_STEPS = [
 
 
 # EHypView's own guide (make help): Help in the library opens its page
-# of it; Help > EHypView guide finds it in C:\\GUIDES through the library
+# of it; Help > EHypView help finds it in C:\\GUIDES through the library
 # and shows the front page's two pictures; a link on it leads to its page,
 # and Help there to the guide's help page, Keys (guideline 4.3)
 GUIDE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "binary", "EHYPVIEW.HYP")
@@ -755,6 +755,8 @@ GUIDE_STEPS = [
     ([item(HELPMENU, 0)], ["menu guide", r"page C:\GUIDES\EHYPVIEW.HYP Main", "pictures 2 st-ram"]),
     ([TAB, RETURN], ["select *", r"page C:\GUIDES\EHYPVIEW.HYP The toolbar"]),
     ([HELP], [r"page C:\GUIDES\EHYPVIEW.HYP Keys"]),
+    ([item(HELPMENU, 0)], ["menu guide", r"page C:\GUIDES\EHYPVIEW.HYP Main"]),
+    ([item(HELPMENU, 1)], ["menu keys", r"page C:\GUIDES\EHYPVIEW.HYP Keys"]),   # Help > Keys... (D11)
     ([("ctrl", Q)], ["quit"]),
 ]
 

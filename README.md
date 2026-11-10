@@ -35,7 +35,7 @@ each file on its own or all in `ehypview-x.y.zip`:
    To be the help viewer for every program, copy the accessory there as `ST-GUIDE.ACC`.
 2. Keep your hypertexts (each `.HYP` with its `.REF`) in `\GUIDES`, or add their folders in
    **Options > Settings...**; copy `EHYPVIEW.HYP` and `.REF` there too.
-3. Press ^L for the library and Help for the page's help; **Help > EHypView guide** opens the guide.
+3. Press ^L for the library and Help for the page's help; **Help > EHypView help** opens the guide.
 
 **Needs:** any ST, STE, TT or Falcon with 1 MB or more; TOS, EmuTOS, MagiC or MiNT; a screen 640
 pixels wide (in 320-wide modes only the accessory, for pages other programs ask for). NVDI or another
