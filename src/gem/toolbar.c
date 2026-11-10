@@ -18,7 +18,7 @@ static const char *const tips[TB_COUNT] = {
 	"The page before (Control+Left)",
 	"The contents (Control+T)",
 	"The next page (Control+Right)",
-	"The index (Control+I)",
+	"The index (Shift+Control+T)",
 	"See also: pages about this one",
 	"The library: every hypertext, and search (Control+L)",
 	"Bookmarks: add this page (Control+D), or go to one",

@@ -41,11 +41,7 @@ typedef struct {
 	long reserved3[2];
 } XATTR;
 
-/* Drvmap() is in tos.h */
-#define Dopendir(n, f)        trap1_wlw(0x128, (long)(n), (f))
-#define Dreaddir(l, h, b)     trap1_wwll(0x129, (l), (long)(h), (long)(b))
-#define Dclosedir(h)          trap1_wl(0x12a, (long)(h))
-#define Fxattr(f, n, x)       trap1_wwll(0x12c, (f), (long)(n), (long)(x))
+/* Drvmap(), Dopendir(), Dreaddir(), Dclosedir() and Fxattr() are in tos.h */
 
 int pf_open(const char *path, int mode)
 {

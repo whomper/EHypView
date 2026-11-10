@@ -195,7 +195,7 @@ hypertext's "quit" link closes its own window.
 
 ## Fonts
 
-**View > Font...** (⇧^F) chooses the font for the text, with the AERA programs' Font dialog, the
+**Options > Font...** chooses the font for the text, with the AERA programs' Font dialog, the
 same as in ECal and EMail: the families on the left, each font's styles and sizes beside them, what
 kind of font it is, and a sample. It lists the system font in 8 x 8 or 8 x 16 and, with NVDI,
 SpeedoGDOS or another GDOS, every fixed-width GDOS font with letters. Hypertexts are laid out in
@@ -230,7 +230,7 @@ field Esc empties the field instead, as in every GEM dialog.
   path. A folder that isn't there is asked about: **Keep** it (a drive you put in later), or **Change** it. OK with new
   folders looks through the library again.
 
-The font is chosen with **View > Font...**, and bookmarks from the Bookmarks menu.
+The font is chosen with **Options > Font...**, and bookmarks from the Bookmarks menu.
 
 ## Program and accessory
 
@@ -291,7 +291,7 @@ Most menu items have a key, shown beside them in the menu.
 | ⇧Undo | forward again |
 | ^Left / ^Right | the page before / after |
 | ^Clr/Home | the main page |
-| ^T / ^I | contents / index |
+| ^T / ⇧^T | contents / index |
 | Help | the hypertext's help page; in the library, this guide |
 | arrows, ⇧arrows | scroll by a line / a page |
 | Clr/Home, ⇧Clr/Home | top / bottom |
@@ -301,7 +301,6 @@ Most menu items have a key, shown beside them in the menu.
 | ^D | bookmark the page |
 | ^O | open a hypertext |
 | ^C | copy the page, as text |
-| ⇧^F | choose the font |
 | ^+ / ^- | larger / smaller text (on the keypad, or ^= and ^-) |
 | ^, | settings |
 | ^U | close the tab in front, or the window with its last |

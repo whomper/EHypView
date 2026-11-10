@@ -40,6 +40,11 @@ RIGHT, LEFT, Q, L, W, U, I, F, CTRL, SHIFT = 0x4D, 0x4B, 0x10, 0x26, 0x11, 0x16,
 MINUS, EQUALS = 0x0C, 0x0D
 N, D, DELETE = 0x31, 0x20, 0x53
 C_KEY = 0x2E
+INSERT = 0x52
+T_KEY = 0x14
+# Font... has no key (Options > Font..., D6): Insert's menu on a page, Up
+# from the bottom (About EHypView...) to Font..., Return
+FONT_KEYS = [INSERT, 0x48, 0x48, RETURN]
 DOWN, UP = 0x50, 0x48
 IMAGES = r"C:\FIXT\IMAGES\IMAGES.HYP"
 
@@ -93,11 +98,11 @@ STEPS = [
     ([("ctrl", EQUALS)], ["font System font 16"]),
     ([("ctrl", EQUALS)], ["status No larger size"]),
     # Esc and Undo cancel the font selector: the font stays (the guidelines, 3.5)
-    ([("ctrl+shift", F)], ["dialog font"]),
+    (FONT_KEYS, ["dialog font"]),
     ([LEFT, ESC], ["dialog-closed font cancel", "!font *"]),
-    ([("ctrl+shift", F)], ["dialog font"]),
+    (FONT_KEYS, ["dialog font"]),
     ([LEFT, UNDO], ["dialog-closed font cancel", "!font *"]),
-    ([("ctrl+shift", F)], ["dialog font"]),
+    (FONT_KEYS, ["dialog font"]),
     ([TAB, TAB, UP, RETURN], ["dialog-closed font ok", "font System font 8"]),   # Size: 8 x 8, kept in EHYPVIEW.INF
     # Settings (^,): Esc and Undo are Cancel, and nothing is written (3.5)
     ([("ctrl", COMMA)], ["dialog settings *"]),
@@ -129,7 +134,7 @@ STEPS = [
     ([("type", "beside")], ['search "beside" 0']),
     ([RETURN], ['fulltext-start "beside"', 'fulltext "beside" 1']),
     ([RETURN], ["page %s Main" % IMAGES]),             # the full-text hit
-    ([("ctrl", I)], ["page %s Index" % IMAGES]),       # hcp made an index
+    ([("ctrl+shift", T_KEY)], ["page %s Index" % IMAGES]),       # hcp made an index
     # several windows: the page in a new one; a bookmark of it
     ([("ctrl", N)], ["window new 2", "page %s Index" % IMAGES]),
     # six at most; the alert that says so: Esc and Undo close it, no window more
@@ -725,7 +730,7 @@ MOUSE_STEPS = [
     (tab_menu_item(0, 1), ["menu close-other-tabs", "tab show 1", "tab closed 1"]),   # the others closed
     ([("cclick", vx(120), 142)], ["tab new 2", "page %s Second" % BASIC]),           # Control+click
     ([("ctrl", U)], ["tab closed 1", "page %s Main" % BASIC]),   # ^U: the tab, the window stays
-    ([item(VIEW, 0)], ["menu font", "dialog font"]),        # the font selector
+    ([item(OPTIONS, 1)], ["menu font", "dialog font"]),     # the font selector
     ([ESC], []),
     ([item(EDIT, 1)], ["menu copy", "copy page *"]),       # the page to the clipboard
     ([item(NAV, 8)], ["menu help", "page %s Help" % BASIC]),
@@ -735,7 +740,7 @@ MOUSE_STEPS = [
     ([("ctrl", N)], ["window new 2", "page %s Main" % BASIC]),
     ([HELP], ["page %s Help" % BASIC]),
     ([TAB, RETURN], ["select *", "closed viewer"]),
-    ([item(FILE, 7)], ["menu quit", "quit"]),
+    ([item(FILE, 6)], ["menu quit", "quit"]),
 ]
 
 
@@ -827,7 +832,8 @@ def pick_gdos_font(rig):
     """in the accessory's Font dialog (common/ui/fontsel.c): the family
     under the system font, the first GDOS font it lists (only the
     fixed-width ones with letters are)"""
-    rig.press(("ctrl+shift", F))
+    for k in FONT_KEYS:
+        rig.press(k)
     if not rig.wait_for("dialog font"):
         return False
     rig.press(DOWN)
@@ -882,7 +888,7 @@ def font_at_boot(rig):
 
 ACC_NVDI_BOOT1 = [
     ([], ["acc registered", "menu shown"]),
-    ([("ctrl+shift", F)], ["dialog font"]),                 # the program measures the fonts
+    (FONT_KEYS, ["dialog font"]),                 # the program measures the fonts
     ([ESC], ["dialog-closed font cancel"]),
     ([("ctrl", Q)], ["quit"]),
     (DESK_ACC, ["library *"]),                              # the accessory, from the desktop
@@ -1054,7 +1060,7 @@ LOOK_STEPS = [
     (in_settings(("click",) + SET_LAYOUT), ["menu settings-layout"]),
     ([ESC], []),                                        # the pop-up closed, nothing chosen
     ([UNDO], ["dialog-closed settings cancel"]),        # (Esc would empty a folder field)
-    ([("ctrl+shift", F)], ["dialog font"]),
+    (FONT_KEYS, ["dialog font"]),
     ([ESC], ["dialog-closed font cancel"]),
     ([("ctrl", L)], ["library *"]),
     ([HELP], ["alert no-guide"]),                       # the library's Help: no EHYPVIEW.HYP here
@@ -1299,7 +1305,7 @@ def refile():
 # on the Falcon in 256 colours
 # (Erez, 28 Oct 2026: the pictures shown are the 256-colour ones; MACHINE=
 # another); each step's screenshot named in SHOT_FILES goes to docs/
-GUIDE = r"C:\GUIDES\EHYPVIEW.HYP"
+SHOT_GUIDE = r"C:\GUIDES\EHYPVIEW.HYP"
 SHOT_MACHINE = os.environ.get("MACHINE", "Falcon:256")
 LONGDIR = r"C:\HYPTEXT\PROGRAMS\DEVELOP\GEMLIB\MANUALS\ENGLISH"
 
@@ -1316,10 +1322,10 @@ def to_pane(subject):
 
 
 SHOT_STEPS = [
-    ([], ["menu shown", "page %s Main" % GUIDE, "index 6 guides"]),
+    ([], ["menu shown", "page %s Main" % SHOT_GUIDE, "index 6 guides"]),
     ([("ctrl", L)], ["library 6"]),
     ([("type", "viewer")], ['search "viewer" *']),
-    ([RETURN], ["page %s The viewer" % GUIDE]),
+    ([RETURN], ["page %s The viewer" % SHOT_GUIDE]),
     ([("hover", 620, 470), ("still", 10)], []),                       # the help's WINDOW.IMG
     ([("hover", 20, 90), ("still", 10)], []),                         # toolbar.png: Back's tip
     ([("ctrl", L)], ["library 6"]),
@@ -1350,7 +1356,7 @@ def shots():
     import shutil
     d = copy_dir("shots", "", "BOOKMARK1=C:\\GUIDES\\ECONTACT.HYP|Groups|EContact - Groups\n"
                  "RECENT1=%s|Main|EHypView - hypertexts for the Atari\n"
-                 "RECENT2=C:\\GUIDES\\ECAL.HYP|Reminders|ECal - Reminders\n" % GUIDE, start=GUIDE)
+                 "RECENT2=C:\\GUIDES\\ECAL.HYP|Reminders|ECal - Reminders\n" % SHOT_GUIDE, start=SHOT_GUIDE)
     shutil.rmtree(os.path.join(d, "FIXT"))
     g = os.path.join(d, "GUIDES")
     os.makedirs(g)

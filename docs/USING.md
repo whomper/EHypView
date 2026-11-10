@@ -110,7 +110,7 @@ aren't kept when the window closes.
 | ⇧Undo | forward again |
 | right mouse button, Insert | the right-click menu |
 | Help | the hypertext's help page (in the library: EHypView's guide) |
-| ^I / ^T | index / contents |
+| ^T / ⇧^T | contents / index |
 | ^Left / ^Right | previous / next page |
 | ^Clr/Home | main page |
 | arrows, ⇧arrows | scroll by a line / a page |
@@ -120,7 +120,6 @@ aren't kept when the window closes.
 | ^C | copy the page, as text, to the clipboard |
 | ^U / ^Q | close the top window / quit |
 | ^W | the next window on top, in turn |
-| ⇧^F | choose the font |
 | ^+ / ^- (on the keypad, or ^= and ^-) | larger / smaller text |
 | ^, | settings |
 
@@ -198,7 +197,7 @@ when EHypView ends, not at every page.
 
 ### Fonts
 
-**View > Font...** (⇧^F) chooses the font for the text, with the AERA programs' Font dialog
+**Options > Font...** chooses the font for the text, with the AERA programs' Font dialog
 (common/ui/fontsel.c), the same as ECal's and EMail's: the families on the left, the styles and the
 sizes beside them, the kind of font, and a sample. It lists the system font in 8×8
 or 8×16 and, with NVDI, SpeedoGDOS or another GDOS, every fixed-width GDOS font with letters (bitmap,
@@ -232,7 +231,7 @@ on two pages, as EMail's and ECal's Settings do. OK keeps the changes; Cancel, U
   more than it shows (guidelines 5.4, `common/ui/field.c`). A folder that isn't there is asked about: **Keep**
   it (a drive put in later) or **Change** it. OK with new folders looks through the library again.
 
-The font stays in **View > Font...**, as in ECal and EMail, and the bookmarks in the Bookmarks menu.
+The font is in **Options > Font...**, as in the other AERA programs, and the bookmarks in the Bookmarks menu.
 
 ### Program and accessory
 

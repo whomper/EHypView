@@ -89,8 +89,8 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `python3 common/tools/helpfront.py thumb SHOT.PNG docs/help/WINDOW.IMG 4,36,632,410 32,90 210,68 330,206 412,90 596,90`),
   with the README's pictures in docs/ (tests/run_gui.py's SHOT_STEPS).
 - Settings (src/gem/settings.c, ^,) is EMail's layout: pages on the left, run by the shared
-  `dlg_do`. It edits `START=`, `LIBRARY=` and `PATHS=`; the font stays in View > Font... as in ECal
-  and EMail.
+  `dlg_do`. It edits `START=`, `LIBRARY=` and `PATHS=`; the font is Options > Font... (no key, D6),
+  as in the other apps.
 - The library (src/view/library.c, the model, tested on the host; src/gem/libwin.c draws it) has two
   layouts, `LIBRARY=outline` (the default: Continue, folding groups, two-line rows) and `panes`
   (Subjects | rows | details). The pages read last are `RECENT1=`... in the INF, written when a
