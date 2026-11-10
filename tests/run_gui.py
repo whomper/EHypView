@@ -1305,7 +1305,7 @@ def refile():
 # on the Falcon in 256 colours
 # (Erez, 28 Oct 2026: the pictures shown are the 256-colour ones; MACHINE=
 # another); each step's screenshot named in SHOT_FILES goes to docs/
-GUIDE = r"C:\GUIDES\EHYPVIEW.HYP"
+SHOT_GUIDE = r"C:\GUIDES\EHYPVIEW.HYP"
 SHOT_MACHINE = os.environ.get("MACHINE", "Falcon:256")
 LONGDIR = r"C:\HYPTEXT\PROGRAMS\DEVELOP\GEMLIB\MANUALS\ENGLISH"
 
@@ -1322,10 +1322,10 @@ def to_pane(subject):
 
 
 SHOT_STEPS = [
-    ([], ["menu shown", "page %s Main" % GUIDE, "index 6 guides"]),
+    ([], ["menu shown", "page %s Main" % SHOT_GUIDE, "index 6 guides"]),
     ([("ctrl", L)], ["library 6"]),
     ([("type", "viewer")], ['search "viewer" *']),
-    ([RETURN], ["page %s The viewer" % GUIDE]),
+    ([RETURN], ["page %s The viewer" % SHOT_GUIDE]),
     ([("hover", 620, 470), ("still", 10)], []),                       # the help's WINDOW.IMG
     ([("hover", 20, 90), ("still", 10)], []),                         # toolbar.png: Back's tip
     ([("ctrl", L)], ["library 6"]),
@@ -1356,7 +1356,7 @@ def shots():
     import shutil
     d = copy_dir("shots", "", "BOOKMARK1=C:\\GUIDES\\ECONTACT.HYP|Groups|EContact - Groups\n"
                  "RECENT1=%s|Main|EHypView - hypertexts for the Atari\n"
-                 "RECENT2=C:\\GUIDES\\ECAL.HYP|Reminders|ECal - Reminders\n" % GUIDE, start=GUIDE)
+                 "RECENT2=C:\\GUIDES\\ECAL.HYP|Reminders|ECal - Reminders\n" % SHOT_GUIDE, start=SHOT_GUIDE)
     shutil.rmtree(os.path.join(d, "FIXT"))
     g = os.path.join(d, "GUIDES")
     os.makedirs(g)
