@@ -1989,7 +1989,7 @@ static void clip_command(int cmd)
 
 		sprintf(lines, "%u", cur->view.page->nlines);
 		log_event("copy", "page", lines);
-		snprintf(cur->view.status, sizeof(cur->view.status), "The page is on the clipboard.");
+		snprintf(cur->view.status, sizeof(cur->view.status), "Copied to the clipboard.");
 	} else
 	{
 		snprintf(cur->view.status, sizeof(cur->view.status), "Couldn't write the clipboard.");
@@ -2198,11 +2198,6 @@ int app_key(short kstate, short kreturn)
 	}
 	switch (KEY_ASCII(kreturn))
 	{
-	case 0x06:                                        /* Shift+^F */
-		if (!(kstate & K_SHIFT))
-			return 0;
-		command(CMD_FONT);
-		return 1;
 	case 0x0e: command(CMD_NEWWIN); return 1;         /* ^N */
 	case 0x04: command(CMD_BM_ADD); return 1;         /* ^D */
 	case 0x11: command(CMD_QUIT); return 1;          /* ^Q */
@@ -2248,16 +2243,13 @@ static void key(short kstate, short kreturn)
 	}
 	switch (ascii)
 	{
-	case 0x09:                         /* ^I and Tab share 9: Tab has scan 0x0f */
+	case 0x09:                         /* Tab (^I has no command: Get info in the family, D2) */
 		if (scan != 0x0f)
-		{
-			command(CMD_INDEX);
 			return;
-		}
 		select_link(shift ? -1 : 1);
 		return;
-	case 0x14:                         /* ^T */
-		command(CMD_TOC);
+	case 0x14:                         /* ^T; with Shift the index (D2) */
+		command(shift ? CMD_INDEX : CMD_TOC);
 		return;
 	case 0x0d:                         /* Return; with Shift, in a new window */
 		if (shift)
@@ -2339,14 +2331,14 @@ static void context_menu(short x, short y)
 		{ "-", CMD_NONE },
 		{ "  Main page            ^Home", CMD_HOME },
 		{ "  Contents                ^T", CMD_TOC },
-		{ "  Index                   ^I", CMD_INDEX },
+		{ "  Index                  \x01^T", CMD_INDEX },
 		{ "  Help page             Help", CMD_HELP },
 		{ "-", CMD_NONE },
 		{ "  New window              ^N", CMD_NEWWIN },
 		{ "  Add bookmark            ^D", CMD_BM_ADD },
 		{ "  Copy page               ^C", CMD_COPY },
 		{ "  Library and search      ^L", CMD_LIBRARY },
-		{ "  Font...                \x01^F", CMD_FONT },
+		{ "  Font...", CMD_FONT },
 		{ "-", CMD_NONE },
 		{ "  About EHypView...", CMD_ABOUT }
 	};
@@ -2527,15 +2519,15 @@ static void bar_menu(short x, short y)
 		{ "Copy page", "^C", CMD_COPY },
 		{ "Add bookmark", "^D", CMD_BM_ADD },
 		{ "-", NULL, CMD_NONE },
-		{ "Font...", "\x01^F", CMD_FONT },
 		{ "Larger text", "^+", CMD_LARGER },
 		{ "Smaller text", "^-", CMD_SMALLER },
 		{ "Settings...", "^,", CMD_SETTINGS },
+		{ "Font...", NULL, CMD_FONT },
 		{ "-", NULL, CMD_NONE },
 		{ "EHypView guide", NULL, CMD_GUIDE },
 		{ "-", NULL, CMD_NONE },
-		{ "Next window", "^W", CMD_NEXTWIN },
 		{ "Close window", "^U", CMD_CLOSE },
+		{ "Next window", "^W", CMD_NEXTWIN },
 		{ "Quit", "^Q", CMD_QUIT }
 	};
 	enum { N = sizeof(all) / sizeof(all[0]) };

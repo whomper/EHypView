@@ -20,9 +20,8 @@ static const MBAR_ITEM file_items[] = {
 	{ "Open hypertext...", "^O", CMD_OPEN },
 	{ "Library and search", "^L", CMD_LIBRARY },
 	{ "-", NULL, CMD_NONE },
-	{ "Next window", "^W", CMD_NEXTWIN },
 	{ "Close window", "^U", CMD_CLOSE },
-	{ "-", NULL, CMD_NONE },
+	{ "Next window", "^W", CMD_NEXTWIN },
 	{ "Quit", "^Q", CMD_QUIT },
 	{ NULL, NULL, CMD_NONE }
 };
@@ -36,8 +35,6 @@ static const MBAR_ITEM edit_items[] = {
 
 /* \x01 is the Shift arrow in the Atari character set */
 static const MBAR_ITEM view_items[] = {
-	{ "Font...", "\x01^F", CMD_FONT },
-	{ "-", NULL, CMD_NONE },
 	{ "Larger text", "^+", CMD_LARGER },
 	{ "Smaller text", "^-", CMD_SMALLER },
 	{ NULL, NULL, CMD_NONE }
@@ -45,6 +42,7 @@ static const MBAR_ITEM view_items[] = {
 
 static const MBAR_ITEM opt_items[] = {
 	{ "Settings...", "^,", CMD_SETTINGS },
+	{ "Font...", NULL, CMD_FONT },
 	{ NULL, NULL, CMD_NONE }
 };
 
@@ -61,7 +59,7 @@ static const MBAR_ITEM nav_items[] = {
 	{ "-", NULL, CMD_NONE },
 	{ "Main page", "^Home", CMD_HOME },
 	{ "Contents", "^T", CMD_TOC },
-	{ "Index", "^I", CMD_INDEX },
+	{ "Index", "\x01^T", CMD_INDEX },
 	{ "Help page", "Help", CMD_HELP },
 	{ "See also...", NULL, CMD_SEEALSO },
 	{ "-", NULL, CMD_NONE },
