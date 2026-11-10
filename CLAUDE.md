@@ -224,3 +224,10 @@ Nothing to do: the toolbar's look and behaviour (D33), About first in the ≡ me
 
 **The next release is 2.0** (Erez, 9 Nov 2026): `tools/bump.py major` (1.39 to 2.0) in its release
 commit, "2.0" in the notes' first line with what is new. VERSION stays 1.39 until then.
+
+**At that release, Erez's configuration in the rigs** (Erez, 10 Nov 2026; AERA-Atari 148df17,
+`machines.ERZ_MACHINE`, `machines.erz_env()`): one of the Falcon function runs (hatari-test, gui-test,
+colour-test's Falcon run besides the 16-colour and true-colour cases) becomes `Falcon-4:256` with
+`AERA_WITH_NVDI=1`, in place of a second Falcon run, not added to it. Without TOS images or NVDI the
+same machine runs on EmuTOS and the report says "stand-in". At least 60% of a candidate's boots under
+NVDI, ST boots counted (Erez, 7 Nov).
