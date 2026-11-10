@@ -99,7 +99,7 @@ int settings_put(const char *key, const char *value, const char *note);
 void font_init(const char *dir, const char *inf, const char *text, const pf_info *info, int is_acc);
 void font_check(void);                    /* the accessory: inf changed meanwhile? the font again */
 void font_exit(void);
-void font_dialog(void);                   /* View > Font... */
+void font_dialog(void);                   /* Options > Font... */
 int font_step(int dir);                   /* the next size up or down: 1 when changed */
 int font_protocol(short id, short point); /* FONT_CHANGED: 1 when taken */
 const char *font_name(void);
