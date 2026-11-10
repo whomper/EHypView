@@ -14,7 +14,7 @@
  *   Library   LIBRARY=: its layout, Outline or Two panes;
  *             PATHS=: folders to look in as well as ST-GUIDE.INF's
  *
- * The font is View > Font... (⇧^F), as in ECal and EMail, and the
+ * The font is Options > Font... (no key, D6), as in the other apps, and the
  * bookmarks are kept from the Bookmarks menu and the library.
  */
 #include <stdio.h>

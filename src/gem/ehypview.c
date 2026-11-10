@@ -4245,6 +4245,30 @@ static void acc_mem_grow(void)
  * (common/atari/crash.c): say so and leave GEM tidy.  Only the AES and
  * VDI: the heap may be what went wrong.
  */
+/* one step of quitting, in ehypview.log next to the program, on the disk
+   at once: if the machine bombs once the window has gone (EFTP and EMail
+   did, Erez 10 Nov 2026), the last line says where (EFTP's quit_step) */
+static void quit_step(const char *what)
+{
+	static int begun;
+	char path[200], line[260];
+	int h, n;
+
+	if (start_dir[0] == '\0')
+		return;
+	snprintf(path, sizeof(path), "%s\\ehypview.log", start_dir);
+	h = pf_open(path, begun ? PF_APPEND : PF_WRITE);
+	if (h < 0)
+		return;
+	n = snprintf(line, sizeof(line), "EHypView %s -- quit: %s\r\n", app_version, what);
+	if (n > (int) sizeof(line) - 1)
+		n = (int) sizeof(line) - 1;
+	pf_write(h, line, n);
+	pf_close(h);
+	begun = 1;
+	log_event("quit-step", what, NULL);
+}
+
 static void crash_quit(const char *what)
 {
 	char a[200];
@@ -4634,7 +4658,14 @@ int main(void)
 				wind_delete(viewers[i].h);
 			}
 	}
+	if (libwin_handle() > 0)
+	{
+		wind_close(libwin_handle());
+		wind_delete(libwin_handle());
+	}
+	quit_step("the windows closed");
 	recent_save();
+	quit_step("settings saved");
 	/* the four longest stretches between event calls (gem.c; the
 	   guidelines' Speed): EHypView keeps no log, so for the tests */
 	if (aes_slowest()[0] != '\0')
@@ -4644,11 +4675,6 @@ int main(void)
 		menu_bar(menu.tree, 0);
 	menu_free(&menu);
 	font_exit();
-	if (libwin_handle() > 0)
-	{
-		wind_close(libwin_handle());
-		wind_delete(libwin_handle());
-	}
 	libwin_free();
 	{
 		int i;
@@ -4661,9 +4687,18 @@ int main(void)
 	bm_free(&recent);
 	ehv_libjob_free(job);
 	ehv_index_free(idx);
-	crash_remove();
 	av_exit();
 	v_clsvwk(vdi_h);
+	quit_step("colours, menu bar and VDI given back");
+	crash_remove();
+	{
+		const char *o = crash_over();
+		char t[220];
+
+		snprintf(t, sizeof(t), "crash catcher off%s%s", *o ? "; hooked over it: " : "", o);
+		quit_step(t);
+	}
 	appl_exit();
+	quit_step("out of the AES");
 	return 0;
 }

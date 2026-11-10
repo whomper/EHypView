@@ -167,7 +167,7 @@ STEPS = [
     ([RETURN], ["page %s Index" % IMAGES]),            # the bookmark, first in the library
     ([("ctrl", L)], ["library 4"]),
     ([DELETE], ["bookmark removed *"]),                # Delete removes it
-    ([("ctrl", Q)], ["quit"]),
+    ([("ctrl", Q)], ["quit", "quit-step crash catcher off*", "quit-step out of the AES"]),
 ]
 
 # started with nothing (DEFHYP in ST-GUIDE.INF isn't EHypView's): the
@@ -740,7 +740,7 @@ MOUSE_STEPS = [
     ([("ctrl", N)], ["window new 2", "page %s Main" % BASIC]),
     ([HELP], ["page %s Help" % BASIC]),
     ([TAB, RETURN], ["select *", "closed viewer"]),
-    ([item(FILE, 6)], ["menu quit", "quit"]),
+    ([item(FILE, 6)], ["menu quit", "quit", "quit-step out of the AES"]),
 ]
 
 

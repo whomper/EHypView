@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * EHypView - the font for the text (View > Font...); menus, dialogs and
+ * EHypView - the font for the text (Options > Font...); menus, dialogs and
  * alerts keep the system font.
  *
  * The Font dialog is the family's (common/ui/fontsel.c, the guidelines
@@ -155,7 +155,7 @@ static void save(void)
 	char pt[12];
 
 	sprintf(pt, "%d", pref.point);
-	settings_put("FONT", pref.name, "the text font: System font, or the name of a GDOS font (View > Font...)");
+	settings_put("FONT", pref.name, "the text font: System font, or the name of a GDOS font (Options > Font...)");
 	settings_put("POINT", pt, "its size in points; 0: the usual one");
 	inf_seen = stamp(inf_path);
 }
@@ -338,7 +338,7 @@ int font_protocol(short id, short point)
 	return 1;
 }
 
-/* ---------------- View > Font... (common/ui/fontsel.c) ---------------- */
+/* ---------------- Options > Font... (common/ui/fontsel.c) ---------------- */
 
 /* OK: the font for the text, kept in EHYPVIEW.INF.  The accessory's font
    of the next start is kept until then */
