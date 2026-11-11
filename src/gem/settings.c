@@ -279,14 +279,6 @@ static void under_popup(void)
 		objc_draw(tree, 0, 8, popup_area.x, popup_area.y, popup_area.w, popup_area.h);
 }
 
-/* where a popup goes to have its row sel over the button at y, as the
-   AES's own pop-ups do (the guidelines, 5.7): popup.c's rows are a line
-   and 2 pixels high, from 2 pixels down, their text a pixel in */
-static short over_button(short y, short sel)
-{
-	return (short) (y - 3 - sel * (sys_ch + 2));
-}
-
 /* the popup of START= choices, over its button with the choice ticked;
    the dialog under it drawn again */
 static void start_pick(void)
@@ -297,12 +289,12 @@ static void start_pick(void)
 
 	for (k = 0; k < NSTART; k++)
 	{
-		sprintf(lab[k], "%c %s", k == start_sel ? '\x08' : ' ', start_name[k]);
+		sprintf(lab[k], "%s%s", k == start_sel ? "\x08" : "", start_name[k]);
 		l[k] = lab[k];
 	}
 	objc_offset(tree, o_start, &x, &y);
 	log_event("menu", "settings-start", NULL);
-	r = popup(x, over_button(y, start_sel < NSTART ? start_sel : 0), l, NSTART);
+	r = popup_over(x, y, l, NSTART, start_sel < NSTART ? start_sel : 0);
 	under_popup();
 	if (r < 0)
 		return;
@@ -321,12 +313,12 @@ static void layout_pick(void)
 
 	for (k = 0; k < NLAYOUT; k++)
 	{
-		sprintf(lab[k], "%c %s", k == layout_sel ? '\x08' : ' ', layout_name[k]);
+		sprintf(lab[k], "%s%s", k == layout_sel ? "\x08" : "", layout_name[k]);
 		l[k] = lab[k];
 	}
 	objc_offset(tree, o_layout, &x, &y);
 	log_event("menu", "settings-layout", NULL);
-	r = popup(x, over_button(y, layout_sel), l, NLAYOUT);
+	r = popup_over(x, y, l, NLAYOUT, layout_sel);
 	under_popup();
 	if (r < 0)
 		return;
