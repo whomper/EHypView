@@ -224,7 +224,12 @@ Nothing to do: the toolbar's look and behaviour (D33), About first in the ≡ me
 
 **Alignment (Erez, 10 Nov 2026): maintenance mode lifted for it** until the hub says it is done.
 2.0 (11 Nov) carried items 1, 2 (Index on ⇧^T), 3, 4 and 8, with the crash catcher's XBRA fix and
-the shared code synced. The rest goes out as 2.1, with the build writing lowercase names (6.6).
+the shared code synced. The rest goes out as 2.1, with the build writing lowercase names (6.6). On main
+for 2.1: the pop-ups on `popup_m`, Settings' choices on `popup_over` (D15, D27); the name asks under a band
+(ask.c, D22) and `[Keep|Change]` (C19); `-DDLG_CLICK` (C16): Settings waits for a page's or a pop-up
+button's release before it draws (`let_go_over`, dialog.h's rule), then draws the two tabs and the page
+alone (`dlg_draw_range`); gui-test's quick scenario double-clicks the pages at 70 and 150 ms on ST-1 and
+Falcon-4:256 with NVDI.
 
 **At that release, Erez's configuration in the rigs** (Erez, 10 Nov 2026; AERA-Atari 148df17,
 `machines.ERZ_MACHINE`, `machines.erz_env()`): one of the Falcon function runs (hatari-test, gui-test,

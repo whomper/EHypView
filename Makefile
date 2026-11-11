@@ -197,7 +197,7 @@ XCPU    ?= -m68000 -mstrict-align -fdisable-tree-bswap
 XFLAGS   = $(XCPU) $(XEXTRA) $(XOPT) -fomit-frame-pointer -ffreestanding -fno-builtin \
            -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-store-merging \
            -fno-asynchronous-unwind-tables -ffunction-sections -fdata-sections -Wall -Wextra -Werror=implicit-function-declaration \
-           -DEHV_TOS -nostdinc -isystem $(GCCINC) -Icommon/atari/include -Icommon/atari -Isrc/core \
+           -DEHV_TOS -DDLG_CLICK -nostdinc -isystem $(GCCINC) -Icommon/atari/include -Icommon/atari -Isrc/core \
            -Icommon/ui -Icommon/src
 XLDFLAGS = $(XCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
