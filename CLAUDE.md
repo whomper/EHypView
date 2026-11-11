@@ -222,8 +222,9 @@ Every GEM release still passes the speed rig. When one is done, send the hub one
 
 Nothing to do: the toolbar's look and behaviour (D33), About first in the ≡ menu, Insert opens the menu.
 
-**The next release is 2.0** (Erez, 9 Nov 2026): `tools/bump.py major` (1.39 to 2.0) in its release
-commit, "2.0" in the notes' first line with what is new. VERSION stays 1.39 until then.
+**Alignment (Erez, 10 Nov 2026): maintenance mode lifted for it** until the hub says it is done.
+2.0 (11 Nov) carried items 1, 2 (Index on ⇧^T), 3, 4 and 8, with the crash catcher's XBRA fix and
+the shared code synced. The rest goes out as 2.1, with the build writing lowercase names (6.6).
 
 **At that release, Erez's configuration in the rigs** (Erez, 10 Nov 2026; AERA-Atari 148df17,
 `machines.ERZ_MACHINE`, `machines.erz_env()`): one of the Falcon function runs (hatari-test, gui-test,
