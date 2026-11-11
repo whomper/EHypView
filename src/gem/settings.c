@@ -26,6 +26,7 @@
 #include "grect.h"
 #include "dialog.h"
 #include "popup.h"
+#include "click.h"
 #include "alert.h"
 #include "inf.h"
 #include "plat.h"
@@ -163,6 +164,8 @@ static void layout_show(void)
 /* ---------------------------------------------------------------- */
 /* the pages                                                         */
 
+static short o_area, o_cancel;     /* the page's area; the first object after the pages */
+
 static void show_page(short p, int draw)
 {
 	short i;
@@ -187,11 +190,30 @@ static void show_page(short p, int draw)
 	   3D the AES only inverts the grey, guidelines 5.6) */
 	for (i = 1; i <= 2; i++)
 		((TEDINFO *) tree[page_tab[i]].ob_spec)->te_color = i == p ? 0x1071 : 0x1180;
-	if (draw)
-		dlg_draw(tree, 0);
+	if (draw)                          /* the two tabs and the page alone, without the AES's walk */
+	{                                  /* through every object (C16: an ST's quick second press) */
+		dlg_draw_one(tree, page_tab[1]);
+		dlg_draw_one(tree, page_tab[2]);
+		dlg_draw_range(tree, o_area, (short) (o_area + 1), o_cancel, 1, 0);
+	}
 }
 
-static short o_band, o_start, o_layout, o_ok, o_cancel;
+static short o_band, o_start, o_layout, o_ok;
+
+/* a TOUCHEXIT object came back on its press (-DDLG_CLICK, C16): its
+   release waited for before anything is drawn, so a quick second press
+   is not read as the first one's release (dialog.h); 1 when let go over
+   it (5.8: acted on when let go) */
+static int let_go_over(void)
+{
+#ifdef DLG_CLICK
+	int u = dlg_touch_up();
+
+	return u < 0 || u == PRESS_IN;
+#else
+	return 1;
+#endif
+}
 static char folder_text[PLEN + 1];
 
 static void build(const char *folder)
@@ -219,6 +241,10 @@ static void build(const char *folder)
 			    (short) (0 | (2 << 8)), 2, (short) ((SW - 1) | (6 << 8)), 1);
 	page_tab[2] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(tab2, "", "", 0x1180),
 			    (short) (0 | (2 << 8)), (short) (4 | (gap << 8)), (short) ((SW - 1) | (6 << 8)), 1);
+
+	/* where the pages are, nothing drawn: what a change of page draws
+	   again (between the band and the buttons, 3 pixels kept from both) */
+	o_area = d_add(G_IBOX, 0, 0, 0L, SX - 1, (short) (1 | (4 << 8)), W - SX + 1, (short) (14 | (6 << 8)));
 
 	/* General */
 	from = nobj;
@@ -374,7 +400,7 @@ static int paths_check(void)
 			strcpy(shown, p);
 		else
 			sprintf(shown, "...%s", p + strlen(p) - (sizeof(shown) - 4));
-		if (alert(1, "[2][%s isn't a folder on this Atari.|Look there anyway?][ Keep |Change]", shown) != 1)
+		if (alert(1, "[2][%s isn't a folder on this Atari.|Look there anyway?][Keep|Change]", shown) != 1)
 		{
 			log_event("alert-closed", "no-folder", "change");
 			show_page(2, 1);
@@ -428,6 +454,8 @@ int settings_dialog(const char *inf_path, const char *folder)
 	for (;;)
 	{
 		r = (short) (dlg_do(tree, 0, o_cancel) & 0x7fff);
+		if ((r == page_tab[1] || r == page_tab[2] || r == o_start || r == o_layout) && !let_go_over())
+			continue;
 		if (r == page_tab[1] || r == page_tab[2])
 		{
 			if (cur_page != (r == page_tab[1] ? 1 : 2))

@@ -403,6 +403,19 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             mouse.move(k[1], k[2])
             mouse.xdo("click", "--repeat", "2", "--delay", "80", "1")
             time.sleep(2)
+        elif isinstance(k, tuple) and k[0] == "dclick2":    # a double click, its gap in ms
+            mouse.move(k[1], k[2])
+            mouse.xdo("click", "--repeat", "2", "--delay", str(k[3]), "1")
+            time.sleep(2)
+        elif isinstance(k, tuple) and k[0] == "quick":      # a click, then k[5] ms on one elsewhere
+            wx, wy = mouse.window()
+            mouse.move(k[1], k[2])
+            glide = []                                      # in four steps: Hatari takes no jump
+            for i in range(1, 5):
+                glide += ["sleep", "%.3f" % (k[5] / 4000.0), "mousemove",
+                          str(wx + k[1] + (k[3] - k[1]) * i // 4), str(wy + k[2] + (k[4] - k[2]) * i // 4)]
+            mouse.xdo("click", "1", *glide, "click", "1")
+            time.sleep(2)
         elif isinstance(k, tuple) and k[0] == "type":
             type_text(k[1])
         elif isinstance(k, tuple) and k[0] == "field":     # a key into a dialog's field
@@ -1012,7 +1025,11 @@ def in_settings(*keys):
             return False
         dx, dy = int(at[-1][0]) - SET_ORIGIN[0], int(at[-1][1]) - SET_ORIGIN[1]
         for k in keys:
-            rig.press(("click", k[1] + dx, k[2] + dy) if k[0] == "click" else k)
+            if k[0] in ("click", "dclick2"):
+                k = (k[0], k[1] + dx, k[2] + dy) + tuple(k[3:])
+            elif k[0] == "quick":
+                k = ("quick", k[1] + dx, k[2] + dy, k[3] + dx, k[4] + dy, k[5])
+            rig.press(k)
         return True
     return step
 
@@ -1047,6 +1064,56 @@ def st_field():
     finally:
         xvfb.terminate()
     return ok and check_inf(machines.ci_path(d, "ehypview.inf"), ["PATHS=" + LONG])
+
+
+# quick clicks on Settings' pages (-DDLG_CLICK, C16; the hub, 11 Nov
+# 2026): each page shown on a press is let go before anything is drawn,
+# so a second press 70 or 150 ms later is never taken for the first's
+# release: a double click on a page, then a click on one page and at
+# once on the other, both seen; on an ST and on Erez's Falcon with NVDI
+SET_GENERAL = (135, 147)
+
+
+def quick_steps(gap, pair=True):
+    """pair: a click on one page and at once on the other; at 150 ms only (at 100 the
+    ST lost the second on Hatari, whose pointer moves once a 20 ms frame: without
+    -DDLG_CLICK it lost it at 150 too)"""
+    return [
+        (in_settings(("dclick2",) + SET_LIBRARY + (gap,)), ["settings-page library"]),
+    ] + ([(in_settings(("quick",) + SET_GENERAL + SET_LIBRARY + (gap,)),
+           ["settings-page general", "settings-page library"])] if pair else []) + [
+        (in_settings(("dclick2",) + SET_GENERAL + (gap,)), ["settings-page general"]),
+        (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
+        (in_settings(("click",) + SET_GENERAL), ["settings-page general"]),
+    ]
+
+
+QUICK_STEPS = ([([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
+                ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"])] +
+               quick_steps(70, pair=False) + quick_steps(150) +
+               [([UNDO], ["dialog-closed settings cancel"]), ([("ctrl", Q)], ["quit"])])
+
+
+def quick():
+    ok = True
+    for machine, nvdi in (("ST-1:mono", False), (machines.ERZ_MACHINE, True)):
+        d = copy_dir("quick", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n", start=BASIC)
+        keep = os.environ.get("AERA_WITH_NVDI")
+        if nvdi and machines.erz_env().get("AERA_WITH_NVDI"):
+            os.environ["AERA_WITH_NVDI"] = "1"
+        try:
+            print("      quick on %s" % machines.Machine(machine, d).describe())
+            xvfb = start_xvfb()
+            try:
+                ok = run_scenario("quick", d, QUICK_STEPS, auto=LAUNCH, windowed=True, machine=machine) and ok
+            finally:
+                xvfb.terminate()
+        finally:
+            if keep is None:
+                os.environ.pop("AERA_WITH_NVDI", None)
+            else:
+                os.environ["AERA_WITH_NVDI"] = keep
+    return ok
 
 
 # the dialogs' look (guidelines 5.6): 3D wherever the AES draws it (TOS 4,
@@ -1409,6 +1476,8 @@ def main():
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
         print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "accnvdi")).describe())
         return 0 if acc_nvdi() else 1
+    if sys.argv[3:] == ["quick"]:                   # quick clicks on Settings' pages alone
+        return 0 if quick() else 1
     if sys.argv[3:] == ["bubble"]:                  # the tips through BubbleGEM alone
         return 0 if bubble() else 1
     if sys.argv[3:] == ["mouse"]:                   # the mouse's scenario alone
@@ -1456,6 +1525,7 @@ def main():
             ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"),
                                   ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG, "LIBRARY=panes"])
             ok = ok and st_field()
+            ok = ok and quick()
             ok = ok and look()
             ok = ok and panebar()
             ok = ok and refile()

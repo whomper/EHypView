@@ -20,8 +20,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install m68k cross compiler and QEMU
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu qemu-user-static
+          # On 11 Nov 2026 the runners could not reach azure.archive.ubuntu.com or archive.ubuntu.com:
+          # kernel.org's mirror, over https (EPlay's finding), and apt retries
+          echo https://mirrors.edge.kernel.org/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y gcc-m68k-linux-gnu qemu-user-static
       - name: Big-endian 68020 tests under QEMU
         run: make m68k-test
 
@@ -31,8 +34,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install m68k cross compiler and Hatari
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu hatari xvfb xdotool x11-utils \
+          # On 11 Nov 2026 the runners could not reach azure.archive.ubuntu.com or archive.ubuntu.com:
+          # kernel.org's mirror, over https (EPlay's finding), and apt retries
+          echo https://mirrors.edge.kernel.org/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y gcc-m68k-linux-gnu hatari xvfb xdotool x11-utils \
             autoconf automake libtool gettext autopoint pkg-config
       - name: Build the Atari programs and run them in Hatari (Falcon, EmuTOS)
         run: make hatari-test

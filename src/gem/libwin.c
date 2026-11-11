@@ -2061,7 +2061,7 @@ static void rename_pane(long p)
 	if (idx == NULL || lib_pane_name(&lib, p, name, sizeof(name)) < 0)
 		return;
 	snprintf(what, sizeof(what), "Rename \"%.24s\" to:", name);
-	if (!ask_name(what, name, sizeof(name)))
+	if (!ask_name("Rename subject", what, name, sizeof(name)))
 	{
 		redraw_all();
 		return;
@@ -2128,7 +2128,7 @@ static void file_under(unsigned long g, short mx, short my)
 		char name[LIB_PANE_TEXT];
 
 		name[0] = '\0';
-		if (!ask_name("File it under a new subject:", name, sizeof(name)) || strchr(name, '/') != NULL)
+		if (!ask_name("New subject", "File it under a new subject:", name, sizeof(name)) || strchr(name, '/') != NULL)
 		{
 			redraw_all();
 			return;
