@@ -2327,23 +2327,23 @@ static void context_menu(short x, short y)
 		const char *label;
 		int cmd;
 	} all[] = {
-		{ "  Back                  Undo", CMD_BACK },
-		{ "  Forward             \x01Undo", CMD_FORWARD },
-		{ "  Link in new window \x01Return", CMD_LINKWIN },
-		{ "  Link in new tab    ^Return", CMD_LINKTAB },
+		{ "Back                  Undo", CMD_BACK },
+		{ "Forward             \x01Undo", CMD_FORWARD },
+		{ "Link in new window \x01Return", CMD_LINKWIN },
+		{ "Link in new tab    ^Return", CMD_LINKTAB },
 		{ "-", CMD_NONE },
-		{ "  Main page            ^Home", CMD_HOME },
-		{ "  Contents                ^T", CMD_TOC },
-		{ "  Index                  \x01^T", CMD_INDEX },
-		{ "  Help page             Help", CMD_HELP },
+		{ "Main page            ^Home", CMD_HOME },
+		{ "Contents                ^T", CMD_TOC },
+		{ "Index                  \x01^T", CMD_INDEX },
+		{ "Help page             Help", CMD_HELP },
 		{ "-", CMD_NONE },
-		{ "  New window              ^N", CMD_NEWWIN },
-		{ "  Add bookmark            ^D", CMD_BM_ADD },
-		{ "  Copy page               ^C", CMD_COPY },
-		{ "  Library and search      ^L", CMD_LIBRARY },
-		{ "  Font...", CMD_FONT },
+		{ "New window              ^N", CMD_NEWWIN },
+		{ "Add bookmark            ^D", CMD_BM_ADD },
+		{ "Copy page               ^C", CMD_COPY },
+		{ "Library and search      ^L", CMD_LIBRARY },
+		{ "Font...", CMD_FONT },
 		{ "-", CMD_NONE },
-		{ "  About EHypView...", CMD_ABOUT }
+		{ "About EHypView...", CMD_ABOUT }
 	};
 	enum { N = sizeof(all) / sizeof(all[0]) };
 	static char off[N][40];
@@ -2371,7 +2371,7 @@ static void context_menu(short x, short y)
 		cmds[n++] = c;
 	}
 	log_event("menu", "popup", NULL);
-	r = popup(x, y, lab, n);
+	r = popup_m(x, y, lab, n);
 	if (r < 0 || cmds[r] == CMD_NONE)
 		return;
 	log_event("menu", menu_command_name(cmds[r]), NULL);
@@ -2384,7 +2384,7 @@ static void context_menu(short x, short y)
 /* a menu line: the text, then its shortcut on the right */
 static void menu_line(char *buf, size_t n, const char *text, const char *key)
 {
-	snprintf(buf, n, "  %-20s%6s ", text, key != NULL ? key : "");
+	snprintf(buf, n, "%-20s%6s", text, key != NULL ? key : "");
 }
 
 /* the history, back (dir < 0) or forward (dir > 0), nearest first */
@@ -2399,14 +2399,14 @@ static void history_menu(int dir, short x, short y)
 
 	while (n < HIST_SHOWN && (t = view_jump_title(&cur->view, dir * (n + 1))) != NULL)
 	{
-		snprintf(lines[n], sizeof(lines[n]), "  %.40s ", t);
+		snprintf(lines[n], sizeof(lines[n]), "%.40s", t);
 		lab[n] = lines[n];
 		n++;
 	}
 	if (n == 0)
 		return;
 	log_event("menu", dir < 0 ? "back-history" : "forward-history", NULL);
-	r = popup(x, y, lab, n);
+	r = popup_m(x, y, lab, n);
 	if (r < 0)
 		return;
 	sprintf(num, "%d", dir * (r + 1));
@@ -2429,13 +2429,13 @@ static void seealso_menu(short x, short y)
 	for (n = 0; n < 16 && (unsigned int) n < view_xref_count(&cur->view); n++)
 	{
 		view_xref_label(&cur->view, (unsigned int) n, label, sizeof(label));
-		snprintf(lines[n], sizeof(lines[n]), "  %s ", label);
+		snprintf(lines[n], sizeof(lines[n]), "%s", label);
 		lab[n] = lines[n];
 	}
 	if (n == 0)
 		return;
 	log_event("menu", "see-also", NULL);
-	r = popup(x, y, lab, n);
+	r = popup_m(x, y, lab, n);
 	if (r < 0)
 		return;
 	view_xref_label(&cur->view, (unsigned int) r, label, sizeof(label));
@@ -2489,12 +2489,12 @@ static void bookmarks_menu(short x, short y)
 	}
 	for (i = 0; i < bookmarks.n && i < BM_MAX; i++)
 	{
-		snprintf(lines[n], sizeof(lines[n]), "  %.40s ", bookmarks.b[i].title);
+		snprintf(lines[n], sizeof(lines[n]), "%.40s", bookmarks.b[i].title);
 		lab[n] = lines[n];
 		cmds[n++] = CMD_BM0 + (int) i;
 	}
 	log_event("menu", "bookmarks", NULL);
-	r = popup(x, y, lab, n);
+	r = popup_m(x, y, lab, n);
 	if (r < 0 || cmds[r] == CMD_NONE)
 		return;
 	log_event("menu", menu_command_name(cmds[r]), NULL);
@@ -2556,7 +2556,7 @@ static void bar_menu(short x, short y)
 		lab[i] = grey ? lines[i] : lines[i] + 1;
 	}
 	log_event("menu", "toolbar", NULL);
-	r = popup(x, y, lab, N);
+	r = popup_m(x, y, lab, N);
 	if (r < 0 || all[r].cmd == CMD_NONE)
 		return;
 	log_event("menu", menu_command_name(all[r].cmd), NULL);
@@ -2888,11 +2888,11 @@ static int bar_click(short mx, short my, short button)
 /* a tab's right-button menu: it, or every other one, closed */
 static void tab_menu(int i, short x, short y)
 {
-	static const char *const lab[] = { "  Close tab          ^U ", "  Close other tabs      " };
+	static const char *const lab[] = { "Close tab          ^U", "Close other tabs" };
 	short r;
 
 	log_event("menu", "tab-popup", NULL);
-	r = popup(x, y, lab, 2);
+	r = popup_m(x, y, lab, 2);
 	if (r == 0)
 	{
 		log_event("menu", "close-tab", NULL);

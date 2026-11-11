@@ -2103,15 +2103,15 @@ static void file_under(unsigned long g, short mx, short my)
 
 		if (p->kind != PANE_SUBJECT && p->kind != PANE_OTHER)
 			continue;
-		snprintf(lab[n], sizeof(lab[n]), "  %s%s", p->level ? "  " : "", p->text);
+		snprintf(lab[n], sizeof(lab[n]), "%s%s", p->level ? "  " : "", p->text);
 		line[n++] = (long) k;
 	}
-	strcpy(lab[n], "  New subject...");
+	strcpy(lab[n], "New subject...");
 	line[n++] = -1;
 	for (r = 0; r < n; r++)
 		l[r] = lab[r];
 	log_event("menu", "file-under", NULL);
-	r = popup(mx, my, l, n);
+	r = popup_m(mx, my, l, n);
 	free(lab);
 	redraw(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
 	if (r < 0)
@@ -2160,9 +2160,9 @@ static void right_click(short mx, short my)
 			lib_pane_select(&lib, p);
 			pane_moved(before, top_before);
 		}
-		lab[0] = lib_pane_name(&lib, p, t, sizeof(t)) == 0 ? "  Rename subject..." : "~  Rename subject...";
+		lab[0] = lib_pane_name(&lib, p, t, sizeof(t)) == 0 ? "Rename subject..." : "~Rename subject...";
 		log_event("menu", "subject", NULL);
-		if (popup(mx, my, lab, 1) == 0)
+		if (popup_m(mx, my, lab, 1) == 0)
 			rename_pane(p);
 		else
 			redraw(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
@@ -2175,10 +2175,10 @@ static void right_click(short mx, short my)
 	{
 		long os = lib.sel, ot = lib.top;
 		const lib_row *rw = &lib.rows[row];
-		static char l_open[] = "  Open             Return", l_open_no[] = "~  Open             Return";
-		static char l_index[] = "  Index", l_index_no[] = "~  Index";
-		static char l_file[] = "  File under...", l_file_no[] = "~  File under...";
-		static char l_ren[] = "  Rename subject...", l_ren_no[] = "~  Rename subject...";
+		static char l_open[] = "Open             Return", l_open_no[] = "~Open             Return";
+		static char l_index[] = "Index", l_index_no[] = "~Index";
+		static char l_file[] = "File under...", l_file_no[] = "~File under...";
+		static char l_ren[] = "Rename subject...", l_ren_no[] = "~Rename subject...";
 		const char *lab[5];
 		long p = rw->kind == LIB_GROUP ? lib_pane_of_row(&lib, row) : -1;
 		int r;
@@ -2196,7 +2196,7 @@ static void right_click(short mx, short my)
 		lab[3] = rw->kind == LIB_GUIDE ? l_file : l_file_no;
 		lab[4] = p >= 0 ? l_ren : l_ren_no;
 		log_event("menu", "row", NULL);
-		r = popup(mx, my, lab, 5);
+		r = popup_m(mx, my, lab, 5);
 		redraw(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
 		if (r == 0)
 			activate();
