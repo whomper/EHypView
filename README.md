@@ -29,7 +29,7 @@ each file on its own or all in `ehypview-x.y.zip`:
 |---|---|
 | `ehypview.prg` / `ehypview.acc` | the viewer as a program and as a desk accessory, for every ST, STE, TT and Falcon |
 | `ehypview.hyp`, `ehypview.ref` | its guide |
-| `icons/` (in the zip) | the desktop icon |
+| `ehypview.rsc`, `ehypvnv.rsc`, `ehypview.icn`, `ehypvwmk.icn` | the desktop icon (also in the zip's `icons/`) |
 
 1. Start `EHYPVIEW.PRG` from a folder of its own, or copy `EHYPVIEW.ACC` to the root of the boot drive.
    To be the help viewer for every program, copy the accessory there as `ST-GUIDE.ACC`.
