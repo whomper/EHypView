@@ -3473,8 +3473,19 @@ static void own_reload(void)
 
 int settings_put(const char *key, const char *value, const char *note)
 {
-	char *text = pf_load(settings_path, NULL), *t;
+	char *text, *t;
 	int r = -1;
+	const char *was = own_inf != NULL ? inf_get(own_inf, key) : NULL;
+
+	/* the INF is written only when a setting changed (guidelines 6.1,
+	   Erez 12 Nov 2026): the same value as the file has (as it was read
+	   or last written) leaves it alone, not even opened */
+	if (was != NULL && strcmp(was, value) == 0)
+	{
+		log_event("inf-same", key, NULL);
+		return 0;
+	}
+	text = pf_load(settings_path, NULL);
 
 	t = retired_out(inf_put(text != NULL ? text : inf_head, key, value, note));
 	if (t != NULL)

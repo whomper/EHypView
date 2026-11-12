@@ -1129,6 +1129,56 @@ def quick():
     return ok
 
 
+# EHYPVIEW.INF written only when a setting changed (guidelines 6.1, Erez
+# 12 Nov 2026): the Font dialog and Settings left with OK and nothing
+# different, then a quit, leave the file as it was, its date too (the
+# second run; the first may write what it adds); Settings with START=
+# changed writes it once
+INF_SAME_STEPS = [
+    ([], ["menu shown", "index 5 guides"]),
+    ([item(OPTIONS, 1)], ["dialog font"]),
+    ([RETURN], ["font-chosen *"]),
+    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
+    ([RETURN], ["dialog-closed settings ok"]),
+    ([("ctrl", Q)], ["quit"]),
+]
+INF_CHANGE_STEPS = [
+    ([], ["menu shown", "index 5 guides"]),
+    ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
+    (in_settings(("click",) + SET_START), ["menu settings-start"]),
+    (in_settings(("click",) + SET_START_NOW), ["settings-start now"]),
+    ([RETURN], ["dialog-closed settings ok"]),
+    ([("ctrl", Q)], ["quit"]),
+]
+
+
+def inf_same():
+    d = copy_dir("infsame", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n",
+                 "; the font\nFONT=System font\n; its size\nPOINT=8\n")
+    path = machines.ci_path(d, "ehypview.inf")
+    xvfb = start_xvfb()
+    try:
+        if not run_scenario("infsame1", d, INF_SAME_STEPS, windowed=True):
+            return False
+        with open(path, "rb") as f:
+            before = f.read()
+        when = os.stat(path).st_mtime_ns
+        time.sleep(2.5)                                 # a write would show in the date
+        if not run_scenario("infsame2", d, INF_SAME_STEPS, windowed=True):
+            return False
+        with open(path, "rb") as f:
+            same = f.read() == before and os.stat(path).st_mtime_ns == when
+        print("%s  EHYPVIEW.INF untouched by a run that changed nothing" % ("ok  " if same else "FAIL"))
+        if not run_scenario("infsame3", d, INF_CHANGE_STEPS, windowed=True):
+            return False
+        with open(path, "rb") as f:
+            changed = f.read() != before
+        print("%s  EHYPVIEW.INF written when START= changed" % ("ok  " if changed else "FAIL"))
+        return same and changed and check_inf(path, ["START=now", "FONT=System font"])
+    finally:
+        xvfb.terminate()
+
+
 # the dialogs' look (guidelines 5.6): 3D wherever the AES draws it (TOS 4,
 # EmuTOS in colour), flat on TOS 1 to 3 (and EmuTOS in fewer colours),
 # with no setting for it (27 Oct): an EHYPVIEW.INF that still has
@@ -1489,6 +1539,8 @@ def main():
     if sys.argv[3:] == ["accnvdi"]:                 # make accnvdi-test: the NVDI case alone
         print("      on %s" % machines.Machine(MACHINE, os.path.join(OUT, "accnvdi")).describe())
         return 0 if acc_nvdi() else 1
+    if sys.argv[3:] == ["infsame"]:                 # the INF left alone when nothing changed
+        return 0 if inf_same() else 1
     if sys.argv[3:] == ["quick"]:                   # quick clicks on Settings' pages alone
         return 0 if quick() else 1
     if sys.argv[3:] == ["bubble"]:                  # the tips through BubbleGEM alone
@@ -1539,6 +1591,7 @@ def main():
                                   ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG, "LIBRARY=panes"])
             ok = ok and st_field()
             ok = ok and quick()
+            ok = ok and inf_same()
             ok = ok and look()
             ok = ok and panebar()
             ok = ok and refile()
