@@ -229,7 +229,10 @@ for 2.1: the pop-ups on `popup_m`, Settings' choices on `popup_over` (D15, D27);
 (ask.c, D22) and `[Keep|Change]` (C19); `-DDLG_CLICK` (C16): Settings waits for a page's or a pop-up
 button's release before it draws (`let_go_over`, dialog.h's rule), then draws the two tabs and the page
 alone (`dlg_draw_range`); gui-test's quick scenario double-clicks the pages at 70 and 150 ms on ST-1 and
-Falcon-4:256 with NVDI.
+Falcon-4:256 with NVDI. Step 5: the first viewer window on the whole desk (D39); paging rows - 1
+(`page_lines`, `page_rows`; W5) with Shift read by `key_shift`; the window's arrows over the Subjects pane
+scroll it (common's `arrow_target`, D37); the library handles `WM_BOTTOMED` (W13); a disabled toolbar
+button greyed by the AES (`objc_draw` of a DISABLED box over it, W2).
 
 **At that release, Erez's configuration in the rigs** (Erez, 10 Nov 2026; AERA-Atari 148df17,
 `machines.ERZ_MACHINE`, `machines.erz_env()`): one of the Falcon function runs (hatari-test, gui-test,
