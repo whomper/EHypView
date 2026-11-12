@@ -358,6 +358,14 @@ static long visible_lines(void)
 	return h / ch > 0 ? h / ch : 1;
 }
 
+/* a page: the lines in sight less one, so one stays in sight (W5) */
+static long page_lines(void)
+{
+	long n = visible_lines();
+
+	return n > 1 ? n - 1 : 1;
+}
+
 static long visible_cols(void)
 {
 	short x, y, w, h;
@@ -611,24 +619,31 @@ static void draw_house(short x, short y, short w, short h)
 	vswr_mode(vdi_h, MD_REPLACE);
 }
 
-/* the inside of a button greyed, as the AES greys what can't be used:
-   every other pixel cleared */
-static void dim(short x1, short y1, short x2, short y2)
-{
-	short pxy[4];
+/* the part of the toolbar being drawn now (draw_bar's clip) */
+static short bar_clip[4];
 
-	pxy[0] = x1;
-	pxy[1] = y1;
-	pxy[2] = x2;
-	pxy[3] = y2;
-	vswr_mode(vdi_h, MD_TRANS);
-	vsf_interior(vdi_h, FIS_PATTERN);
-	vsf_style(vdi_h, 4);
-	vsf_color(vdi_h, 0);
-	vsf_perimeter(vdi_h, 0);
-	vr_recfl(vdi_h, pxy);
-	vsf_interior(vdi_h, FIS_SOLID);
-	vswr_mode(vdi_h, MD_REPLACE);
+/* a button that can't be used now greyed by the AES itself, as its
+   DISABLED (W2; EFTP's buttons): an invisible box in that state over
+   it, drawn by objc_draw, so it looks as the AES's own wherever it runs */
+static void dim(short x, short y, short w, short h)
+{
+	OBJECT o[1];
+	short x1 = x > bar_clip[0] ? x : bar_clip[0], y1 = y > bar_clip[1] ? y : bar_clip[1];
+	short x2 = x + w - 1 < bar_clip[2] ? (short) (x + w - 1) : bar_clip[2];
+	short y2 = y + h - 1 < bar_clip[3] ? (short) (y + h - 1) : bar_clip[3];
+
+	if (x2 < x1 || y2 < y1)
+		return;
+	memset(o, 0, sizeof(o));
+	o[0].ob_next = o[0].ob_head = o[0].ob_tail = -1;
+	o[0].ob_type = G_IBOX;
+	o[0].ob_flags = LASTOB;
+	o[0].ob_state = DISABLED;
+	o[0].ob_x = x;
+	o[0].ob_y = y;
+	o[0].ob_width = w;
+	o[0].ob_height = h;
+	objc_draw(o, 0, 0, x1, y1, (short) (x2 - x1 + 1), (short) (y2 - y1 + 1));
 }
 
 static void draw_button(const toolbar *t, int b)
@@ -657,7 +672,7 @@ static void draw_button(const toolbar *t, int b)
 		text_at((short) (x + (w - (short) strlen(l) * cw) / 2), (short) (y + 1), l, (long) strlen(l));
 	}
 	if (!bar_enabled(b))
-		dim((short) (x + 1), (short) (y + 1), (short) (x + w - 2), (short) (y + h - 2));
+		dim(x, y, w, h);
 }
 
 /* the toolbar within one rectangle (screen coordinates) */
@@ -672,6 +687,7 @@ static void draw_bar(short cx, short cy, short cw_, short ch_)
 	clip[1] = cy;
 	clip[2] = (short) (cx + cw_ - 1);
 	clip[3] = (short) (cy + ch_ - 1);
+	memcpy(bar_clip, clip, sizeof(bar_clip));
 	text_clip(vdi_h, clip);
 	fill(0, t.x, t.y, (short) (t.x + t.w - 1), (short) (t.y + t.h - 1));
 	font_sys_push();
@@ -1159,6 +1175,13 @@ static void open_window(void)
 		h = desk_h;
 	x = (short) (desk_x + (desk_w - w) / 2);
 	y = (short) (desk_y + (desk_h - h) / 3);
+	if (viewer_windows() == 1)             /* the first one: the whole desk (D39) */
+	{
+		x = desk_x;
+		y = desk_y;
+		w = desk_w;
+		h = desk_h;
+	} else
 	{
 		/* each further window a little down and to the right (this
 		   one, just made, is counted too) */
@@ -2220,8 +2243,11 @@ static void context_menu(short x, short y);
 static void key(short kstate, short kreturn)
 {
 	short scan = KEY_SCAN(kreturn), ascii = KEY_ASCII(kreturn);
-	int shift = (kstate & K_SHIFT) != 0, ctrl = key_ctrl(kstate, kreturn);
-	long rows = visible_lines();
+	/* Shift read as common's key_shift: an arrow typed with Shift while
+	   EHypView is busy comes with kstate 0 (3.2); a page is rows - 1,
+	   one line kept in sight (W5) */
+	int shift = key_shift(kstate, kreturn), ctrl = key_ctrl(kstate, kreturn);
+	long rows = page_lines();
 	int rc = -2;
 
 	if (ctrl && ascii != 0x09 && app_key(kstate, kreturn))
@@ -3215,7 +3241,7 @@ static void viewer_message(short *msg)
 	case WM_ARROWED:
 		if (msg[3] == cur->h)
 		{
-			long rows = visible_lines(), cols = visible_cols();
+			long rows = page_lines(), cols = visible_cols();
 
 			switch (msg[4])
 			{

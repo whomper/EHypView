@@ -44,6 +44,7 @@
 #include "dialog.h"
 #include "popup.h"
 #include "ask.h"
+#include "arrowed.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
 #define MARGIN 8
@@ -319,6 +320,14 @@ static long rows_fit(long from)
 static long visible_rows(void)
 {
 	return rows_fit(lib.top);
+}
+
+/* a page: the rows in sight less one (W5) */
+static long page_rows(void)
+{
+	long n = visible_rows();
+
+	return n > 1 ? n - 1 : 1;
 }
 
 /* the first row when the last is at the bottom */
@@ -1744,6 +1753,38 @@ static int pane_scroll(long n)
 	return pane_goto(pane_top + n);
 }
 
+/* the window's arrows with the pointer on the Subjects pane, while it
+   has more lines than show: they scroll it (D37, common's arrowed.c),
+   a page its lines less one (W5); 0 when they go to the rows */
+static int arrows_to_subjects(short action)
+{
+	ARROW_PANE p[1];
+	short wx, wy, ww, wh;
+	long page;
+
+	if (!panes() || pane_max_top() <= 0)
+		return 0;
+	work_area(&wx, &wy, &ww, &wh);
+	p[0].r.x = wx;
+	p[0].r.y = (short) (wy + header_h());
+	p[0].r.w = (short) (pane_text_w() + libbar_width());
+	p[0].r.h = (short) (wh - header_h());
+	if (arrow_target(p, 1, 0) != 1)
+		return 0;
+	page = pane_last() - pane_top;     /* the lines shown less one */
+	if (page < 1)
+		page = 1;
+	switch (action)
+	{
+	case WA_UPPAGE: pane_scroll(-page); break;
+	case WA_DNPAGE: pane_scroll(page); break;
+	case WA_UPLINE: pane_scroll(-1); break;
+	case WA_DNLINE: pane_scroll(1); break;
+	default: return 0;
+	}
+	return 1;
+}
+
 /* ^C ^X ^V: the search line (^C: the hypertext chosen, else the search) */
 void libwin_clip(int what)
 {
@@ -1781,8 +1822,10 @@ void libwin_clip(int what)
 void libwin_key(short kstate, short kreturn)
 {
 	short scan = KEY_SCAN(kreturn), ascii = KEY_ASCII(kreturn);
-	int shift = (kstate & K_SHIFT) != 0, ctrl = key_ctrl(kstate, kreturn);
-	long rows = visible_rows(), old_sel = lib.sel, old_top = lib.top;
+	/* Shift as key_shift (an arrow typed while busy comes with kstate 0,
+	   3.2); a page is rows - 1 (W5) */
+	int shift = key_shift(kstate, kreturn), ctrl = key_ctrl(kstate, kreturn);
+	long rows = page_rows(), old_sel = lib.sel, old_top = lib.top;
 	char q[LIB_QUERY_MAX];
 	size_t n = strlen(lib.query);
 
@@ -2380,6 +2423,10 @@ int libwin_message(short *msg)
 	case WM_TOPPED:
 		wind_set(lib_h, WF_TOP, lib_h, 0, 0, 0);
 		break;
+	case WM_BOTTOMED:                      /* behind the others, as the viewers (W13) */
+		wind_set(lib_h, WF_BOTTOM, 0, 0, 0, 0);
+		log_event("library-bottomed", NULL, NULL);
+		break;
 	case WM_CLOSED:
 		libwin_close();
 		break;
@@ -2440,8 +2487,10 @@ int libwin_message(short *msg)
 			redraw_all();
 		break;
 	case WM_ARROWED:
+		if (arrows_to_subjects(msg[4]))       /* the pointer on the Subjects (D37) */
+			break;
 		{
-			long rows = visible_rows();
+			long rows = page_rows();
 
 			switch (msg[4])
 			{

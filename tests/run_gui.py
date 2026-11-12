@@ -606,21 +606,34 @@ def item(title, n):
 # where its work area is on the 8-pixel grid (wind_x8, the guidelines'
 # Speed; it started at 27 before), and what is measured in it below is
 # moved by VX (its text, 8 pixels in now, by one pixel less)
-VX = -3
+# Since 2.1 the first viewer window opens on the whole desk (D39): its
+# frame at 7,19 for 23,36, everything in it 16 pixels left and 17 up
+VX = -3 - 16
+VY = -17
 
 
 def vx(x):
     return x + VX
 
 
+def vy(y):
+    return y + VY
+
+
+# what is at the window's right (the menu button [=]): the window now ends
+# at the screen's edge, 640, where it ended at 623: 17 pixels right
+def rx(x):
+    return x + 17
+
+
 # the viewer's toolbar (src/gem/toolbar.c): the middle of each button, in
 # the first window; the page starts 24 pixels lower than before it; menus
 # from a button open below it, their first item at y 111, the next 18 below
-TB_Y = 90
+TB_Y = vy(90)
 TB_BACK, TB_FORWARD, TB_HOME = (vx(43), TB_Y), (vx(69), TB_Y), (vx(95), TB_Y)
 TB_PREV, TB_TOC, TB_NEXT = (vx(125), TB_Y), (vx(179), TB_Y), (vx(233), TB_Y)
 TB_INDEX, TB_SEEALSO, TB_LIBRARY, TB_BOOKMARKS, TB_MENU = \
-    (vx(279), TB_Y), (vx(349), TB_Y), (vx(431), TB_Y), (vx(513), TB_Y), (vx(579), TB_Y)
+    (vx(279), TB_Y), (vx(349), TB_Y), (vx(431), TB_Y), (vx(513), TB_Y), (rx(579), TB_Y)
 
 
 def tb(button, kind="click"):
@@ -657,22 +670,22 @@ MOUSE_STEPS = [
     ([tb(TB_BACK)], ["toolbar back", "page %s Main" % BASIC]),
     ([tb(TB_FORWARD)], ["toolbar forward", "page %s Index" % BASIC]),
     ([tb(TB_BACK, "rclick")], ["menu back-history"]),
-    ([("click", vx(70), 111)], ["history -1", "page %s Main" % BASIC]),
+    ([("click", vx(70), vy(111))], ["history -1", "page %s Main" % BASIC]),
     ([("shift", UNDO)], ["page %s Index" % BASIC]),        # Shift+Undo: forward
     ([BACKSPACE], ["page %s Main" % BASIC]),
     # See also: the page's @xref
     ([tb(TB_SEEALSO)], ["toolbar see-also", "menu see-also"]),
-    ([("click", vx(340), 111)], ["see-also The help page", "page %s Help" % BASIC]),
+    ([("click", vx(340), vy(111))], ["see-also The help page", "page %s Help" % BASIC]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
     ([("hover",) + TB_LIBRARY], ["tip library"]),           # a tooltip after a second
     # Bookmarks: add this page, then remove it
     ([tb(TB_BOOKMARKS)], ["toolbar bookmarks", "menu bookmarks"]),
-    ([("click", vx(540), 111)], ["menu bookmark-add", "bookmark added *"]),
+    ([("click", vx(540), vy(111))], ["menu bookmark-add", "bookmark added *"]),
     ([tb(TB_BOOKMARKS)], ["toolbar bookmarks", "menu bookmarks"]),
-    ([("click", vx(540), 129)], ["menu bookmark-remove", "bookmark removed *"]),
+    ([("click", vx(540), vy(129))], ["menu bookmark-remove", "bookmark removed *"]),
     # the menu button: About first (the accessory's way to it)
     ([tb(TB_MENU)], ["toolbar menu", "menu toolbar"]),
-    ([("click", vx(600), 111)], ["menu about", "dialog about *"]),
+    ([("click", rx(600), vy(111))], ["menu about", "dialog about *"]),
     ([("click", 320, 300)], []),                            # a click closes it
     ([tb(TB_LIBRARY)], ["toolbar library", "library 4"]),
     ([("wait", 1)], []),                                    # (a picture of it)
@@ -680,16 +693,16 @@ MOUSE_STEPS = [
     ([BACKSPACE] * 3, ['search "" 4']),
     ([("ctrl", U)], ["closed library"]),
     # the page: links, the right button's menu, pop-ups
-    ([("click", vx(120), 142)], ["page %s Second" % BASIC]),    # "to Second"
-    ([("rclick", vx(300), 174)], ["menu popup"]),               # right button: the menu,
-    ([("click", vx(330), 185)], ["menu back", "page %s Main" % BASIC]),     # Back first
-    ([("click", vx(120), 158)], ["popup Pop"]),                 # "popup here": the pop-up,
+    ([("click", vx(120), vy(142))], ["page %s Second" % BASIC]),    # "to Second"
+    ([("rclick", vx(300), vy(174))], ["menu popup"]),               # right button: the menu,
+    ([("click", vx(330), vy(185))], ["menu back", "page %s Main" % BASIC]),     # Back first
+    ([("click", vx(120), vy(158))], ["popup Pop"]),                 # "popup here": the pop-up,
     ([("click", 500, 424)], ["popup-closed Pop"]),          # a click outside closes it
-    ([("click", vx(120), 158)], ["popup Pop"]),                 # and its own link
-    ([("click", vx(200), 199)], ["popup-link Pop", "page %s Second" % BASIC]),  # goes there
+    ([("click", vx(120), vy(158))], ["popup Pop"]),                 # and its own link
+    ([("click", vx(200), vy(199))], ["popup-link Pop", "page %s Second" % BASIC]),  # goes there
     ([BACKSPACE], ["page %s Main" % BASIC]),
-    ([("rclick", vx(300), 174)], ["menu popup"]),               # and About last (rows of 18)
-    ([("click", vx(330), 437)], ["menu about", "dialog about *"]),
+    ([("rclick", vx(300), vy(174))], ["menu popup"]),               # and About last (rows of 18)
+    ([("click", vx(330), vy(437))], ["menu about", "dialog about *"]),
     ([("click", 320, 300)], []),                            # a click closes it
     ([item(DESK, 0)], ["menu about", "dialog about *"]),    # the About box
     ([("click", 320, 300)], []),                            # a click closes it
@@ -722,18 +735,18 @@ MOUSE_STEPS = [
     ([item(HELPMENU, 0)], ["menu guide", "alert no-guide"]),
     ([RETURN], []),
     # several windows: Shift+click opens the link in a new one
-    ([("sclick", vx(120), 142)], ["window new 2", "page %s Second" % BASIC]),
+    ([("sclick", vx(120), vy(142))], ["window new 2", "page %s Second" % BASIC]),
     ([item(BOOK, 0)], ["menu bookmark-add", "bookmark added *"]),
     ([("ctrl", U)], ["closed viewer"]),
     ([item(BOOK, 3)], ["menu bookmark", "page %s Second" % BASIC]),   # in the first window
     ([item(BOOK, 1)], ["menu bookmark-remove", "bookmark removed *"]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
-    ([("rclick", vx(120), 142)], ["menu popup"]),               # on a link, the menu has
-    ([("click", vx(150), 189)], ["menu link-window", "window new 2", "page %s Second" % BASIC]),
+    ([("rclick", vx(120), vy(142))], ["menu popup"]),               # on a link, the menu has
+    ([("click", vx(150), vy(189))], ["menu link-window", "window new 2", "page %s Second" % BASIC]),
     ([("ctrl", U)], ["closed viewer"]),
     # tabs (Erez, 31 Oct 2026): the link's menu has "Link in new tab"
-    ([("rclick", vx(120), 142)], ["menu popup"]),
-    ([("click", vx(150), 207)], ["menu link-tab", "tab new 2", "page %s Second" % BASIC, "strip *"]),
+    ([("rclick", vx(120), vy(142))], ["menu popup"]),
+    ([("click", vx(150), vy(207))], ["menu link-tab", "tab new 2", "page %s Second" % BASIC, "strip *"]),
     ([BACKSPACE], ["page %s Main" % BASIC]),                   # its Back: where the link was
     ([("ctrl", TAB)], ["tab show 1", "page %s Main" % BASIC]),  # Control+Tab, round
     ([("ctrl", TAB)], ["tab show 2", "page %s Main" % BASIC]),
@@ -741,7 +754,7 @@ MOUSE_STEPS = [
     ([("ctrl+shift", TAB)], ["tab show 2"]),
     (tab_click(0, "rclick"), ["menu tab-popup"]),               # a tab's menu:
     (tab_menu_item(0, 1), ["menu close-other-tabs", "tab show 1", "tab closed 1"]),   # the others closed
-    ([("cclick", vx(120), 142)], ["tab new 2", "page %s Second" % BASIC]),           # Control+click
+    ([("cclick", vx(120), vy(142))], ["tab new 2", "page %s Second" % BASIC]),           # Control+click
     ([("ctrl", U)], ["tab closed 1", "page %s Main" % BASIC]),   # ^U: the tab, the window stays
     ([item(OPTIONS, 1)], ["menu font", "dialog font"]),     # the font selector
     ([ESC], []),
