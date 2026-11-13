@@ -1560,6 +1560,10 @@ static int pictures_idle(void)
 #define REST_STEP 1024UL                /* bytes a step: an ST's 30 ms */
 static int index_worked;                /* the index's slice ran this turn:
                                            no step of a page's rest after it */
+static int rest_due;                    /* the index had the last turn: a
+                                           page's rest has the next (they take
+                                           turns, the rest not left till the
+                                           index is done) */
 
 static int rests_busy(void)
 {
@@ -1623,6 +1627,7 @@ static int rests_idle(void)
 		if (index_worked)
 			return 1 | 2;
 		aes_profile_tag("page-rest");
+		rest_due = 0;
 #ifdef AES_PROFILE
 		{
 			unsigned long t0 = tos_hz200();
@@ -4836,9 +4841,11 @@ int main(void)
 			index_news = 0;
 			info_everywhere();
 			libwin_index_changed();
-		} else if (which == MU_TIMER && job_pending() && (bg_may_work() || (urgent && twin_prg() < 0)))
+		} else if (which == MU_TIMER && job_pending() && (bg_may_work() || (urgent && twin_prg() < 0)) &&
+			   !(rest_due && rests_busy()))
 		{
 			index_worked = 1;
+			rest_due = 1;
 			/* a slice (bgwork.h), ending a little early: the step that
 			   starts last may take a while on a 16 MHz machine, and one
 			   that opens a file or reads a folder begins a slice */
