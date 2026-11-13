@@ -35,7 +35,10 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
            (ASKHELP.PRG, VA_START)
 
 It prints a table: each action's longest stretch on each machine, marked
-"over" where it is over the guidelines' time, and fails when one is.
+"over" where it is over the guidelines' time, and fails when one is, or
+when what an action waits for never came ("no event": a scroll's "top",
+Tab's "select", a page's "page"; the speed build logs them), so a row
+never times a key that did nothing.
 SPEED_ONLY=page,acc runs only those. SPEED_FONT="Courier,14" writes
 EHYPVIEW.INF's FONT= and POINT= (the font's name as the VDI gives it,
 trailing blanks off: a GDOS font, under NVDI); unset, the system font.
@@ -75,8 +78,11 @@ def note(action, limit, machine, ms):
     if (action, limit) not in results:
         results[(action, limit)] = {}
         order.append((action, limit))
-    old = results[(action, limit)].get(machine)
-    results[(action, limit)][machine] = ms if old is None or ms is None else max(old, ms)
+    row = results[(action, limit)]
+    if machine in row and row[machine] is None:
+        return                          # once an action came to nothing, the row says so
+    old = row.get(machine)
+    row[machine] = ms if old is None or ms is None else max(old, ms)
 
 
 def gaps(lines):
@@ -301,15 +307,16 @@ def whole(run, spec, what):
     """the page drawn whole: Shift+Clr/Home to its end, Clr/Home to its top"""
     for mods in ([SHIFT], []):
         note(what + ": drawn whole (Shift+Clr/Home, Clr/Home)", WHOLE, spec,
-             run.act(lambda: run.key(0x47, mods), settle=1.0))
+             run.act(lambda: run.key(0x47, mods), "top ", settle=1.0, timeout=20))
 
 
 def scrolls(run, spec, what):
     for _ in range(3):
-        note(what + ": a line scrolled (Down)", LINE, spec, run.act(lambda: run.key(DOWN), settle=1.0))
+        note(what + ": a line scrolled (Down)", LINE, spec,
+             run.act(lambda: run.key(DOWN), "top ", settle=1.0, timeout=20))
     for _ in range(3):
         note(what + ": a page scrolled (Shift+Down)", PAGE, spec,
-             run.act(lambda: run.key(DOWN, [SHIFT]), settle=1.0))
+             run.act(lambda: run.key(DOWN, [SHIFT]), "top ", settle=1.0, timeout=20))
 
 
 def page_case(spec, nvdi):
@@ -325,7 +332,7 @@ def page_case(spec, nvdi):
         time.sleep(1)
         whole(run, spec, "big page")
         scrolls(run, spec, "big page")
-        note("a key: Tab chooses a link", KEY, spec, run.act(lambda: run.key(TAB)))
+        note("a key: Tab chooses a link", KEY, spec, run.act(lambda: run.key(TAB), "select", timeout=20))
         note("Settings opened (^,)", DIALOG, spec,
              run.act(lambda: run.key(COMMA, [CTRL]), "dialog settings"))
         note("Settings closed (Esc): the page uncovered", WHOLE, spec,
@@ -401,6 +408,7 @@ def click_case(spec, nvdi):
     run = Run(os.path.join(slug(spec), "click"), m, r"C:\LAUNCH.PRG", windowed=True)
     try:
         ok = run.wait("page " + page, 180, 0)
+        run.wait("page-whole", 20, 0)   # a big page whole (an older build says nothing)
         time.sleep(5)                   # (the index goes on in its slices, never in a press's turn)
         at = [e.split()[1:5] for e in run.events(0) if e.startswith("text-at ")]
         if not ok or not at:
@@ -509,7 +517,9 @@ def main():
         for s in SPECS:
             v = results[(a, lim)].get(s)
             if v is None:
-                cells.append("%14s" % ("-" if s not in results[(a, lim)] else "no event"))
+                missing = s in results[(a, lim)]
+                over += missing          # what it waited for never came: the row timed nothing
+                cells.append("%14s" % ("no event" if missing else "-"))
             else:
                 bad = v > lim
                 over += bad

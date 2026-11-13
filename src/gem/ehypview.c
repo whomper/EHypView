@@ -1411,6 +1411,15 @@ static void scroll_to(long top, long left)
 	{
 		short x, y, w, h;
 
+#ifdef AES_PROFILE
+		{
+			char a[16], b[16];         /* the speed rig: the key moved it */
+
+			sprintf(a, "%ld", cur->view.top);
+			sprintf(b, "%ld", cur->view.left);
+			log_event("top", a, b);
+		}
+#endif
 		cur->sliders_due = 1;          /* sliders_now(), when no key waits */
 		work_area(&x, &y, &w, &h);
 		if (cur->view.left == ol && cur->lay.gfx_y != NULL)
