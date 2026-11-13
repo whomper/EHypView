@@ -419,9 +419,23 @@ static int parse(hyp_page_job *j, unsigned long budget)
 			   loop of its own (an ST: 72 cycles a byte before). The page
 			   ends in a NUL (hyp_load, hyp_unpack_take), so it stops
 			   there at the latest, without a test against `end` */
+#if defined(EHV_TOS) && defined(__mc68000__)
+			{
+				/* two instructions a byte, 18 cycles on a 68000 (GCC's
+				   loop took 30): a byte above ESC compared from the
+				   pointer and the loop again; q ends past the one that
+				   stopped it */
+				const unsigned char *q = p + 1;
+
+				__asm__ volatile("1:\tcmp.b (%0)+,%1\n\tbcs.s 1b"
+						 : "+a"(q) : "d"((short) ESC) : "cc", "memory");
+				p = q - 1;
+			}
+#else
 			do
 				p++;
 			while (*p > ESC);
+#endif
 			continue;
 		}
 		if (*p == ESC || *p == '\0')
