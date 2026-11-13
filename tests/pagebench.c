@@ -118,6 +118,29 @@ static unsigned long sum_page(const hyp_page *pg)
 	return s;
 }
 
+/* the same object unpacked a piece at a time (hyp_unpack_more, as a
+   search and a picture do), `piece` bytes a call: its checksum, which
+   must be the one of hyp_load's at once; 0 when it failed */
+static unsigned long sum_pieces(hyp_doc *doc, unsigned short n, unsigned long piece)
+{
+	int rc;
+	unsigned long size, s = 0;
+	unsigned char *data;
+	hyp_unpack *u = hyp_unpack_begin(doc, n, &rc);
+
+	if (u == NULL)
+		return 0;
+	while ((rc = hyp_unpack_more(u, piece)) == 0)
+		;
+	if (rc > 0 && (data = hyp_unpack_take(u, &size)) != NULL)
+	{
+		s = sum_bytes(1, data, size);
+		free(data);
+	} else
+		hyp_unpack_free(u);
+	return s;
+}
+
 /* every text page of the file: unpacked, then parsed; the checksums, and
    the best time of `rounds` for the biggest page */
 static int bench(const char *path, int rounds)
@@ -145,7 +168,10 @@ static int bench(const char *path, int rounds)
 			/* pictures and the rest: unpacked by the same decoder */
 			if (doc->entries[n].size > 0 && hyp_load(doc, n, &data, &size) == HYP_OK)
 			{
-				snprintf(line, sizeof(line), "object %u: %lu bytes %08lx\n", n, size, sum_bytes(1, data, size));
+				unsigned long a = sum_bytes(1, data, size);
+
+				snprintf(line, sizeof(line), "object %u: %lu bytes %08lx%s\n", n, size, a,
+					 sum_pieces(doc, n, 97) == a ? "" : " PIECES DIFFER");
 				out(line);
 				free(data);
 			}
@@ -160,8 +186,9 @@ static int bench(const char *path, int rounds)
 			continue;
 		}
 		pg = hyp_page_load(doc, n, &err);
-		snprintf(line, sizeof(line), "page %u: %lu bytes %08lx, parsed %08lx\n", n, size,
-			 sum_bytes(1, data, size), pg != NULL ? sum_page(pg) : 0UL);
+		snprintf(line, sizeof(line), "page %u: %lu bytes %08lx, parsed %08lx%s\n", n, size,
+			 sum_bytes(1, data, size), pg != NULL ? sum_page(pg) : 0UL,
+			 sum_pieces(doc, n, 97) == sum_bytes(1, data, size) ? "" : " PIECES DIFFER");
 		out(line);
 		free(data);
 		hyp_page_free(pg);
