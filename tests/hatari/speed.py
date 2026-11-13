@@ -20,9 +20,9 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
            Settings (^,) opened and closed with Esc; the library (^L)
            drawn whole; letters typed into its search; a full-text search
            (Return); the library closed (^U): the page uncovered
-  images   IMAGES.HYP (a 640 x 400 16-colour picture), and on a Falcon in
-           256 colours COLOUR.HYP: the page drawn, a line and a page
-           scrolled
+  images   IMAGES.HYP (a 640 x 400 16-colour picture): the page drawn, a
+           line and a page scrolled; on a Falcon in 256 colours COLOUR.HYP
+           drawn (its page fits the window)
   front    ECal's guide from its release (the family's front page, 4.3)
   acc      EHYPVIEW.ACC opened from the Desk menu (Xvfb and xdotool)
            (acc and help skip ST and Falcon-4: the accessory on those
@@ -373,7 +373,7 @@ def page_case(spec, nvdi):
         run.stop()
 
 
-def picture_case(spec, nvdi, name, hyp, what):
+def picture_case(spec, nvdi, name, hyp, what, scrolled=True):
     d = os.path.join(OUT, slug(spec), name)
     m = make_drive(os.path.join(d, "c"), nvdi, start=hyp)
     run = Run(os.path.join(slug(spec), name), m, r"C:\LAUNCH.PRG")
@@ -383,9 +383,10 @@ def picture_case(spec, nvdi, name, hyp, what):
         time.sleep(2)
         note(what + ": page drawn at the start (longest stretch)", WHOLE, spec,
              longest(run.lines()) if ok else None)
-        scrolls(run, spec, what, from_top=True)
-        to_top(run)
-        whole(run, spec, what)
+        if scrolled:                    # COLOUR.HYP's page fits the window: nothing to scroll
+            scrolls(run, spec, what, from_top=True)
+            to_top(run)
+            whole(run, spec, what)
     finally:
         run.stop()
 
@@ -502,7 +503,8 @@ def main():
                 picture_case(spec, nvdi, "images", "C:\\FIXT\\IMAGES\\IMAGES.HYP", "IMAGES.HYP (16-colour picture)")
                 if SPEC_NAME.startswith("Falcon"):
                     SPEC_NAME = SPEC_NAME.split(":")[0] + ":256"
-                    picture_case(spec, nvdi, "colour256", "C:\\FIXT\\COLOUR.HYP", "COLOUR.HYP in 256 colours")
+                    picture_case(spec, nvdi, "colour256", "C:\\FIXT\\COLOUR.HYP", "COLOUR.HYP in 256 colours",
+                                 scrolled=False)
                     SPEC_NAME = spec[:-5] if nvdi else spec
             if want("front"):
                 front_case(spec, nvdi)
