@@ -422,7 +422,9 @@ def click_case(spec, nvdi):
     try:
         ok = run.wait("page " + page, 180, 0)
         run.wait("page-whole", 20, 0)   # a big page whole (an older build says nothing)
-        time.sleep(5)                   # (the index goes on in its slices, never in a press's turn)
+        # pressed once the index is done, in both builds the same state
+        run.wait("index-done", 600, 0)
+        time.sleep(5)
         at = [e.split()[1:5] for e in run.events(0) if e.startswith("text-at ")]
         if not ok or not at:
             note("a link pressed: drawn chosen", KEY, spec, None)
