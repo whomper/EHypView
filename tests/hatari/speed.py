@@ -288,6 +288,9 @@ def screen(run):
 def start_times(run, page):
     """the start: the first event call, and the longest stretch till the page was drawn"""
     ok = run.wait("page " + page, 120, 0)
+    # a big page is shown from its head, the rest loaded in steps: the
+    # actions are timed once it is whole (an older build says nothing)
+    run.wait("page-whole", 10, 0)
     time.sleep(2)
     evs = run.events(0)
     first = next((int(e.split()[1]) for e in evs if e.startswith("started ")), None)

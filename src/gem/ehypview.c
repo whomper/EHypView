@@ -1515,6 +1515,124 @@ static int pictures_idle(void)
 	return 0;
 }
 
+/*
+ * A big page shown from its head (view.h: its first lines at once, the
+ * whole page loaded a piece at a time between event calls; the
+ * guidelines' Speed, Erez 13 Nov 2026): the rest in the same idle turns
+ * as the pictures, and in the head's place once the window's pictures
+ * are done (a picture half made would be begun again). Before a key, a
+ * click or a message that may need the whole page, it is finished at
+ * once (rests_finish), as a page was loaded before.
+ */
+#define REST_STEP 1024UL                /* bytes a step: an ST's 30 ms */
+static int index_worked;                /* the index's slice ran this turn:
+                                           no step of a page's rest after it */
+
+static int rests_busy(void)
+{
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+		if (viewers[i].used && view_rest_pending(&viewers[i].view))
+			return 1;
+	return 0;
+}
+
+/* viewer v's whole page in its head's place: the same lines first, so
+   only what was below the head's end is drawn again */
+static void rest_in(viewer *v)
+{
+	viewer *was = cur;
+	long head = v->view.page != NULL ? v->view.page->nlines : 0;
+	char n[16];
+
+	cur = v;
+	aes_profile_tag("page-swap");
+	view_rest_swap(&cur->view);
+	make_layout();
+	clamp_scroll();
+	if (cur->h > 0 && !cur->icon)
+	{
+		update_info();
+		set_sliders();
+		if (cur->view.top + visible_lines() > head)
+			redraw_all();               /* the head's end was in sight */
+	}
+	sprintf(n, "%u", cur->view.page != NULL ? cur->view.page->nlines : 0);
+	log_event("page-whole", n, "lines");
+	cur = was;
+}
+
+/* a step of a page's rest: 1 more to do */
+static int rests_idle(void)
+{
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+	{
+		viewer *v = &viewers[i];
+		int r;
+
+		if (!v->used || !view_rest_pending(&v->view))
+			continue;
+		if (v->view.whole != NULL)
+		{
+			/* the whole page in: swapped in a turn of its own, once
+			   the window's pictures are done */
+			if (layout_busy(&v->lay))
+				return 1;
+			rest_in(v);
+			return rests_busy() | 2;     /* the slice ends */
+		}
+		/* one step a turn (an ST: 30 ms, 85 where a step begins the
+		   unpacker's next block): the slice ends with it; none in a
+		   turn the index's slice had */
+		if (index_worked)
+			return 1 | 2;
+		aes_profile_tag("page-rest");
+#ifdef AES_PROFILE
+		{
+			unsigned long t0 = tos_hz200();
+			char a[16];
+
+			r = view_rest_step(&v->view, REST_STEP);
+			sprintf(a, "%lu", (tos_hz200() - t0) * 5);
+			log_event("rest-step", a, "ms");
+		}
+#else
+		r = view_rest_step(&v->view, REST_STEP);
+#endif
+		if (r >= 0)
+			return 1 | 2;                /* more, or the swap next turn */
+		if (r < 0)
+		{
+			viewer *was = cur;
+
+			cur = v;
+			if (cur->h > 0)
+				update_info();      /* "Cannot show the rest of the page" */
+			cur = was;
+		}
+		return rests_busy();
+	}
+	return 0;
+}
+
+/* every page's rest now (before what may need the whole page) */
+static void rests_finish(void)
+{
+	int i;
+
+	for (i = 0; i < MAX_VIEWERS; i++)
+		if (viewers[i].used && view_rest_pending(&viewers[i].view))
+		{
+			while (view_rest_step(&viewers[i].view, 0x7FFFFFFFUL) == 0)
+				;
+			if (viewers[i].view.whole != NULL)
+				rest_in(&viewers[i]);
+		}
+}
+
 /* one line of the page drawn again: a link chosen or left */
 static void redraw_line(long line)
 {
@@ -4513,6 +4631,7 @@ int main(void)
 	viewers[0].used = 1;
 	viewers[0].ntabs = 1;
 	view_init(&cur->view, NULL);
+	view_head_bytes = 6144;            /* a big page's first screen at once (view.h) */
 	bg_init(is_acc ? start_when : BG_NOW);
 	if (!is_acc)
 	{
@@ -4575,7 +4694,7 @@ int main(void)
 		log_event("started", num, "ms");
 	}
 	aes_profile_tag("idle");
-	fts_busy = pictures_busy();         /* the page on the command line's */
+	fts_busy = pictures_busy() || rests_busy();   /* the page on the command line's */
 	while (!quit_now)
 	{
 		short flags = MU_MESAG, which;
@@ -4614,6 +4733,11 @@ int main(void)
 		   AESGAP lines of an -DAES_PROFILE build */
 		aes_profile_tag(which & (MU_MESAG | MU_KEYBD | MU_BUTTON) ? "event" : "idle");
 		bg_tick();
+		index_worked = 0;
+		/* a key, a click or a message that may need a page whole */
+		if ((which & (MU_KEYBD | MU_BUTTON)) ||
+		    ((which & MU_MESAG) && msg[0] != WM_REDRAW && msg[0] != WM_MOVED && msg[0] != WM_TOPPED))
+			rests_finish();
 		if ((which & MU_MESAG) && !libwin_message(msg))
 			message(msg);
 		if ((which & MU_KEYBD) && crash_test(KEY_SCAN(ev.kreturn)))
@@ -4667,7 +4791,7 @@ int main(void)
 			aes_profile_tag("sliders");
 			sliders_now();
 			slid = 1;
-			fts_busy = libwin_busy() || pictures_busy();
+			fts_busy = libwin_busy() || pictures_busy() || rests_busy();
 		} else if (index_news && which == MU_TIMER)
 		{
 			/* the windows show the new index (or progress): a turn of
@@ -4678,6 +4802,7 @@ int main(void)
 			libwin_index_changed();
 		} else if (which == MU_TIMER && job_pending() && (bg_may_work() || (urgent && twin_prg() < 0)))
 		{
+			index_worked = 1;
 			/* a slice (bgwork.h), ending a little early: the step that
 			   starts last may take a while on a 16 MHz machine, and one
 			   that opens a file or reads a folder begins a slice */
@@ -4704,7 +4829,7 @@ int main(void)
 		   not after a key, a click or a message (the guidelines,
 		   Speed: what the user did answered at once) */
 		if (which & (MU_KEYBD | MU_BUTTON | MU_MESAG))
-			fts_busy = libwin_busy() || pictures_busy();
+			fts_busy = libwin_busy() || pictures_busy() || rests_busy();
 		else if ((which & MU_TIMER) && !slid)
 		{
 			/* work, or drawing what it found: never both in a turn */
@@ -4713,7 +4838,7 @@ int main(void)
 			aes_profile_tag("lib-work");
 			bg_begin();
 			do
-				r = pictures_idle() | libwin_idle();
+				r = pictures_idle() | rests_idle() | libwin_idle();
 			while (r == 1 && bg_more());
 			fts_busy = r & 1;
 		}
