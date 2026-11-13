@@ -56,7 +56,32 @@ typedef struct {
 	 */
 	hyp_page *popup;             /* NULL when none is open       */
 	unsigned short popup_node;   /* its index entry              */
+	/*
+	 * A big page is shown from its head (hyp_page_load_head: its first
+	 * lines, each as the whole page has it) while the whole of it is
+	 * loaded a piece at a time (view_rest_step); view_rest_swap puts it
+	 * in the head's place. Any change of page drops it.
+	 */
+	hyp_page_job *rest;          /* the whole page being loaded, or NULL */
+	hyp_page *whole;             /* loaded, waiting for view_rest_swap */
 } ehv_view;
+
+/* the head's size (bytes) for a big page; 0 (the default): pages come
+   whole at once, as before */
+extern unsigned long view_head_bytes;
+
+/* 1 while a page is shown from its head (its rest being loaded) */
+int view_rest_pending(const ehv_view *v);
+/* the rest loaded on for about `budget` bytes: 0 more to do, 1 the
+   whole page is in (view_rest_swap), -1 it failed (the head stays,
+   v->status says so) */
+int view_rest_step(ehv_view *v, unsigned long budget);
+/* the whole page, loaded, in the head's place: the place, the column
+   and the link chosen kept (its lines begin the same) */
+void view_rest_swap(ehv_view *v);
+/* the rest loaded and swapped in now (before anything that needs the
+   whole page) */
+void view_rest_finish(ehv_view *v);
 
 void view_init(ehv_view *v, const ehv_index *idx);
 void view_free(ehv_view *v);

@@ -245,6 +245,8 @@ $(ATARI)/%.o: src/gem/%.c src/gem/*.h src/view/*.h $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -Isrc/view -Isrc/gem -std=gnu99 -c -o $@ $<
 $(ATARI)/ehvcheck.o: tests/ehvcheck.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -c -o $@ $<
+$(ATARI)/pagebench.o: tests/pagebench.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -c -o $@ $<
 $(ATARI):
 	mkdir -p $@
 
@@ -273,6 +275,8 @@ $(HATARI_DIR)/BUBBLE.ACC: common/tests/notify/fakebgem.c common/ui/notify.h
 
 $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o -lgcc
+$(ATARI)/pagebench.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/pagebench.o common/atari/link.ld
+	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/pagebench.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/tabs.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/ehv_settings.o $(ATARI)/ask.o \
@@ -327,6 +331,8 @@ $(HATARI_DIR)/EHVCHECK.PRG: $(ATARI)/ehvcheck.elf common/tools/elf2tos.py $(FIXT
 	$(call make_fixt,$(HATARI_DIR))
 
 $(HOST)/ehvcheck: tests/ehvcheck.c $(HOST)/libehv.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
+$(HOST)/pagebench: tests/pagebench.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
 
 atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPVIEW.ACC \
@@ -420,6 +426,16 @@ acc-files-test: atari $(HATARI_DIR)/ASKHELP.PRG
 
 # run EHVCHECK.PRG in Hatari (the family's Falcon:16, then ST:mono;
 # common/tools/machines.py) and compare with the host
+# a page unpacked and parsed: the time on a machine (MACHINE, default
+# ST:mono) and the checksums, the same on the host (tests/pagebench.c):
+# a faster decoder or parser shows the same output
+pagebench: $(ATARI)/pagebench.elf $(HOST)/pagebench
+	mkdir -p build/pagebench/FIXT
+	python3 common/tools/elf2tos.py $(ATARI)/pagebench.elf build/pagebench/PAGEBENC.PRG
+	cp tests/fixtures/big.hyp build/pagebench/FIXT/BIG.HYP
+	$(HOST)/pagebench tests/fixtures/big.hyp
+	sh tests/run_bench.sh build/pagebench
+
 hatari-test: atari $(HOST)/ehvcheck
 	$(call make_fixt,build/hostcheck)
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)

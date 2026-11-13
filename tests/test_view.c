@@ -400,6 +400,70 @@ static void test_park(void)
 	view_free(&w);
 }
 
+/* the same lines and runs (text by its bytes) */
+static int same_page(const hyp_page *a, const hyp_page *b)
+{
+	unsigned long i;
+
+	if (a->nlines != b->nlines || a->nruns != b->nruns || a->width != b->width || a->ngfx != b->ngfx)
+		return 0;
+	for (i = 0; i < a->nlines; i++)
+		if (a->lines[i].first_run != b->lines[i].first_run || a->lines[i].nruns != b->lines[i].nruns)
+			return 0;
+	for (i = 0; i < a->nruns; i++)
+		if (a->runs[i].kind != b->runs[i].kind || a->runs[i].len != b->runs[i].len ||
+		    a->runs[i].target != b->runs[i].target || a->runs[i].attr != b->runs[i].attr ||
+		    memcmp(a->runs[i].text, b->runs[i].text, a->runs[i].len) != 0)
+			return 0;
+	return 1;
+}
+
+/* a big page from its head (view_head_bytes): its first lines at once,
+   the whole page after the rest's steps, the same as loaded at once;
+   the place and the link chosen kept; a change of page drops the rest */
+static void test_head(void)
+{
+	ehv_view whole, v;
+	unsigned short head_lines;
+	int r, steps = 0;
+
+	view_init(&whole, NULL);
+	view_init(&v, NULL);
+	view_head_bytes = 0;
+	CHECK(view_open(&whole, fx("big.hyp"), NULL, 0) == VIEW_OK);
+	CHECK(!view_rest_pending(&whole));
+	view_head_bytes = 2048;
+	CHECK(view_open(&v, fx("big.hyp"), NULL, 0) == VIEW_OK);
+	CHECK(view_rest_pending(&v));
+	head_lines = v.page != NULL ? v.page->nlines : 0;
+	CHECK(head_lines > 10 && whole.page != NULL && head_lines < whole.page->nlines);
+	v.top = 5;
+	v.sel = 0;                         /* the link on line 0 */
+	while ((r = view_rest_step(&v, 1000)) == 0)
+		steps++;
+	CHECK(r == 1 && steps > 5);
+	CHECK(v.page != NULL && v.page->nlines == head_lines);   /* the head until swapped */
+	view_rest_swap(&v);
+	CHECK(!view_rest_pending(&v));
+	CHECK(v.page != NULL && whole.page != NULL && same_page(v.page, whole.page));
+	CHECK(v.top == 5 && v.sel == 0);
+
+	/* finished at once; and dropped when the page changes */
+	CHECK(view_open(&v, fx("big.hyp"), "Index", 0) == VIEW_OK);
+	CHECK(!view_rest_pending(&v));                /* a small page comes whole */
+	CHECK(view_open(&v, fx("big.hyp"), NULL, 0) == VIEW_OK && view_rest_pending(&v));
+	view_rest_finish(&v);
+	CHECK(!view_rest_pending(&v) && v.page != NULL && same_page(v.page, whole.page));
+	CHECK(view_open(&v, fx("big.hyp"), NULL, 0) == VIEW_OK && view_rest_pending(&v));
+	CHECK(view_open(&v, fx("basic.hyp"), NULL, 0) == VIEW_OK);
+	CHECK(!view_rest_pending(&v));                /* another hypertext: dropped */
+	CHECK(view_open(&v, fx("big.hyp"), NULL, 0) == VIEW_OK && view_rest_pending(&v));
+	view_free(&v);                                /* freed with it */
+	CHECK(!view_rest_pending(&v));
+	view_head_bytes = 0;
+	view_free(&whole);
+}
+
 int main(int argc, char **argv)
 {
 	fixdir = argc > 1 ? argv[1] : "tests/fixtures";
@@ -412,6 +476,7 @@ int main(int argc, char **argv)
 	test_selection();
 	test_request();
 	test_park();
+	test_head();
 	printf("%d checks, %d failures\n", checks, failures);
 	return failures ? 1 : 0;
 }

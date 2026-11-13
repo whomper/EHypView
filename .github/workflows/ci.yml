@@ -21,10 +21,11 @@ jobs:
       - name: Install m68k cross compiler and QEMU
         run: |
           # On 11 Nov 2026 the runners could not reach azure.archive.ubuntu.com or archive.ubuntu.com:
-          # kernel.org's mirror, over https (EPlay's finding), and apt retries
-          echo https://mirrors.edge.kernel.org/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-          sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get -o Acquire::Retries=3 install -y gcc-m68k-linux-gnu qemu-user-static
+          # kernel.org's mirror, over https (EPlay's finding), and apt retries; on 13 Nov kernel.org was
+          # unreachable in turn (EContact): three mirrors, the runner's apt takes the next that answers, IPv4
+          printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gcc-m68k-linux-gnu qemu-user-static
       - name: Big-endian 68020 tests under QEMU
         run: make m68k-test
 
@@ -35,10 +36,11 @@ jobs:
       - name: Install m68k cross compiler and Hatari
         run: |
           # On 11 Nov 2026 the runners could not reach azure.archive.ubuntu.com or archive.ubuntu.com:
-          # kernel.org's mirror, over https (EPlay's finding), and apt retries
-          echo https://mirrors.edge.kernel.org/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-          sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get -o Acquire::Retries=3 install -y gcc-m68k-linux-gnu hatari xvfb xdotool x11-utils \
+          # kernel.org's mirror, over https (EPlay's finding), and apt retries; on 13 Nov kernel.org was
+          # unreachable in turn (EContact): three mirrors, the runner's apt takes the next that answers, IPv4
+          printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gcc-m68k-linux-gnu hatari xvfb xdotool x11-utils \
             autoconf automake libtool gettext autopoint pkg-config
       - name: Build the Atari programs and run them in Hatari (Falcon, EmuTOS)
         run: make hatari-test

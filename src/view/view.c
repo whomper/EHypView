@@ -39,10 +39,69 @@ static void forward_clear(ehv_view *v)
 		hist_free(&v->fwd[--v->nfwd]);
 }
 
+unsigned long view_head_bytes;
+
+static void set_status(ehv_view *v, const char *a, const char *b, const char *c);
+
+/* the rest of a page shown from its head, given up (the page changes) */
+static void rest_drop(ehv_view *v)
+{
+	hyp_page_job_free(v->rest);
+	v->rest = NULL;
+	hyp_page_free(v->whole);
+	v->whole = NULL;
+}
+
+int view_rest_pending(const ehv_view *v)
+{
+	return v->rest != NULL || v->whole != NULL;
+}
+
+int view_rest_step(ehv_view *v, unsigned long budget)
+{
+	int r;
+
+	if (v->whole != NULL)
+		return 1;
+	if (v->rest == NULL)
+		return 0;
+	r = hyp_page_more(v->rest, budget);
+	if (r == 0)
+		return 0;
+	if (r < 0)
+	{
+		set_status(v, "Cannot show the rest of the page: ", hyp_strerror(hyp_page_job_error(v->rest)), NULL);
+		rest_drop(v);
+		return -1;
+	}
+	v->whole = hyp_page_take(v->rest);
+	v->rest = NULL;
+	return 1;
+}
+
+void view_rest_swap(ehv_view *v)
+{
+	if (v->whole == NULL)
+		return;
+	hyp_page_free(v->page);
+	v->page = v->whole;
+	v->whole = NULL;
+	if (v->top >= v->page->nlines)
+		v->top = v->page->nlines > 0 ? v->page->nlines - 1 : 0;
+}
+
+void view_rest_finish(ehv_view *v)
+{
+	while (view_rest_step(v, 0x7FFFFFFFUL) == 0)
+		;
+	view_rest_swap(v);
+}
+
 void view_free(ehv_view *v)
 {
 	unsigned long i;
 
+	rest_drop(v);
 	hyp_page_free(v->popup);
 	hyp_page_free(v->page);
 	hyp_close(v->doc);
@@ -104,6 +163,10 @@ static int push_current(ehv_view *v, view_hist **list, unsigned long *n, unsigne
 	return 1;
 }
 
+/* the speed rig's marks (src/core/page.c's; NULL: none) */
+extern void (*view_mark)(const char *what);
+#define MARK(w) do { if (view_mark != NULL) view_mark(w); } while (0)
+
 static int push_history(ehv_view *v)
 {
 	return push_current(v, &v->hist, &v->nhist, &v->cap_hist) < 0 ? -1 : 0;
@@ -119,17 +182,31 @@ static void pop_history(ehv_view *v)
 /* replace the page; the document stays */
 static int show_entry(ehv_view *v, unsigned short entry, long top)
 {
-	int err;
-	hyp_page *pg = hyp_page_load(v->doc, entry, &err);
+	int err, whole = 1;
+	hyp_page *pg = view_head_bytes != 0 ? hyp_page_load_head(v->doc, entry, view_head_bytes, &err, &whole)
+		: hyp_page_load(v->doc, entry, &err);
 
+	MARK("page_load");
 	if (pg == NULL)
 	{
 		set_status(v, "Cannot show the page: ", hyp_strerror(err), NULL);
 		return VIEW_ERROR;
 	}
 	view_popup_close(v);
+	rest_drop(v);
 	hyp_page_free(v->page);
 	v->page = pg;
+	if (!whole && (v->rest = hyp_page_begin(v->doc, entry, &err)) == NULL)
+	{
+		/* the rest can't be loaded in pieces: the whole page now */
+		hyp_page *all = hyp_page_load(v->doc, entry, &err);
+
+		if (all != NULL)
+		{
+			hyp_page_free(v->page);
+			v->page = pg = all;
+		}
+	}
 	v->left = 0;
 	v->sel = -1;
 	if (top >= pg->nlines)
@@ -149,6 +226,7 @@ static int show_in(ehv_view *v, const char *path, const char *node, long top, in
 	if (doc == NULL || strcmp(doc->path, path) != 0)
 	{
 		doc = hyp_open_held(path, &err);
+		MARK("hyp_open");
 		if (doc == NULL)
 		{
 			set_status(v, fs_basename(path), ": ", hyp_strerror(err));
@@ -181,6 +259,7 @@ static int show_in(ehv_view *v, const char *path, const char *node, long top, in
 	if (doc != v->doc)
 	{
 		view_popup_close(v);
+		rest_drop(v);
 		hyp_page_free(v->page);
 		v->page = NULL;
 		hyp_close(v->doc);
@@ -287,6 +366,7 @@ int view_request(ehv_view *v, const char *args)
 		set_status(v, "Out of memory", NULL, NULL);
 		return VIEW_ERROR;
 	}
+	MARK("resolve");
 	rc = show_target(v, args, &t);
 	hyp_recent_let_go();              /* the file the resolver looked in */
 	return rc;
@@ -372,6 +452,7 @@ static int show_hist(ehv_view *v, const view_hist *h)
 		set_status(v, fs_basename(h->path), ": ", hyp_strerror(err));
 		return VIEW_ERROR;
 	}
+	rest_drop(v);
 	hyp_page_free(v->page);
 	v->page = NULL;
 	hyp_close(v->doc);

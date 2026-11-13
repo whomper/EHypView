@@ -20,9 +20,9 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
            Settings (^,) opened and closed with Esc; the library (^L)
            drawn whole; letters typed into its search; a full-text search
            (Return); the library closed (^U): the page uncovered
-  images   IMAGES.HYP (a 640 x 400 16-colour picture), and on a Falcon in
-           256 colours COLOUR.HYP: the page drawn, a line and a page
-           scrolled
+  images   IMAGES.HYP (a 640 x 400 16-colour picture): the page drawn, a
+           line and a page scrolled; on a Falcon in 256 colours COLOUR.HYP
+           drawn (its page fits the window)
   front    ECal's guide from its release (the family's front page, 4.3)
   acc      EHYPVIEW.ACC opened from the Desk menu (Xvfb and xdotool)
            (acc and help skip ST and Falcon-4: the accessory on those
@@ -35,7 +35,10 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
            (ASKHELP.PRG, VA_START)
 
 It prints a table: each action's longest stretch on each machine, marked
-"over" where it is over the guidelines' time, and fails when one is.
+"over" where it is over the guidelines' time, and fails when one is, or
+when what an action waits for never came ("no event": a scroll's "top",
+Tab's "select", a page's "page"; the speed build logs them), so a row
+never times a key that did nothing.
 SPEED_ONLY=page,acc runs only those. SPEED_FONT="Courier,14" writes
 EHYPVIEW.INF's FONT= and POINT= (the font's name as the VDI gives it,
 trailing blanks off: a GDOS font, under NVDI); unset, the system font.
@@ -75,8 +78,11 @@ def note(action, limit, machine, ms):
     if (action, limit) not in results:
         results[(action, limit)] = {}
         order.append((action, limit))
-    old = results[(action, limit)].get(machine)
-    results[(action, limit)][machine] = ms if old is None or ms is None else max(old, ms)
+    row = results[(action, limit)]
+    if machine in row and row[machine] is None:
+        return                          # once an action came to nothing, the row says so
+    old = row.get(machine)
+    row[machine] = ms if old is None or ms is None else max(old, ms)
 
 
 def gaps(lines):
@@ -288,6 +294,9 @@ def screen(run):
 def start_times(run, page):
     """the start: the first event call, and the longest stretch till the page was drawn"""
     ok = run.wait("page " + page, 120, 0)
+    # a big page is shown from its head, the rest loaded in steps: the
+    # actions are timed once it is whole (an older build says nothing)
+    run.wait("page-whole", 10, 0)
     time.sleep(2)
     evs = run.events(0)
     first = next((int(e.split()[1]) for e in evs if e.startswith("started ")), None)
@@ -298,15 +307,27 @@ def whole(run, spec, what):
     """the page drawn whole: Shift+Clr/Home to its end, Clr/Home to its top"""
     for mods in ([SHIFT], []):
         note(what + ": drawn whole (Shift+Clr/Home, Clr/Home)", WHOLE, spec,
-             run.act(lambda: run.key(0x47, mods), settle=1.0))
+             run.act(lambda: run.key(0x47, mods), "top ", settle=1.0, timeout=20))
 
 
-def scrolls(run, spec, what):
+def to_top(run):
+    """Clr/Home, not timed: the page at its top (a "top" only if it moved)"""
+    run.act(lambda: run.key(0x47), "top 0 ", settle=1.0, timeout=5)
+
+
+def scrolls(run, spec, what, from_top=False):
+    """from_top: each scroll from the page's top (Clr/Home first, not
+    timed), for a page too short to move three times in a row"""
     for _ in range(3):
-        note(what + ": a line scrolled (Down)", LINE, spec, run.act(lambda: run.key(DOWN), settle=1.0))
+        if from_top:
+            to_top(run)
+        note(what + ": a line scrolled (Down)", LINE, spec,
+             run.act(lambda: run.key(DOWN), "top ", settle=1.0, timeout=20))
     for _ in range(3):
+        if from_top:
+            to_top(run)
         note(what + ": a page scrolled (Shift+Down)", PAGE, spec,
-             run.act(lambda: run.key(DOWN, [SHIFT]), settle=1.0))
+             run.act(lambda: run.key(DOWN, [SHIFT]), "top ", settle=1.0, timeout=20))
 
 
 def page_case(spec, nvdi):
@@ -322,7 +343,8 @@ def page_case(spec, nvdi):
         time.sleep(1)
         whole(run, spec, "big page")
         scrolls(run, spec, "big page")
-        note("a key: Tab chooses a link", KEY, spec, run.act(lambda: run.key(TAB)))
+        to_top(run)                     # the page's one link is on its first line
+        note("a key: Tab chooses a link", KEY, spec, run.act(lambda: run.key(TAB), "select", timeout=20))
         note("Settings opened (^,)", DIALOG, spec,
              run.act(lambda: run.key(COMMA, [CTRL]), "dialog settings"))
         note("Settings closed (Esc): the page uncovered", WHOLE, spec,
@@ -351,7 +373,7 @@ def page_case(spec, nvdi):
         run.stop()
 
 
-def picture_case(spec, nvdi, name, hyp, what):
+def picture_case(spec, nvdi, name, hyp, what, scrolled=True):
     d = os.path.join(OUT, slug(spec), name)
     m = make_drive(os.path.join(d, "c"), nvdi, start=hyp)
     run = Run(os.path.join(slug(spec), name), m, r"C:\LAUNCH.PRG")
@@ -361,8 +383,10 @@ def picture_case(spec, nvdi, name, hyp, what):
         time.sleep(2)
         note(what + ": page drawn at the start (longest stretch)", WHOLE, spec,
              longest(run.lines()) if ok else None)
-        scrolls(run, spec, what)
-        whole(run, spec, what)
+        if scrolled:                    # COLOUR.HYP's page fits the window: nothing to scroll
+            scrolls(run, spec, what, from_top=True)
+            to_top(run)
+            whole(run, spec, what)
     finally:
         run.stop()
 
@@ -398,7 +422,10 @@ def click_case(spec, nvdi):
     run = Run(os.path.join(slug(spec), "click"), m, r"C:\LAUNCH.PRG", windowed=True)
     try:
         ok = run.wait("page " + page, 180, 0)
-        time.sleep(5)                   # (the index goes on in its slices, never in a press's turn)
+        run.wait("page-whole", 20, 0)   # a big page whole (an older build says nothing)
+        # pressed once the index is done, in both builds the same state
+        run.wait("index-done", 600, 0)
+        time.sleep(5)
         at = [e.split()[1:5] for e in run.events(0) if e.startswith("text-at ")]
         if not ok or not at:
             note("a link pressed: drawn chosen", KEY, spec, None)
@@ -476,7 +503,8 @@ def main():
                 picture_case(spec, nvdi, "images", "C:\\FIXT\\IMAGES\\IMAGES.HYP", "IMAGES.HYP (16-colour picture)")
                 if SPEC_NAME.startswith("Falcon"):
                     SPEC_NAME = SPEC_NAME.split(":")[0] + ":256"
-                    picture_case(spec, nvdi, "colour256", "C:\\FIXT\\COLOUR.HYP", "COLOUR.HYP in 256 colours")
+                    picture_case(spec, nvdi, "colour256", "C:\\FIXT\\COLOUR.HYP", "COLOUR.HYP in 256 colours",
+                                 scrolled=False)
                     SPEC_NAME = spec[:-5] if nvdi else spec
             if want("front"):
                 front_case(spec, nvdi)
@@ -506,7 +534,9 @@ def main():
         for s in SPECS:
             v = results[(a, lim)].get(s)
             if v is None:
-                cells.append("%14s" % ("-" if s not in results[(a, lim)] else "no event"))
+                missing = s in results[(a, lim)]
+                over += missing          # what it waited for never came: the row timed nothing
+                cells.append("%14s" % ("no event" if missing else "-"))
             else:
                 bad = v > lim
                 over += bad

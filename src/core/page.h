@@ -118,6 +118,14 @@ typedef struct {
 hyp_page *hyp_page_load(hyp_doc *doc, unsigned short num, int *err);
 void hyp_page_free(hyp_page *page);
 
+/* only the page's head when it is big (more than twice `head` bytes and a
+   margin): its lines up to the first line end at or after `head` bytes,
+   each as the whole page has it, *whole = 0; then the rest is loaded with
+   hyp_page_begin() (the guidelines' Speed: the first screen of a 50 KB
+   page shown at once). A page that is not big, or whose head can't be
+   cut (a line with no end in the bytes unpacked), comes whole, *whole = 1 */
+hyp_page *hyp_page_load_head(hyp_doc *doc, unsigned short num, unsigned long head, int *err, int *whole);
+
 /* the same a piece at a time (the guidelines' Speed: a big page took
    2 s on an ST): hyp_page_more() unpacks, then parses, about `budget`
    bytes a call: 1 done, then hyp_page_take() hands the page over; 0

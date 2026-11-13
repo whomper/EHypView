@@ -43,7 +43,8 @@ typedef struct {
 	unsigned char len[NC];
 	unsigned short count[MAXLEN + 1];
 	unsigned short sorted[NC];       /* symbols ordered by (len, value) */
-	unsigned short fast[FASTSIZE];   /* (len << 9) | sym, or SLOW */
+	unsigned short fast[FASTSIZE];   /* (sym << 4) | len, or SLOW: a 16-bit
+	                                    mask and shift on the 68000 */
 } huff_t;
 
 struct lh5_state {
@@ -124,7 +125,7 @@ static void huff_constant(huff_t *h, unsigned short nsym, unsigned int sym)
 	h->constant = (int) sym;
 	memset(h->len, 0, sizeof(h->len));
 	for (i = 0; i < FASTSIZE; i++)     /* lh5_decode()'s own lookup: no bits */
-		h->fast[i] = (unsigned short) sym;
+		h->fast[i] = (unsigned short) (sym << 4);
 }
 
 /* build lookup structures from h->len[0 .. nsym-1]; -1 if oversubscribed */
@@ -180,7 +181,7 @@ static int huff_build(huff_t *h, unsigned short nsym)
 
 			for (n = 0; n < h->count[l]; n++, i++)
 			{
-				unsigned short v = (unsigned short) ((l << 9) | h->sorted[i]), k;
+				unsigned short v = (unsigned short) ((h->sorted[i] << 4) | l), k;
 
 				for (k = cnt; k > 0; k--)
 					*f++ = v;
@@ -204,8 +205,8 @@ static unsigned int huff_decode(lh5_state *s, huff_t *h)
 	e = h->fast[bits >> (MAXLEN - FASTBITS)];
 	if (e != SLOW)
 	{
-		skip(s, (int) (e >> 9));
-		return e & 0x1FF;
+		skip(s, (int) (e & 15));
+		return e >> 4;
 	}
 
 	/* canonical walk for codes longer than FASTBITS */
@@ -345,8 +346,12 @@ static int run(lh5_state *s, unsigned long budget)
 {
 	const unsigned char *src = s->src;
 	unsigned char *dst = s->dst;
-	unsigned long srclen = s->srclen, dstlen = s->dstlen, out = s->out, blocksize = s->blocksize, pos;
-	unsigned long stop = budget < dstlen - out ? out + budget : dstlen;
+	unsigned long srclen = s->srclen, dstlen = s->dstlen, blocksize = s->blocksize, pos;
+	/* the output as pointers, kept in registers (an index into dst went
+	   to the stack and back for every byte on the 68000) */
+	unsigned char *d = dst + s->out, *dend = dst + dstlen;
+	unsigned char *dstop = budget < dstlen - s->out ? d + budget : dend;
+	const unsigned short *cfast = s->c.fast, *pfast = s->p.fast;
 	unsigned int bb;                 /* 32 bits, here and on the Atari */
 	int bc;
 
@@ -367,9 +372,9 @@ static int run(lh5_state *s, unsigned long budget)
 	if (s->error)
 		return -1;
 	LOAD();
-	while (out < stop)
+	while (d < dstop)
 	{
-		unsigned int c, e;
+		unsigned short e, c;             /* 16 bits: word compares on the 68000 */
 
 		if (blocksize == 0)
 		{
@@ -389,12 +394,12 @@ static int run(lh5_state *s, unsigned long budget)
 		blocksize--;
 
 		NEED(MAXLEN);
-		e = s->c.fast[bb >> (32 - FASTBITS)];
+		e = cfast[bb >> (32 - FASTBITS)];
 		if (e != SLOW)
 		{
-			bb <<= e >> 9;
-			bc -= (int) (e >> 9);
-			c = e & 0x1FF;
+			bb <<= e & 15;
+			bc -= (int) (e & 15);
+			c = e >> 4;
 		} else
 		{
 			SAVE();
@@ -405,20 +410,20 @@ static int run(lh5_state *s, unsigned long budget)
 		}
 		if (c < 256)
 		{
-			dst[out++] = (unsigned char) c;
+			*d++ = (unsigned char) c;
 			continue;
 		}
 		{
-			unsigned long len = c - (256 - THRESHOLD), dist;
+			unsigned long len = c - (256 - THRESHOLD), dist, out = (unsigned long) (d - dst);
 			unsigned int j;
 
 			NEED(MAXLEN);
-			e = s->p.fast[bb >> (32 - FASTBITS)];
+			e = pfast[bb >> (32 - FASTBITS)];
 			if (e != SLOW)
 			{
-				bb <<= e >> 9;
-				bc -= (int) (e >> 9);
-				j = e & 0x1FF;
+				bb <<= e & 15;
+				bc -= (int) (e & 15);
+				j = e >> 4;
 			} else
 			{
 				SAVE();
@@ -437,29 +442,28 @@ static int run(lh5_state *s, unsigned long budget)
 				bc -= n;
 			}
 			dist = (unsigned long) j + 1;
-			if (len > dstlen - out)
-				len = dstlen - out;
+			if (len > (unsigned long) (dend - d))
+				len = (unsigned long) (dend - d);
 			if (dist <= out)
 			{
-				unsigned char *d = dst + out;
 				const unsigned char *f = d - dist;
 
-				out += len;
 				while (len-- > 0)
 					*d++ = *f++;
 			} else
 				while (len-- > 0)
 				{
 					/* LHarc starts with a window full of spaces */
-					dst[out] = out >= dist ? dst[out - dist] : ' ';
-					out++;
+					out = (unsigned long) (d - dst);
+					*d = out >= dist ? dst[out - dist] : ' ';
+					d++;
 				}
 		}
 	}
 	SAVE();
-	s->out = out;
+	s->out = (unsigned long) (d - dst);
 	s->blocksize = blocksize;
-	if (out < dstlen)
+	if (s->out < dstlen)
 		return 0;
 	if (PAST_END())
 		return s->error = 1, -1;

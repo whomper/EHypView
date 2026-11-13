@@ -342,6 +342,10 @@ static unsigned long do_command(parser *ps, const unsigned char *p, unsigned lon
 	}
 }
 
+/* what a head keeps unpacked past the line it ends at: no command is
+   longer (a block's length is a byte) */
+#define HEAD_MARGIN 1024UL
+
 /*
  * A page loaded a piece at a time (page.h): its object unpacked, then
  * its text parsed, `budget` bytes a call.  The parse stops between two
@@ -355,6 +359,8 @@ struct hyp_page_job {
 	parser ps;
 	unsigned long at, text;        /* where the parse is; its text run's start */
 	int err;
+	unsigned long head;            /* 0, or a head only: it ends at the first
+	                                  line end from here on */
 };
 
 void hyp_page_job_free(hyp_page_job *j)
@@ -413,6 +419,31 @@ static int parse(hyp_page_job *j, unsigned long budget)
 
 	while (p < end)
 	{
+		if (*p > ESC)
+		{
+			/* the text: every byte above ESC, nearly all of them, in a
+			   loop of its own (an ST: 72 cycles a byte before). The page
+			   ends in a NUL (hyp_load, hyp_unpack_take), so it stops
+			   there at the latest, without a test against `end` */
+#if defined(EHV_TOS) && defined(__mc68000__)
+			{
+				/* two instructions a byte, 18 cycles on a 68000 (GCC's
+				   loop took 30): a byte above ESC compared from the
+				   pointer and the loop again; q ends past the one that
+				   stopped it */
+				const unsigned char *q = p + 1;
+
+				__asm__ volatile("1:\tcmp.b (%0)+,%1\n\tbcs.s 1b"
+						 : "+a"(q) : "d"((short) ESC) : "cc", "memory");
+				p = q - 1;
+			}
+#else
+			do
+				p++;
+			while (*p > ESC);
+#endif
+			continue;
+		}
 		if (*p == ESC || *p == '\0')
 		{
 			if (add_run(ps, HYP_RUN_TEXT, (const char *) text, (unsigned long) (p - text), 0, 0, 0) < 0)
@@ -422,8 +453,15 @@ static int parse(hyp_page_job *j, unsigned long budget)
 				if (end_line(ps) < 0)
 					return -1;
 				p++;
+				if (j->head != 0 && (unsigned long) (p - pg->data) >= j->head)
+					return 1;                /* the head: its lines are whole */
 			} else
 			{
+				/* a head is cut from the bytes unpacked so far: a command
+				   this near their end may go past it; given up, the page
+				   is loaded whole (hyp_page_load_head) */
+				if (j->head != 0 && (unsigned long) (end - p) < HEAD_MARGIN)
+					return -2;
 				unsigned long n = do_command(ps, p, (unsigned long) (end - p));
 
 				if (n == 0)
@@ -442,6 +480,8 @@ static int parse(hyp_page_job *j, unsigned long budget)
 			p++;
 		}
 	}
+	if (j->head != 0)
+		return -2;                       /* no line end after it: given up */
 	if (add_run(ps, HYP_RUN_TEXT, (const char *) text, (unsigned long) (p - text), 0, 0, 0) < 0)
 		return -1;
 	if (pg->nruns > ps->line_first && end_line(ps) < 0)
@@ -485,6 +525,10 @@ hyp_page *hyp_page_take(hyp_page_job *j)
 }
 
 /* at once: hyp_load's decoder, kept for it (no room taken for the pieces') */
+/* the speed rig's marks in the work of opening a page (NULL: none; the
+   speed build's program sets it) */
+void (*view_mark)(const char *what);
+
 hyp_page *hyp_page_load(hyp_doc *doc, unsigned short num, int *err)
 {
 	hyp_page_job j;
@@ -503,6 +547,8 @@ hyp_page *hyp_page_load(hyp_doc *doc, unsigned short num, int *err)
 		rc = HYP_ERR_MEMORY;
 	else if ((rc = hyp_load(doc, num, &j.pg->data, &j.pg->size)) == HYP_OK)
 	{
+		if (view_mark != NULL)
+			view_mark("hyp_load");
 		j.pg->num = num;
 		j.ps.page = j.pg;
 		j.ps.doc = doc;
@@ -515,6 +561,58 @@ hyp_page *hyp_page_load(hyp_doc *doc, unsigned short num, int *err)
 	if (err != NULL)
 		*err = rc;
 	return NULL;
+}
+
+hyp_page *hyp_page_load_head(hyp_doc *doc, unsigned short num, unsigned long head, int *err, int *whole)
+{
+	hyp_page_job j;
+	hyp_unpack *u;
+	unsigned long ready = 0;
+	const unsigned char *got;
+	int r, rc = HYP_OK;
+
+	*whole = 1;
+	if (num >= doc->num_entries || !HYP_IS_TEXT(doc->entries[num].type) ||
+	    doc->entries[num].size <= head + head + HEAD_MARGIN)
+		return hyp_page_load(doc, num, err);
+	if ((u = hyp_unpack_begin(doc, num, &rc)) == NULL)
+		return hyp_page_load(doc, num, err);
+	/* the head and a margin unpacked, in pieces of the same size */
+	while ((r = hyp_unpack_more(u, head + HEAD_MARGIN)) == 0 &&
+	       (hyp_unpack_out(u, &ready), ready < head + HEAD_MARGIN))
+		;
+	got = hyp_unpack_out(u, &ready);
+	if (r != 0 || got == NULL || ready < head + HEAD_MARGIN)
+	{
+		hyp_unpack_free(u);              /* all of it out, or a fault: at once */
+		return hyp_page_load(doc, num, err);
+	}
+	memset(&j, 0, sizeof(j));
+	if ((j.pg = calloc(1, sizeof(*j.pg))) == NULL || (j.pg->data = malloc(ready + 1)) == NULL)
+	{
+		hyp_unpack_free(u);
+		hyp_page_free(j.pg);
+		return hyp_page_load(doc, num, err);
+	}
+	memcpy(j.pg->data, got, ready);
+	j.pg->data[ready] = '\0';          /* as hyp_load ends a page */
+	j.pg->size = ready;
+	hyp_unpack_free(u);
+	j.pg->num = num;
+	j.ps.page = j.pg;
+	j.ps.doc = doc;
+	j.ps.fg = j.ps.bg = HYP_COLOR_DEFAULT;
+	j.head = head;
+	r = parse(&j, (unsigned long) -1);
+	if (r == 1)
+	{
+		*whole = 0;
+		if (err != NULL)
+			*err = HYP_OK;
+		return j.pg;
+	}
+	hyp_page_free(j.pg);                 /* given up (or no memory): at once */
+	return hyp_page_load(doc, num, err);
 }
 
 void hyp_page_free(hyp_page *page)
