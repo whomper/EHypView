@@ -310,11 +310,22 @@ def whole(run, spec, what):
              run.act(lambda: run.key(0x47, mods), "top ", settle=1.0, timeout=20))
 
 
-def scrolls(run, spec, what):
+def to_top(run):
+    """Clr/Home, not timed: the page at its top (a "top" only if it moved)"""
+    run.act(lambda: run.key(0x47), "top 0 ", settle=1.0, timeout=5)
+
+
+def scrolls(run, spec, what, from_top=False):
+    """from_top: each scroll from the page's top (Clr/Home first, not
+    timed), for a page too short to move three times in a row"""
     for _ in range(3):
+        if from_top:
+            to_top(run)
         note(what + ": a line scrolled (Down)", LINE, spec,
              run.act(lambda: run.key(DOWN), "top ", settle=1.0, timeout=20))
     for _ in range(3):
+        if from_top:
+            to_top(run)
         note(what + ": a page scrolled (Shift+Down)", PAGE, spec,
              run.act(lambda: run.key(DOWN, [SHIFT]), "top ", settle=1.0, timeout=20))
 
@@ -332,6 +343,7 @@ def page_case(spec, nvdi):
         time.sleep(1)
         whole(run, spec, "big page")
         scrolls(run, spec, "big page")
+        to_top(run)                     # the page's one link is on its first line
         note("a key: Tab chooses a link", KEY, spec, run.act(lambda: run.key(TAB), "select", timeout=20))
         note("Settings opened (^,)", DIALOG, spec,
              run.act(lambda: run.key(COMMA, [CTRL]), "dialog settings"))
@@ -371,7 +383,8 @@ def picture_case(spec, nvdi, name, hyp, what):
         time.sleep(2)
         note(what + ": page drawn at the start (longest stretch)", WHOLE, spec,
              longest(run.lines()) if ok else None)
-        scrolls(run, spec, what)
+        scrolls(run, spec, what, from_top=True)
+        to_top(run)
         whole(run, spec, what)
     finally:
         run.stop()
