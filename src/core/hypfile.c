@@ -437,6 +437,8 @@ unsigned short hyp_default_node(const hyp_doc *doc)
 	return HYP_NO_NODE;
 }
 
+extern void (*view_mark)(const char *what);
+
 int hyp_load(hyp_doc *doc, unsigned short num, unsigned char **data, unsigned long *size)
 {
 	const hyp_entry *e;
@@ -476,7 +478,8 @@ int hyp_load(hyp_doc *doc, unsigned short num, unsigned char **data, unsigned lo
 			rc = HYP_ERR_MEMORY;
 		else if (pf_read_at(h, e->offset, packed, e->packed) != 0)
 			rc = HYP_ERR_OPEN;
-		else if (lh5_decode(packed, e->packed, out, e->size) != 0)
+		else if ((view_mark != NULL ? view_mark("read") : (void) 0),
+			 lh5_decode(packed, e->packed, out, e->size) != 0)
 			rc = HYP_ERR_DECODE;
 		free(packed);
 	}

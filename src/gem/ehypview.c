@@ -4366,6 +4366,25 @@ static int no_workstation(void)
 	}
 }
 
+#ifdef AES_PROFILE
+/* the start's parts, for the speed rig: ms since the start, each part's */
+static unsigned long mark_t0, mark_last;
+static void start_mark(const char *what)
+{
+	unsigned long now = tos_hz200();
+	char a[24];
+
+	if (mark_t0 == 0)
+		mark_t0 = mark_last = now;
+	sprintf(a, "%lu %lu", (now - mark_t0) * 5, (now - mark_last) * 5);
+	mark_last = now;
+	log_event("start-mark", what, a);
+}
+#else
+#define start_mark(what) ((void) 0)
+#endif
+
+
 int main(void)
 {
 	short work_out[57], msg[8], d, screen_w, screen_h;
@@ -4379,9 +4398,18 @@ int main(void)
 	if (!is_acc)                       /* the program only: the accessory hung at boot with it (not looked into) */
 		probe_paint();
 #endif
+	start_mark("begin");
+#ifdef AES_PROFILE
+	{
+		extern void (*view_mark)(const char *what);
+
+		view_mark = start_mark;
+	}
+#endif
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;
+	start_mark("appl_init");
 	twin_init("EHYPVIEW");
 	dlg_title = "EHypView";            /* dialogs in a window (MiNT, MagiC) */
 	dlg_redraw_hook = dialog_redraw;
@@ -4411,6 +4439,7 @@ int main(void)
 	tall_pixels = work_out[4] >= work_out[3] * 3 / 2;	/* pixel height, width (microns) */
 	vq_extnd(vdi_h, 1, work_out);
 	planes = work_out[4];
+	start_mark("vdi");
 	pb_vdi(vdi_h);                     /* the Subjects pane's bar: its fast way (common's panebar) */
 	tip_buf = av_shared(tip_local, sizeof(tip_local));   /* BubbleGEM reads the tips there */
 	if (is_acc)
@@ -4458,6 +4487,7 @@ int main(void)
 	/* the desktop's AV server, if one runs yet; the accessory may be
 	   ST-GUIDE.ACC, standing in for ST-Guide */
 	av_init("EHYPVIEW|ST-GUIDE");
+	start_mark("crash+av");
 
 	/* a file looked up once, and a hypertext opened once, for each
 	   event's work (the AERA guidelines, 6.5): forgotten before each
@@ -4466,12 +4496,14 @@ int main(void)
 	hyp_recent(1);
 	index_pieces();
 	find_home();
+	start_mark("find_home");
 	/* the accessory: nothing more before its first event call (the AERA
 	   guidelines, 2.2): no index until it is opened, GDOS fonts now or
 	   not at all */
 	font_init(home_dir, settings_path, own_text, &own_info, is_acc);
 	if (!is_acc)
 		log_font();
+	start_mark("font_init");
 	{
 		int i;
 
@@ -4488,6 +4520,7 @@ int main(void)
 		bg_opened();
 		bookmarks_load();
 	}
+	start_mark("bg+bookmarks");
 
 	menu_scr_w = screen_w;
 	menu_scr_h = screen_h;
@@ -4498,6 +4531,7 @@ int main(void)
 		log_event("menu", has_menu ? "shown" : "refused", NULL);
 		update_menu();
 	}
+	start_mark("menu");
 	if (!is_acc)
 	{
 		/* the hypertext on the command line, else the library (not
@@ -4506,14 +4540,18 @@ int main(void)
 
 		if (needs_index(args))
 			job_wait_index();
+		start_mark("index-wait");
 		graf_mouse(BUSYBEE, NULL);
 		if (args[0] != '\0')
 			view_request(&cur->view, args);
 		graf_mouse(ARROW, NULL);
+		start_mark("view_request");
 		if (cur->view.page != NULL || cur->view.status[0] != '\0')
 		{
 			make_layout();
+			start_mark("layout");
 			open_window();
+			start_mark("open_window");
 			if (cur->view.page != NULL)
 				page_read();
 			else
@@ -4523,9 +4561,11 @@ int main(void)
 			job_load_index();
 			libwin_open();
 		}
+		start_mark("page_read/library");
 		app_window_closed();
 	}
 	crash_offer("EHypView", "next to EHYPVIEW.PRG");
+	start_mark("first-event");
 
 	{
 		char num[16];

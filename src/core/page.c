@@ -485,6 +485,10 @@ hyp_page *hyp_page_take(hyp_page_job *j)
 }
 
 /* at once: hyp_load's decoder, kept for it (no room taken for the pieces') */
+/* the speed rig's marks in the work of opening a page (NULL: none; the
+   speed build's program sets it) */
+void (*view_mark)(const char *what);
+
 hyp_page *hyp_page_load(hyp_doc *doc, unsigned short num, int *err)
 {
 	hyp_page_job j;
@@ -503,6 +507,8 @@ hyp_page *hyp_page_load(hyp_doc *doc, unsigned short num, int *err)
 		rc = HYP_ERR_MEMORY;
 	else if ((rc = hyp_load(doc, num, &j.pg->data, &j.pg->size)) == HYP_OK)
 	{
+		if (view_mark != NULL)
+			view_mark("hyp_load");
 		j.pg->num = num;
 		j.ps.page = j.pg;
 		j.ps.doc = doc;

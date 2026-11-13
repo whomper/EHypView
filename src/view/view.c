@@ -104,6 +104,10 @@ static int push_current(ehv_view *v, view_hist **list, unsigned long *n, unsigne
 	return 1;
 }
 
+/* the speed rig's marks (src/core/page.c's; NULL: none) */
+extern void (*view_mark)(const char *what);
+#define MARK(w) do { if (view_mark != NULL) view_mark(w); } while (0)
+
 static int push_history(ehv_view *v)
 {
 	return push_current(v, &v->hist, &v->nhist, &v->cap_hist) < 0 ? -1 : 0;
@@ -122,6 +126,7 @@ static int show_entry(ehv_view *v, unsigned short entry, long top)
 	int err;
 	hyp_page *pg = hyp_page_load(v->doc, entry, &err);
 
+	MARK("page_load");
 	if (pg == NULL)
 	{
 		set_status(v, "Cannot show the page: ", hyp_strerror(err), NULL);
@@ -149,6 +154,7 @@ static int show_in(ehv_view *v, const char *path, const char *node, long top, in
 	if (doc == NULL || strcmp(doc->path, path) != 0)
 	{
 		doc = hyp_open_held(path, &err);
+		MARK("hyp_open");
 		if (doc == NULL)
 		{
 			set_status(v, fs_basename(path), ": ", hyp_strerror(err));
@@ -287,6 +293,7 @@ int view_request(ehv_view *v, const char *args)
 		set_status(v, "Out of memory", NULL, NULL);
 		return VIEW_ERROR;
 	}
+	MARK("resolve");
 	rc = show_target(v, args, &t);
 	hyp_recent_let_go();              /* the file the resolver looked in */
 	return rc;
