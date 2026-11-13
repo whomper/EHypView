@@ -386,8 +386,32 @@ static long page_cols(void)
 static long max_top(void)
 {
 	long n = cur->view.page ? cur->view.page->nlines : 0, rows = visible_lines();
+	long t = n > rows ? n - rows : 0;
 
-	return n > rows ? n - rows : 0;
+	/* an @limage (or a picture reaching below the last line) makes the
+	   page taller than its lines: the first top that brings its bottom
+	   into sight, else its last line (a page of plain lines: as before) */
+	if (n > 0 && cur->lay.gfx_y != NULL && cur->lay.pg == cur->view.page)
+	{
+		short x, y, w, h;
+		long bottom = layout_height(&cur->lay), lo = t, hi = n - 1;
+
+		work_area(&x, &y, &w, &h);
+		if (bottom - cur->lay.gfx_y[t] > h)
+		{
+			while (lo < hi)
+			{
+				long mid = lo + (hi - lo) / 2;
+
+				if (bottom - cur->lay.gfx_y[mid] > h)
+					lo = mid + 1;
+				else
+					hi = mid;
+			}
+			t = lo;
+		}
+	}
+	return t;
 }
 
 static long max_left(void)
@@ -423,7 +447,7 @@ static void set_sliders(void)
 
 	if (cur->icon)
 		return;
-	v[0] = (short) (n > rows ? rows * 1000L / n : 1000);
+	v[0] = (short) (n > rows ? rows * 1000L / n : mt > 0 ? rows * 1000L / (rows + mt) : 1000);
 	v[1] = (short) (mt > 0 ? cur->view.top * 1000L / mt : 0);
 	v[2] = (short) (c > cols ? cols * 1000L / c : 1000);
 	v[3] = (short) (ml > 0 ? cur->view.left * 1000L / ml : 0);
