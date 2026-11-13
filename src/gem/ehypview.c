@@ -1412,16 +1412,20 @@ static void scroll_area(short x, short y, short w, short h, long dy)
 		text_clip(vdi_h, clip);           /* NVDI clips raster copies */
 		scr_rows(vdi_h, pxy);
 		text_noclip(vdi_h);
+		/* the strip that comes in drawn at once, the screen still held
+		   and the mouse still hidden: nothing drawn between the move and
+		   it (the old rows were shown twice till it came, Erez's video,
+		   13 Nov 2026) */
+		if (dy > 0)
+			redraw(x, (short) (y + h - ady), w, ady);
+		else
+			redraw(x, y, w, ady);
 		graf_mouse(M_ON, NULL);
 		whole = 1;
 	}
 	wind_update(END_UPDATE);
 	if (!whole)
 		redraw(x, y, w, h);
-	else if (dy > 0)
-		redraw(x, (short) (y + h - ady), w, ady);
-	else
-		redraw(x, y, w, ady);
 }
 
 static void scroll_to(long top, long left)
