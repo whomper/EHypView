@@ -141,6 +141,80 @@ static unsigned long sum_pieces(hyp_doc *doc, unsigned short n, unsigned long pi
 	return s;
 }
 
+static int run_same(const hyp_page *a, const hyp_run *ra, const hyp_page *b, const hyp_run *rb)
+{
+	int ina = ra->text != NULL && (const unsigned char *) ra->text >= a->data &&
+		(const unsigned char *) ra->text < a->data + a->size;
+	int inb = rb->text != NULL && (const unsigned char *) rb->text >= b->data &&
+		(const unsigned char *) rb->text < b->data + b->size;
+
+	if (ra->kind != rb->kind || ra->attr != rb->attr || ra->fg != rb->fg || ra->bg != rb->bg ||
+	    ra->link_kind != rb->link_kind || ra->target != rb->target || ra->target_line != rb->target_line ||
+	    ra->len != rb->len || ina != inb || (ra->text == NULL) != (rb->text == NULL))
+		return 0;
+	if (ina && (const unsigned char *) ra->text - a->data != (const unsigned char *) rb->text - b->data)
+		return 0;
+	return ra->text == NULL || memcmp(ra->text, rb->text, ra->len) == 0;
+}
+
+/* the head (hyp_page_load_head) is the full page's beginning: its lines
+   with the same runs, and its pictures, cross references and objects the
+   full page's first ones; "" when so, else what differs */
+static const char *head_of(const hyp_page *h, const hyp_page *f)
+{
+	unsigned long i;
+
+	if (h->nlines == 0 || h->nlines >= f->nlines || h->nruns > f->nruns)
+		return "size";
+	if (h->ngfx > f->ngfx || h->nxrefs > f->nxrefs || h->nobjrefs > f->nobjrefs)
+		return "objects";
+	if ((h->title == NULL) != (f->title == NULL) || (h->title != NULL && strcmp(h->title, f->title) != 0))
+		return "title";
+	for (i = 0; i < h->nlines; i++)
+		if (h->lines[i].first_run != f->lines[i].first_run || h->lines[i].nruns != f->lines[i].nruns)
+			return "lines";
+	for (i = 0; i < h->nruns; i++)
+		if (!run_same(h, &h->runs[i], f, &f->runs[i]))
+			return "runs";
+	for (i = 0; i < h->ngfx; i++)
+		if (memcmp(&h->gfx[i], &f->gfx[i], sizeof(hyp_gfx)) != 0)
+			return "pictures";
+	for (i = 0; i < h->nxrefs; i++)
+		if (h->xrefs[i].target != f->xrefs[i].target || strcmp(h->xrefs[i].text, f->xrefs[i].text) != 0)
+			return "xrefs";
+	for (i = 0; i < h->nobjrefs; i++)
+		if (memcmp(&h->objrefs[i], &f->objrefs[i], sizeof(hyp_objref)) != 0)
+			return "objrefs";
+	return "";
+}
+
+/* the page's heads at a few sizes, each checked against the whole page:
+   "heads" and how many were cut (the rest came whole) */
+static void check_heads(hyp_doc *doc, unsigned short n, const hyp_page *full, char *buf, size_t size)
+{
+	static const unsigned long sizes[] = { 512, 2048, 8192 };
+	unsigned int k, cut = 0;
+	const char *bad = "";
+
+	for (k = 0; k < sizeof(sizes) / sizeof(sizes[0]) && full != NULL; k++)
+	{
+		int err, whole;
+		hyp_page *h = hyp_page_load_head(doc, n, sizes[k], &err, &whole);
+
+		if (h != NULL && !whole)
+		{
+			const char *d = head_of(h, full);
+
+			cut++;
+			if (d[0] != '\0')
+				bad = d;
+		} else if (h == NULL)
+			bad = "failed";
+		hyp_page_free(h);
+	}
+	snprintf(buf, size, cut ? (bad[0] ? ", heads %u BAD %s" : ", heads %u") : "%.0u%s", cut, bad);
+}
+
 /* every text page of the file: unpacked, then parsed; the checksums, and
    the best time of `rounds` for the biggest page */
 static int bench(const char *path, int rounds)
@@ -162,6 +236,7 @@ static int bench(const char *path, int rounds)
 		unsigned char *data;
 		unsigned long size;
 		hyp_page *pg;
+		char heads[48];
 
 		if (!HYP_IS_TEXT(doc->entries[n].type))
 		{
@@ -186,9 +261,10 @@ static int bench(const char *path, int rounds)
 			continue;
 		}
 		pg = hyp_page_load(doc, n, &err);
-		snprintf(line, sizeof(line), "page %u: %lu bytes %08lx, parsed %08lx%s\n", n, size,
+		check_heads(doc, n, pg, heads, sizeof(heads));
+		snprintf(line, sizeof(line), "page %u: %lu bytes %08lx, parsed %08lx%s%s\n", n, size,
 			 sum_bytes(1, data, size), pg != NULL ? sum_page(pg) : 0UL,
-			 sum_pieces(doc, n, 97) == sum_bytes(1, data, size) ? "" : " PIECES DIFFER");
+			 sum_pieces(doc, n, 97) == sum_bytes(1, data, size) ? "" : " PIECES DIFFER", heads);
 		out(line);
 		free(data);
 		hyp_page_free(pg);
