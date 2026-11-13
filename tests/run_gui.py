@@ -111,6 +111,10 @@ STEPS = [
     ([UNDO], ["dialog-closed settings cancel", "!settings *"]),
     ([TAB], ["select 2"]),                             # first link
     ([RETURN], ["page %s Second" % BASIC]),
+    # ^Clr/Home: the main page (TOS gives it scan code 0x77; it did nothing
+    # before 2.1, the hub's key check of 13 Nov 2026), Undo back again
+    ([("ctrl", CLRHOME)], ["page %s Main" % BASIC]),
+    ([UNDO], ["page %s Second" % BASIC]),
     ([BACKSPACE], ["page %s Main" % BASIC]),
     ([TAB] * 3, ["select 2", "select 2", "select 3"]),
     ([RETURN], ["popup Pop"]),                         # a @pnode: a pop-up over the page

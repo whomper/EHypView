@@ -2446,6 +2446,9 @@ static void key(short kstate, short kreturn)
 		case 0x4d:                     /* Right */
 			scroll_to(cur->view.top, shift ? cur->view.left + visible_cols() : cur->view.left + 1);
 			return;
+		case 0x77:                     /* ^Clr/Home: TOS gives it this scan code */
+			command(CMD_HOME);
+			return;
 		case 0x47:                     /* Clr/Home */
 			if (ctrl)
 				command(CMD_HOME);
