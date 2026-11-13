@@ -413,6 +413,17 @@ static int parse(hyp_page_job *j, unsigned long budget)
 
 	while (p < end)
 	{
+		if (*p > ESC)
+		{
+			/* the text: every byte above ESC, nearly all of them, in a
+			   loop of its own (an ST: 72 cycles a byte before). The page
+			   ends in a NUL (hyp_load, hyp_unpack_take), so it stops
+			   there at the latest, without a test against `end` */
+			do
+				p++;
+			while (*p > ESC);
+			continue;
+		}
 		if (*p == ESC || *p == '\0')
 		{
 			if (add_run(ps, HYP_RUN_TEXT, (const char *) text, (unsigned long) (p - text), 0, 0, 0) < 0)
