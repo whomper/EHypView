@@ -10,7 +10,8 @@
  * are 3D wherever the AES draws 3D: there is no setting for it (5.6).
  *
  *   General   START=: when the accessory looks through the library;
- *             FOLDER=, shown: where the index is kept
+ *             FOLDER=, shown: where the index is kept;
+ *             LOG=: Write a log (EHYPVIEW.LOG), the Options tick too (6.5)
  *   Library   LIBRARY=: its layout, Outline or Two panes;
  *             PATHS=: folders to look in as well as ST-GUIDE.INF's
  *
@@ -33,8 +34,9 @@
 #include "bgwork.h"
 #include "charset.h"
 #include "field.h"
+#include "dlgbuild.h"
 
-#define DMAX 32
+#define DMAX 40                    /* 31 used: room kept, d_add has no guard */
 #define TMAX 8
 #define NPATH 3                    /* folder fields on the Library page */
 #define PLEN 40                    /* characters a folder field shows */
@@ -200,6 +202,9 @@ static void show_page(short p, int draw)
 
 static short o_band, o_start, o_layout, o_ok;
 
+/* LOG=: the family's tick box (dlgbuild's drawing, 5.6) and its words */
+static short o_log, o_log_text, log_on, log_was;
+
 /* a TOUCHEXIT object came back on its press (-DDLG_CLICK, C16): its
    release waited for before anything is drawn, so a quick second press
    is not read as the first one's release (dialog.h); 1 when let go over
@@ -261,6 +266,11 @@ static void build(const char *folder)
 	d_text(SX + 2, (short) (10 | (gap << 8)), folder_text);
 	d_text(SX, (short) (11 | (gap << 8)), "keeps the library's index, EHYPVIEW.IDX,");
 	d_text(SX, (short) (12 | (gap << 8)), "and the fonts measured, EHYPVIEW.FNT.");
+	db_tick_bits(sys_ch);
+	o_log = d_add(G_IMAGE, TOUCHEXIT, 0, (long) (log_on ? &db_tick_on : &db_tick_off),
+		      SX, (short) (14 | (gap << 8)), 2, 1);
+	o_log_text = d_text(SX + 3, (short) (14 | (gap << 8)), "Write a log (EHYPVIEW.LOG)");
+	tree[o_log_text].ob_flags |= TOUCHEXIT;
 	for (i = from; i < nobj; i++)
 		page_of[i] = 1;
 
@@ -411,6 +421,13 @@ static int paths_check(void)
 	return 1;
 }
 
+int settings_log_on(const inf_file *inf)
+{
+	const char *v = inf != NULL ? inf_get(inf, "LOG") : NULL;
+
+	return v != NULL && atoi(v) == 1;
+}
+
 int settings_dialog(const char *inf_path, const char *folder)
 {
 	inf_file *inf = inf_load(inf_path, NULL);
@@ -433,7 +450,9 @@ int settings_dialog(const char *inf_path, const char *folder)
 			snprintf(paths[k], sizeof(paths[k]), "%s", (unsigned int) k < n ? list[k] : "");
 		inf_free_list(list, n);
 	}
+	log_on = settings_log_on(inf);
 	inf_free(inf);
+	log_was = log_on;
 	start_was = start_sel;
 	layout_was = layout_sel;
 	paths_join(was, sizeof(was));
@@ -463,6 +482,16 @@ int settings_dialog(const char *inf_path, const char *folder)
 				show_page(r == page_tab[1] ? 1 : 2, 1);
 				log_event("settings-page", cur_page == 1 ? "general" : "library", NULL);
 			}
+			continue;
+		}
+		if (r == o_log || r == o_log_text)
+		{
+			/* turned over on the press, the box alone drawn (5.6) */
+			log_on = !log_on;
+			tree[o_log].ob_spec = (long) (log_on ? &db_tick_on : &db_tick_off);
+			dlg_draw(tree, o_log);
+			log_event("settings-log", log_on ? "on" : "off", NULL);
+			evnt_timer_(120);
 			continue;
 		}
 		if (r == o_start)
@@ -505,6 +534,12 @@ int settings_dialog(const char *inf_path, const char *folder)
 		changed |= SETTINGS_LAYOUT;
 	}
 	log_event("settings", "LIBRARY", layout_val[layout_sel]);
+	if (log_on != log_was)
+	{
+		settings_put("LOG", log_on ? "1" : "0", SETTINGS_LOG_NOTE);
+		changed |= SETTINGS_LOG;
+	}
+	log_event("settings", "LOG", log_on ? "1" : "0");
 	paths_join(now, sizeof(now));
 	if (strcmp(now, was) != 0)
 	{

@@ -80,6 +80,8 @@ static short menu_id = -1;
 static ehv_menu menu;
 static short has_menu;
 static signed char menu_on[CMD_COUNT];   /* what menu_ienable last set */
+static signed char log_ticked = -1;      /* what menu_icheck last set Write a log to */
+static int write_log;                  /* LOG=1: Write a log ticked (6.5), else no ehypview.log */
 
 /*
  * The viewer windows: each shows a page, with its own history, scroll
@@ -2250,6 +2252,7 @@ static void menu_rebuild(void)
 	menu_free(&menu);
 	menu = fresh;
 	memset(menu_on, -1, sizeof(menu_on));
+	log_ticked = -1;
 	update_menu();
 }
 
@@ -2343,6 +2346,10 @@ static void command(int cmd)
 	case CMD_FONT:
 		font_dialog();
 		return;
+	case CMD_LOG:                      /* Write a log: LOG=, the same setting as Settings' tick */
+		settings_put("LOG", write_log ? "0" : "1", SETTINGS_LOG_NOTE);
+		log_event("log", write_log ? "on" : "off", NULL);
+		return;
 	case CMD_SETTINGS:
 		{
 			int changed = settings_dialog(settings_path, home_dir);
@@ -2406,6 +2413,7 @@ static void command(int cmd)
 static void update_menu(void)
 {
 	int c;
+	short obj;
 
 	if (!has_menu)
 		return;
@@ -2413,7 +2421,6 @@ static void update_menu(void)
 	for (c = CMD_ABOUT; c < CMD_WIN0; c++)
 	{
 		int on = 1, target = nav_target(c);
-		short obj;
 
 		if (c == CMD_CLOSE)
 			on = viewer_windows() > 0 || libwin_handle() > 0;
@@ -2440,6 +2447,11 @@ static void update_menu(void)
 			menu_ienable(menu.tree, obj, (short) on);
 			menu_on[c] = (signed char) on;
 		}
+	}
+	if (log_ticked != write_log && (obj = menu_object(&menu, CMD_LOG)) >= 0)
+	{
+		menu_icheck(menu.tree, obj, (short) write_log);
+		log_ticked = (signed char) write_log;
 	}
 	window_menu();
 }
@@ -3717,6 +3729,7 @@ static void own_set(char *text)
 	inf_free(own_inf);
 	own_text = text;
 	own_inf = text != NULL ? inf_parse(text, NULL) : NULL;
+	write_log = settings_log_on(own_inf);
 }
 
 /* settings no longer used, left out when the file is written:
@@ -4562,15 +4575,20 @@ static void acc_mem_grow(void)
  */
 /* one step of quitting, in ehypview.log next to the program, on the disk
    at once: if the machine bombs once the window has gone (EFTP and EMail
-   did, Erez 10 Nov 2026), the last line says where (EFTP's quit_step) */
+   did, Erez 10 Nov 2026), the last line says where (EFTP's quit_step).
+   Only with Write a log ticked (LOG=1, the guidelines 6.5): else no file,
+   not one line */
 static void quit_step(const char *what)
 {
 	static int begun;
 	char path[200], line[260];
 	int h, n;
 
-	if (start_dir[0] == '\0')
+	if (!write_log || start_dir[0] == '\0')
+	{
+		log_event("quit-step", what, NULL);
 		return;
+	}
 	snprintf(path, sizeof(path), "%s\\ehypview.log", start_dir);
 	h = pf_open(path, begun ? PF_APPEND : PF_WRITE);
 	if (h < 0)

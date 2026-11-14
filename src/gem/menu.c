@@ -43,6 +43,8 @@ static const MBAR_ITEM view_items[] = {
 static const MBAR_ITEM opt_items[] = {
 	{ "Settings...", "^,", CMD_SETTINGS },
 	{ "Font...", NULL, CMD_FONT },
+	{ "-", NULL, CMD_NONE },
+	{ "Write a log", NULL, CMD_LOG },          /* last (3.1, 6.5) */
 	{ NULL, NULL, CMD_NONE }
 };
 
@@ -186,7 +188,7 @@ const char *menu_command_name(int cmd)
 		"back", "home", "index", "toc", "help", "prev", "next",
 		"font", "larger", "smaller", "cut", "copy", "paste",
 		"new-window", "link-window", "bookmark-add", "bookmark-remove",
-		"forward", "see-also", "settings", "guide", "next-window", "link-tab", "keys"
+		"forward", "see-also", "settings", "guide", "next-window", "link-tab", "keys", "log"
 	};
 
 	if (cmd >= CMD_WIN0 && cmd < CMD_COUNT)

@@ -599,6 +599,7 @@ WINDOWMENU, OPTIONS, HELPMENU = (440, 9), (508, 9), (568, 9)
 # second just below), the first folder field
 SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 187), (320, 203), (300, 219), (300, 237)
 SET_LAYOUT, SET_LAYOUT_PANES = (340, 181), (330, 197)
+SET_LOG = (300, 342)            # General: "Write a log (EHYPVIEW.LOG)", its words
 SET_ORIGIN = (89, 102)          # where the dialog is on 640 x 480, which SET_* are measured on
 
 
@@ -727,6 +728,7 @@ MOUSE_STEPS = [
     # front that ClrHome and Delete take away at its start, then its end
     # added after Shift+Right: the whole of it is kept
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
+    ([("click",) + SET_LOG], ["settings-log on"]),           # Write a log (6.5): off until ticked
     ([("click",) + SET_START], ["menu settings-start"]),
     ([("click",) + SET_START_NOW], ["settings-start now"]),
     ([("click",) + SET_LIBRARY], ["settings-page library"]),
@@ -743,8 +745,11 @@ MOUSE_STEPS = [
     ([RETURN], ["alert no-folder C:\\NOWHERE"]),
     ([RETURN], ["alert-closed no-folder keep", "alert no-folder " + LONG]),
     ([RETURN], ["alert-closed no-folder keep", "dialog-closed settings ok", "settings START now",
-                "settings LIBRARY panes", "settings PATHS C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG,
+                "settings LIBRARY panes", "settings LOG 1", "settings PATHS C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG,
                 "index again", "index 5 guides"]),
+    # the same setting in Options, ticked there too: off, and on again
+    ([item(OPTIONS, 3)], ["menu log", "log off"]),
+    ([item(OPTIONS, 3)], ["menu log", "log on"]),
     # the guide, when it is nowhere: where to put it
     ([item(HELPMENU, 0)], ["menu guide", "alert no-guide"]),
     ([RETURN], []),
