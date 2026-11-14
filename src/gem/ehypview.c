@@ -104,9 +104,14 @@ typedef struct {
 	view_parked *tabs;             /* TABS_MAX, from the heap with the second tab
 	                                  (2 KB less of the accessory resident);
 	                                  tabs[front] unused */
+	unsigned long opened;          /* the Window menu's order (0: not counted yet) */
 } viewer;
 
 #define MAX_VIEWERS 6
+static unsigned long win_clock;         /* the Window menu: windows in the order opened */
+#if MAX_VIEWERS + 1 != MENU_WINDOWS
+#error the Window menu has a line for each viewer and the library
+#endif
 static viewer viewers[MAX_VIEWERS];
 static viewer *cur = &viewers[0];
 
@@ -1236,6 +1241,7 @@ static void open_window(void)
 	set_sliders();
 	planning = 0;
 	wind_open(cur->h, x, y, w, h);
+	cur->opened = ++win_clock;         /* the Window menu's order */
 	{
 		char at[32];
 
@@ -1295,6 +1301,105 @@ static void close_window(void)
  * the viewers in turn and then the library, round again; with one
  * window open nothing.
  */
+/*
+ * The Window menu (Erez, 14 Nov 2026; EWeb 1.11's): EHypView's windows,
+ * the viewers by their pages' titles and the library, oldest first, the one in
+ * front ticked; one chosen comes to the front as Next window brings it.
+ * Its lines are written in the menu's tree after each event (update_menu):
+ * the AES shows them the next time the menu drops, so no call is made.
+ */
+static unsigned long lib_opened;
+static short win_handle[MENU_WINDOWS];  /* each line's window, as last written */
+
+static void window_menu(void)
+{
+	static char label[MENU_WINDOWS][MENU_WIN_LABEL + 4];
+	const char *title[MENU_WINDOWS];
+	unsigned long when[MENU_WINDOWS];
+	short top = top_window();
+	int i, j, n = 0, front = -1;
+
+	if (!has_menu)
+		return;
+	for (i = 0; i < MAX_VIEWERS; i++)
+	{
+		viewer *v = &viewers[i];
+
+		if (!v->used || v->h <= 0)
+		{
+			v->opened = 0;
+			continue;
+		}
+		if (v->opened == 0)
+			v->opened = ++win_clock;
+		win_handle[n] = v->h;
+		when[n] = v->opened;
+		/* the page's title (two windows on one hypertext told apart) */
+		title[n++] = v->view.page != NULL ? hyp_page_title(v->view.doc, v->view.page) : "EHypView";
+	}
+	if (libwin_handle() > 0)
+	{
+		if (lib_opened == 0)
+			lib_opened = ++win_clock;
+		win_handle[n] = libwin_handle();
+		when[n] = lib_opened;
+		title[n++] = "Hypertexts";            /* the library window's title */
+	} else
+		lib_opened = 0;
+	/* oldest first (seven at most) */
+	for (i = 1; i < n; i++)
+		for (j = i; j > 0 && when[j - 1] > when[j]; j--)
+		{
+			unsigned long w = when[j];
+			short h = win_handle[j];
+			const char *t = title[j];
+
+			when[j] = when[j - 1], when[j - 1] = w;
+			win_handle[j] = win_handle[j - 1], win_handle[j - 1] = h;
+			title[j] = title[j - 1], title[j - 1] = t;
+		}
+	for (i = 0; i < n; i++)
+	{
+		const char *t = title[i];
+		size_t len;
+
+		while (*t == ' ')
+			t++;                           /* " database - page " */
+		len = strlen(t);
+		while (len > 0 && t[len - 1] == ' ')
+			len--;
+		if (len > MENU_WIN_LABEL + 3)
+			len = MENU_WIN_LABEL + 3;
+		memcpy(label[i], t, len);
+		label[i][len] = '\0';
+		title[i] = label[i];
+		if (win_handle[i] == top)
+			front = i;
+	}
+	for (; i < MENU_WINDOWS; i++)
+		win_handle[i] = 0;
+	menu_windows(&menu, title, n, front);
+}
+
+/* a line of the Window menu chosen: its window to the front */
+static void window_chosen(int line)
+{
+	short h = line >= 0 && line < MENU_WINDOWS ? win_handle[line] : 0;
+	char k[8];
+
+	if (h <= 0)
+		return;
+	wind_set(h, WF_TOP, h, 0, 0, 0);
+	sprintf(k, "%d", line + 1);
+	if (h == libwin_handle())
+		log_event("window-menu", "library", k);
+	else
+	{
+		cur = viewer_of(h);
+		log_event("window-menu", "viewer", k);
+	}
+}
+
 static void next_window(void)
 {
 	short h[MAX_VIEWERS + 1], top = top_window();
@@ -2270,7 +2375,12 @@ static void command(int cmd)
 		}
 		return;
 	}
-	if (cmd >= CMD_BM0 && cmd < CMD_COUNT)
+	if (cmd >= CMD_WIN0 && cmd < CMD_COUNT)
+	{
+		window_chosen(cmd - CMD_WIN0);
+		return;
+	}
+	if (cmd >= CMD_BM0 && cmd < CMD_WIN0)
 	{
 		const ehv_bookmark *b = (unsigned int) (cmd - CMD_BM0) < bookmarks.n ? &bookmarks.b[cmd - CMD_BM0] : NULL;
 
@@ -2300,7 +2410,7 @@ static void update_menu(void)
 	if (!has_menu)
 		return;
 	pick_current();
-	for (c = CMD_ABOUT; c < CMD_COUNT; c++)
+	for (c = CMD_ABOUT; c < CMD_WIN0; c++)
 	{
 		int on = 1, target = nav_target(c);
 		short obj;
@@ -2331,6 +2441,7 @@ static void update_menu(void)
 			menu_on[c] = (signed char) on;
 		}
 	}
+	window_menu();
 }
 
 static void log_font(void)

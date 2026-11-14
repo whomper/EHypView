@@ -78,6 +78,11 @@ static MBAR_ITEM bm_items[BM_FIXED + 1 + BM_MAX + 1] = {
 };
 static char bm_label[BM_MAX][BM_LABEL + 4];
 
+/* the Window menu: its lines written by menu_windows, the widest title
+   setting its width */
+static char win_blank[MENU_WIN_LABEL + 1];
+static MBAR_ITEM win_items[MENU_WINDOWS + 1];
+
 /* the guidelines' order (3.1): the Desk menu (under the program's name,
    as ECal's), File, Edit, View, the app's, Options, Help */
 static const MBAR_TITLE titles[] = {
@@ -87,6 +92,7 @@ static const MBAR_TITLE titles[] = {
 	{ " View ", view_items },
 	{ " Navigate ", nav_items },
 	{ " Bookmarks ", bm_items },
+	{ " Window ", win_items },
 	{ " Options ", opt_items },
 	{ " Help ", help_items },
 	{ NULL, NULL }
@@ -115,7 +121,47 @@ int menu_build(ehv_menu *m, const ehv_bookmarks *bm, short cw, short ch, short s
 		}
 	}
 	bm_items[n].text = NULL;
+	memset(win_blank, ' ', MENU_WIN_LABEL);
+	for (i = 0; i < MENU_WINDOWS; i++)
+	{
+		win_items[i].text = win_blank;
+		win_items[i].key = NULL;
+		win_items[i].cmd = CMD_WIN0 + (int) i;
+	}
+	win_items[MENU_WINDOWS].text = NULL;
 	return mbar_build(m, titles, cw, ch, screen_w, screen_h);
+}
+
+void menu_windows(ehv_menu *m, const char *const *title, int n, int front)
+{
+	int i;
+	short drop = -1, first = mbar_object(m, CMD_WIN0);
+
+	if (first < 0)
+		return;
+	for (i = 0; i < MENU_WINDOWS; i++)
+	{
+		OBJECT *o = &m->tree[first + i];
+		char *t = (char *) o->ob_spec + 2;      /* "  Title      " */
+		const char *s = i < n ? title[i] : i == 0 ? "No windows" : "";
+		size_t len = strlen(s);
+
+		memset(t, ' ', MENU_WIN_LABEL);
+		if (len > MENU_WIN_LABEL)
+		{
+			memcpy(t, s, MENU_WIN_LABEL - 3);
+			memcpy(t + MENU_WIN_LABEL - 3, "...", 3);
+		} else
+			memcpy(t, s, len);
+		o->ob_state = (unsigned short) ((i == front ? CHECKED : 0) | (n == 0 && i == 0 ? DISABLED : 0));
+		if (i < (n > 0 ? n : 1))
+			o->ob_flags &= (unsigned short) ~HIDETREE;
+		else
+			o->ob_flags |= HIDETREE;
+		if (i == MENU_WINDOWS - 1)
+			drop = o->ob_next;              /* the last line's next: its drop-down */
+	}
+	m->tree[drop].ob_height = (short) ((n > 0 ? n : 1) * m->tree[first].ob_height);
 }
 
 void menu_free(ehv_menu *m)
@@ -143,7 +189,9 @@ const char *menu_command_name(int cmd)
 		"forward", "see-also", "settings", "guide", "next-window", "link-tab", "keys"
 	};
 
-	if (cmd >= CMD_BM0 && cmd < CMD_COUNT)
+	if (cmd >= CMD_WIN0 && cmd < CMD_COUNT)
+		return "window";
+	if (cmd >= CMD_BM0 && cmd < CMD_WIN0)
 		return "bookmark";
 	return cmd > CMD_NONE && cmd < CMD_BM0 ? names[cmd] : "none";
 }
