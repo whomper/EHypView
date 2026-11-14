@@ -110,11 +110,29 @@ void colour_vdi_std(unsigned short n, crgb *c)
 #define WG 4
 #define WB 3
 
+/* a product of two values that fit 16 bits, as one 16 x 16 -> 32 bit
+   multiply (the 68000's muls.w): no call to libgcc's __mulsi3, whose
+   place against colour_pick's in a 68030's 256-byte instruction cache
+   made the Falcon's picture steps 65 ms slower or not, as the program's
+   layout fell (14 Nov 2026). Every operand here is within -510..510 */
+#if defined(EHV_TOS) && defined(__mc68000__)
+static inline long mul16(short a, short b)
+{
+	long r = a;
+
+	__asm__("muls.w %1,%0" : "+d"(r) : "dm"(b) : "cc");
+	return r;
+}
+#define MUL16(a, b) mul16((short) (a), (short) (b))
+#else
+#define MUL16(a, b) ((long) (short) (a) * (short) (b))
+#endif
+
 static long dist(const crgb *a, const crgb *b)
 {
-	long dr = (long) a->r - b->r, dg = (long) a->g - b->g, db = (long) a->b - b->b;
+	short dr = (short) (a->r - b->r), dg = (short) (a->g - b->g), db = (short) (a->b - b->b);
 
-	return WR * dr * dr + WG * dg * dg + WB * db * db;
+	return WR * MUL16(dr, dr) + WG * MUL16(dg, dg) + WB * MUL16(db, db);
 }
 
 void colour_pick(const crgb *pal, unsigned short n, const crgb *c, int dither, cpick *out)
@@ -141,22 +159,23 @@ void colour_pick(const crgb *pal, unsigned short n, const crgb *c, int dither, c
 	for (i = 0; i < n; i++)
 		for (j = 0; j < n; j++)
 		{
-			long ar = pal[i].r, ag = pal[i].g, ab = pal[i].b;
-			long er = (long) pal[j].r - ar, eg = (long) pal[j].g - ag, eb = (long) pal[j].b - ab;
-			long len = WR * er * er + WG * eg * eg + WB * eb * eb, dot, t, pr, pg, pb, d;
+			short ar = pal[i].r, ag = pal[i].g, ab = pal[i].b;
+			short er = (short) (pal[j].r - ar), eg = (short) (pal[j].g - ag), eb = (short) (pal[j].b - ab);
+			long len = WR * MUL16(er, er) + WG * MUL16(eg, eg) + WB * MUL16(eb, eb), dot, t, d;
+			short pr, pg, pb;
 
 			if (i == j || len == 0)
 				continue;
-			dot = WR * ((long) c->r - ar) * er + WG * ((long) c->g - ag) * eg + WB * ((long) c->b - ab) * eb;
+			dot = WR * MUL16(c->r - ar, er) + WG * MUL16(c->g - ag, eg) + WB * MUL16(c->b - ab, eb);
 			if (dot <= 0 || dot >= len)
 				continue;                        /* nearer to one of them */
 			t = (dot * 16 + len / 2) / len;      /* in sixteenths */
 			if (t <= 0 || t >= 16 || t > 8)
 				continue;                        /* (j, i) has it, with 16 - t */
-			pr = ar + er * t / 16 - c->r;
-			pg = ag + eg * t / 16 - c->g;
-			pb = ab + eb * t / 16 - c->b;
-			d = WR * pr * pr + WG * pg * pg + WB * pb * pb;
+			pr = (short) (ar + MUL16(er, t) / 16 - c->r);
+			pg = (short) (ag + MUL16(eg, t) / 16 - c->g);
+			pb = (short) (ab + MUL16(eb, t) / 16 - c->b);
+			d = WR * MUL16(pr, pr) + WG * MUL16(pg, pg) + WB * MUL16(pb, pb);
 			if (d < best)
 			{
 				best = d;

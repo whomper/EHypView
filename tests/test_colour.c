@@ -142,6 +142,103 @@ static void test_pick(void)
 }
 
 /* text: never white unless white, greys grey, white behind it none */
+/* colour_pick's arithmetic before its products were made 16 x 16 bit
+   (14 Nov 2026), kept here as the reference: the same pens, the same
+   dither, for any palette and colour */
+static long ref_dist(const crgb *a, const crgb *b)
+{
+	long dr = (long) a->r - b->r, dg = (long) a->g - b->g, db = (long) a->b - b->b;
+
+	return 2 * dr * dr + 4 * dg * dg + 3 * db * db;
+}
+
+static void ref_pick(const crgb *pal, unsigned short n, const crgb *c, int dither, cpick *out)
+{
+	unsigned short i, j;
+	long best = -1;
+
+	out->a = out->b = 0;
+	out->t = 0;
+	for (i = 0; i < n; i++)
+	{
+		long d = ref_dist(&pal[i], c);
+
+		if (best < 0 || d < best)
+		{
+			best = d;
+			out->a = out->b = (unsigned char) i;
+		}
+	}
+	if (!dither || best == 0 || n > 16)
+		return;
+	for (i = 0; i < n; i++)
+		for (j = 0; j < n; j++)
+		{
+			long ar = pal[i].r, ag = pal[i].g, ab = pal[i].b;
+			long er = (long) pal[j].r - ar, eg = (long) pal[j].g - ag, eb = (long) pal[j].b - ab;
+			long len = 2 * er * er + 4 * eg * eg + 3 * eb * eb, dot, t, pr, pg, pb, d;
+
+			if (i == j || len == 0)
+				continue;
+			dot = 2 * ((long) c->r - ar) * er + 4 * ((long) c->g - ag) * eg + 3 * ((long) c->b - ab) * eb;
+			if (dot <= 0 || dot >= len)
+				continue;
+			t = (dot * 16 + len / 2) / len;
+			if (t <= 0 || t >= 16 || t > 8)
+				continue;
+			pr = ar + er * t / 16 - c->r;
+			pg = ag + eg * t / 16 - c->g;
+			pb = ab + eb * t / 16 - c->b;
+			d = 2 * pr * pr + 4 * pg * pg + 3 * pb * pb;
+			if (d < best)
+			{
+				best = d;
+				out->a = (unsigned char) i;
+				out->b = (unsigned char) j;
+				out->t = (unsigned char) t;
+			}
+		}
+}
+
+static void test_pick_same(void)
+{
+	unsigned long seed = 7, k, same = 0;
+
+	for (k = 0; k < 20000; k++)
+	{
+		crgb pal[16], c;
+		cpick a, b;
+		unsigned short n, i;
+		int d;
+
+		seed = seed * 1103515245UL + 12345UL;
+		n = (unsigned short) (2 + (seed >> 16) % 15);
+		for (i = 0; i < n; i++)
+		{
+			seed = seed * 1103515245UL + 12345UL;
+			pal[i].r = (unsigned char) (seed >> 8);
+			pal[i].g = (unsigned char) (seed >> 16);
+			pal[i].b = (unsigned char) (seed >> 24);
+		}
+		if (k % 3 == 0)
+		{
+			memset(&pal[0], 0, sizeof(pal[0]));          /* black and white, as screens have */
+			memset(&pal[1], 255, sizeof(pal[1]));
+		}
+		seed = seed * 1103515245UL + 12345UL;
+		c.r = (unsigned char) (seed >> 8);
+		c.g = (unsigned char) (seed >> 16);
+		c.b = (unsigned char) (seed >> 24);
+		for (d = 0; d < 2; d++)
+		{
+			ref_pick(pal, n, &c, d, &a);
+			colour_pick(pal, n, &c, d, &b);
+			same += a.a == b.a && a.b == b.b && a.t == b.t;
+		}
+	}
+	CHECK(same == 2 * k);
+}
+
 static void test_text(void)
 {
 	crgb pal16[16], pal4[4], pal2[2], c;
@@ -324,6 +421,7 @@ int main(void)
 	test_pens();
 	test_vdi();
 	test_pick();
+	test_pick_same();
 	test_text();
 	test_bayer();
 	test_dark();
