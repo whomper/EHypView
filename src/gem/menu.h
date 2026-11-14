@@ -14,6 +14,11 @@
 #include "mbar.h"
 #include "bookmark.h"
 
+/* the Window menu's lines: the viewers and the library (Erez, 14 Nov
+   2026; EWeb 1.11's) */
+#define MENU_WINDOWS 7
+#define MENU_WIN_LABEL 32          /* a title shown in it is cut to this */
+
 /* commands */
 enum {
 	CMD_NONE = 0,
@@ -47,7 +52,8 @@ enum {
 	CMD_LINKTAB,                   /* the selected link in a new tab */
 	CMD_KEYS,                      /* Keys...: the guide's Keys page */
 	CMD_BM0,                       /* open bookmark 0 ... */
-	CMD_COUNT = CMD_BM0 + BM_MAX
+	CMD_WIN0 = CMD_BM0 + BM_MAX,   /* the Window menu's first line ... */
+	CMD_COUNT = CMD_WIN0 + MENU_WINDOWS
 };
 
 /* the menu bar itself is the shared builder's (common/ui/mbar.c) */
@@ -67,6 +73,15 @@ short menu_object(const ehv_menu *m, int cmd);
 
 /* the command of a selected item */
 int menu_command(const ehv_menu *m, short item);
+
+/*
+ * The Window menu as it is now: n windows (0 to MENU_WINDOWS), oldest
+ * first, their titles in title[], the one in front at index front (-1:
+ * none of them). Its lines are written in the tree, those not used hidden
+ * and the drop-down cut to the rest: no AES call, the AES draws it so
+ * the next time it drops. With none, one line says so, not chosen.
+ */
+void menu_windows(ehv_menu *m, const char *const *title, int n, int front);
 
 /* "open", "next", ... for the log */
 const char *menu_command_name(int cmd);

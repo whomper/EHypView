@@ -590,7 +590,8 @@ def copy_dir(name, inf, settings=None, start=None):
 # with the mouse (8x16 system font, Falcon VGA): a link, the right
 # button's menu, and each menu (title x, y, then the item's x, y)
 DESK, FILE, EDIT, VIEW, NAV, BOOK = (56, 9), (120, 9), (168, 9), (216, 9), (280, 9), (364, 9)
-OPTIONS, HELPMENU = (444, 9), (504, 9)
+# the Window menu (Erez, 14 Nov 2026) after Bookmarks: Options and Help 64 pixels on
+WINDOWMENU, OPTIONS, HELPMENU = (440, 9), (508, 9), (568, 9)
 
 # the Settings dialog, centred on the screen: its pages on the left, the
 # START= popup on General; on Library the layout's popup and its second
@@ -692,6 +693,15 @@ MOUSE_STEPS = [
     ([("click", rx(600), vy(111))], ["menu about", "dialog about *"]),
     ([("click", 320, 300)], []),                            # a click closes it
     ([tb(TB_LIBRARY)], ["toolbar library", "library 4"]),
+    # the Window menu: the windows oldest first (the viewer, the library,
+    # then a new viewer), each chosen comes to the front
+    ([item(WINDOWMENU, 0)], ["menu window", "window-menu viewer 1"]),
+    ([("ctrl", N)], ["window new 2"]),
+    ([item(WINDOWMENU, 2)], ["menu window", "window-menu viewer 3"]),
+    ([item(WINDOWMENU, 0)], ["menu window", "window-menu viewer 1"]),
+    ([item(WINDOWMENU, 2)], ["menu window", "window-menu viewer 3"]),
+    ([("ctrl", U)], ["closed viewer"]),
+    ([item(WINDOWMENU, 1)], ["menu window", "window-menu library 2"]),
     ([("wait", 1)], []),                                    # (a picture of it)
     ([("type", "sec")], ['search "sec" *']),
     ([BACKSPACE] * 3, ['search "" 4']),

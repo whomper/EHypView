@@ -79,7 +79,7 @@ static void test_tree(short cw, short ch, short sw, short sh)
 
 	CHECK(menu_build(&m, &two, cw, ch, sw, sh) == 0);
 	t = m.tree;
-	CHECK(m.ntitles == 8);
+	CHECK(m.ntitles == 9);
 
 	/* every object reached exactly once from the root */
 	memset(visits, 0, sizeof(visits));
@@ -133,7 +133,7 @@ static void test_tree(short cw, short ch, short sw, short sh)
 	{
 		short o = menu_object(&m, i);
 
-		if (i >= CMD_BM0 + (short) two.n)
+		if (i >= CMD_BM0 + (short) two.n && i < CMD_WIN0)
 		{
 			CHECK(o == -1);
 			continue;
@@ -146,14 +146,39 @@ static void test_tree(short cw, short ch, short sw, short sh)
 	CHECK(ends_with(text(&t[menu_object(&m, CMD_NEWWIN)]), "^N "));
 	CHECK(ends_with(text(&t[menu_object(&m, CMD_BM_ADD)]), "^D "));
 	CHECK(strcmp(menu_command_name(CMD_BM0 + 1), "bookmark") == 0);
+	CHECK(strcmp(menu_command_name(CMD_WIN0 + 2), "window") == 0);
+	/* the Window menu (Erez, 14 Nov 2026): the windows oldest first,
+	   the one in front ticked, the lines not used hidden and the
+	   drop-down cut to the rest; with none, one line, not chosen */
+	{
+		static const char *const three[] = { " A - Main ", "Hypertexts",
+			"A window title much longer than the Window menu shows it" };
+		short w0 = menu_object(&m, CMD_WIN0), drop = t[w0 + MENU_WINDOWS - 1].ob_next;
+
+		CHECK(w0 > 0 && t[drop].ob_type == G_BOX && t[drop].ob_head == w0);
+		menu_windows(&m, three, 3, 1);
+		CHECK(strncmp(text(&t[w0]), "   A - Main ", 12) == 0);
+		CHECK(strncmp(text(&t[w0 + 1]), "  Hypertexts ", 13) == 0);
+		CHECK(strstr(text(&t[w0 + 2]), "  A window title much longer th...") != NULL);
+		CHECK(strlen(text(&t[w0 + 2])) == strlen(text(&t[w0])));    /* the width kept */
+		CHECK(!(t[w0].ob_state & CHECKED) && (t[w0 + 1].ob_state & CHECKED) && !(t[w0 + 2].ob_state & CHECKED));
+		for (i = 0; i < MENU_WINDOWS; i++)
+			CHECK(!(t[w0 + i].ob_flags & HIDETREE) == (i < 3));
+		CHECK(t[drop].ob_height == 3 * ch);
+		menu_windows(&m, three, 0, -1);
+		CHECK(strncmp(text(&t[w0]), "  No windows ", 13) == 0 && (t[w0].ob_state & DISABLED));
+		CHECK(!(t[w0].ob_flags & HIDETREE) && (t[w0 + 1].ob_flags & HIDETREE) && t[drop].ob_height == ch);
+		menu_windows(&m, three, 1, -1);
+		CHECK(!(t[w0].ob_state & (DISABLED | CHECKED)) && t[drop].ob_height == ch);
+	}
 	CHECK(strcmp(menu_command_name(CMD_LINKWIN), "link-window") == 0);
 	/* the titles in the guidelines' order */
 	{
 		short ti = t[2].ob_head;
 		static const char *const want[] = { " EHypView ", " File ", " Edit ", " View ", " Navigate ", " Bookmarks ",
-						    " Options ", " Help " };
+						    " Window ", " Options ", " Help " };
 
-		for (i = 0; i < 8; i++, ti = t[ti].ob_next)
+		for (i = 0; i < 9; i++, ti = t[ti].ob_next)
 			CHECK(strcmp(text(&t[ti]), want[i]) == 0);
 	}
 	CHECK(menu_object(&m, CMD_NONE) == -1);

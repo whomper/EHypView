@@ -193,6 +193,10 @@ the page shown in another; ⇧-click opens a link in one. Up to six are open at 
 below and to the right of the last. The menu commands act on the window in front, and a
 hypertext's "quit" link closes its own window.
 
+The **Window** menu lists EHypView's windows, the oldest first: each viewer by the title of its page,
+and the library as Hypertexts. The one in front is ticked; choosing another brings it to the front,
+as **File > Next window** (^W) does in turn. The accessory has no menu bar: there ^W goes round them.
+
 ## Fonts
 
 **Options > Font...** chooses the font for the text, with the AERA programs' Font dialog, the
