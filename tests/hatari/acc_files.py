@@ -44,7 +44,9 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "common", "tools"))
+sys.path.insert(0, os.path.join(ROOT, "tests"))
 import machines  # noqa: E402
+import natfeats  # noqa: E402
 
 DIR, OUT = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
 MACHINE = sys.argv[3] if len(sys.argv) > 3 else "Falcon:16"
@@ -113,6 +115,7 @@ def boot(name, wanted, idle=0, auto=None, timeout=900):
     and the events with their times (the host's clock, fast-forward off)"""
     trace = os.path.join(OUT, name + ".trace")
     log = os.path.join(OUT, name + ".log")
+    natfeats.seed(C)                                    # its EHV lines (NATFEATS=1)
     m = machines.Machine(MACHINE, C)
     args = ["hatari"] + m.args() + ["--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
                                     "--fast-forward", "no", "--trace", "gemdos,aes", "--trace-file", trace]

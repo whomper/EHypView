@@ -15,6 +15,8 @@
 #include "tos.h"
 #include "gem.h"
 
+long nf_on = 1;                 /* a test program: NatFeats looked for (tos.h) */
+
 #define VA_START 0x4711
 
 static char request[128] = "C:\\GUIDES\\G000.HYP Main";

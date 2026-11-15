@@ -39,6 +39,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "common", "tools"))
 import machines  # noqa: E402
+import natfeats  # noqa: E402
 
 PDIR, OUT = sys.argv[1], sys.argv[2]
 MANY = os.path.join(HERE, "fixtures", "many")
@@ -103,6 +104,7 @@ def boot(d, name, wanted, timeout=int(os.environ.get("QUIET_TIMEOUT", "240"))):
     """boot with drive C: = d, open the accessory, wait for the events
     wanted; the console's lines"""
     log_path = os.path.join(OUT, name + ".log")
+    natfeats.seed(d)                                    # its EHV lines (NATFEATS=1)
     m = machines.Machine(MACHINE, d)
     env = m.env()
     env["DISPLAY"] = DISPLAY
@@ -148,6 +150,7 @@ def help_boot(d, page):
     """boot with drive C: = d and ASKHELP.PRG started: the console's lines,
     and the seconds from its request to the page (None: no page)"""
     log_path = os.path.join(OUT, "help.log")
+    natfeats.seed(d)                                    # its EHV lines (NATFEATS=1)
     m = machines.Machine(MACHINE, d)
     args = ["hatari"] + m.args() + [
             "--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal", "--fast-forward", "no",
