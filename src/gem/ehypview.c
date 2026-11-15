@@ -183,6 +183,47 @@ static long probe_depth(void)
 }
 #endif
 
+/* NatFeats only where EHYPVIEW.INF says NATFEATS=1, which only the test
+   rigs write (Erez, 15 Nov 2026: "make it a .INF setting so that it can be
+   added in our testing but have no bearing outside"; guidelines 6.5): on a
+   real machine nf_debug never probes, so the probe's illegal instruction
+   never runs (a Vampire V4SA ended EHypView with it). The lines before the
+   INF is read (own_set, in the program and the accessory alike) are held
+   here and sent then, so nothing is probed before nf_on is known */
+static char nf_held[2048];
+static int nf_held_n, nf_known;
+
+static void nf_out(const char *s)
+{
+	size_t n = strlen(s);
+
+	if (nf_known)
+	{
+		if (nf_on)
+			nf_debug(s);
+		return;
+	}
+	if (nf_held_n + n < sizeof(nf_held))
+	{
+		memcpy(nf_held + nf_held_n, s, n + 1);
+		nf_held_n += (int) n + 1;
+	}
+}
+
+static void nf_decide(const inf_file *inf)
+{
+	const char *v = inf != NULL ? inf_get(inf, "NATFEATS") : NULL;
+	int i;
+
+	if (nf_known)
+		return;
+	nf_known = 1;
+	nf_on = v != NULL && atoi(v) == 1;
+	for (i = 0; nf_on && i < nf_held_n; i += (int) strlen(nf_held + i) + 1)
+		nf_debug(nf_held + i);
+	nf_held_n = 0;
+}
+
 void log_event(const char *what, const char *a, const char *b)
 {
 	char line[300];
@@ -196,14 +237,14 @@ void log_event(const char *what, const char *a, const char *b)
 
 		deepest = d;
 		snprintf(n, sizeof(n), "STACK %ld after %s\n", d, what);
-		nf_debug(n);
+		nf_out(n);
 	}
 #endif
 
 	snprintf(line, sizeof(line), "EHV %s %s%s%s", what, a ? a : "", b ? " " : "", b ? b : "");
 	crash_note(line + 4);             /* the last one goes in CRASH.LOG */
 	strcat(line, "\n");
-	nf_debug(line);
+	nf_out(line);
 }
 
 /* ---------------------------------------------------------------- */
@@ -3730,6 +3771,7 @@ static void own_set(char *text)
 	own_text = text;
 	own_inf = text != NULL ? inf_parse(text, NULL) : NULL;
 	write_log = settings_log_on(own_inf);
+	nf_decide(own_inf);              /* the first time: NATFEATS= */
 }
 
 /* settings no longer used, left out when the file is written:

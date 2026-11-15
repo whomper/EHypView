@@ -53,7 +53,9 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..", "..")
 sys.path.insert(0, os.path.join(ROOT, "common", "tools"))
+sys.path.insert(0, os.path.join(ROOT, "tests"))
 import machines  # noqa: E402
+import natfeats  # noqa: E402
 
 BDIR, OUT = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
 FIX = os.path.join(ROOT, "tests", "fixtures")
@@ -205,6 +207,7 @@ class Run:
         self.fifo = os.path.join(self.dir, "fifo")
         if os.path.exists(self.fifo):
             os.remove(self.fifo)
+        natfeats.seed(m.hd)                             # its EHV lines (NATFEATS=1)
         env = m.env()
         args = ["hatari"] + m.args() + ["--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
                                         "--cmd-fifo", self.fifo, "--borders", "no"]

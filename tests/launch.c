@@ -11,6 +11,8 @@
 #include <string.h>
 #include "tos.h"
 
+long nf_on = 1;                 /* a test program: NatFeats looked for (tos.h) */
+
 static char text[300];
 
 int main(void)

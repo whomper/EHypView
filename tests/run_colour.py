@@ -38,6 +38,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "common", "tools"))
 import machines  # noqa: E402
+import natfeats  # noqa: E402
 
 HDIR, OUT = sys.argv[1], sys.argv[2]
 FIXTURE = os.path.join(HERE, "fixtures", "colour.hyp")
@@ -242,6 +243,7 @@ def boot(name, spec, opts, vmode, how, hyp=FIXTURE, npics=2):
     for p in (fifo, shot):
         if os.path.exists(p):
             os.remove(p)
+    natfeats.seed(drive)                                # its EHV lines (NATFEATS=1)
     args = ["hatari"] + margs + [
         "--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal", "--borders", "no",
         "--cmd-fifo", fifo, "--fast-forward", "yes",

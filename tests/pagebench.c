@@ -27,6 +27,8 @@
 #define NOW() 0UL
 #endif
 
+long nf_on = 1;                 /* a test program: NatFeats looked for (tos.h) */
+
 static void out(const char *s);
 
 /* a checksum (Fletcher-32 over bytes) */

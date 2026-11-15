@@ -31,6 +31,8 @@
 #include "tos.h"
 #endif
 
+long nf_on = 1;                 /* a test program: NatFeats looked for (tos.h) */
+
 static const char *root;
 static size_t root_len;
 

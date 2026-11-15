@@ -28,6 +28,7 @@ import types
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common", "tools"))
 import machines  # noqa: E402
+import natfeats  # noqa: E402
 
 HDIR, OUT = sys.argv[1], sys.argv[2]
 MACHINE = os.environ.get("MACHINE", "Falcon:16")
@@ -196,6 +197,7 @@ BOOT_WAIT = (120 if MACHINE.startswith("Falcon-4") else 90) if os.environ.get("A
 
 
 def start_hatari(hdir, auto, fifo, log_path, windowed=False, extra=(), machine=None):
+    natfeats.seed(hdir)                                 # its EHV lines (NATFEATS=1)
     for name in (fifo, machines.ci_path(hdir, "ehypview.idx")):
         if os.path.exists(name):
             os.remove(name)
