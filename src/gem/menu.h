@@ -51,6 +51,7 @@ enum {
 	CMD_NEXTWIN,                   /* ^W: the next of its windows on top */
 	CMD_LINKTAB,                   /* the selected link in a new tab */
 	CMD_KEYS,                      /* Keys...: the guide's Keys page */
+	CMD_LOG,                       /* Write a log: LOG=, ticked (guidelines 6.5) */
 	CMD_BM0,                       /* open bookmark 0 ... */
 	CMD_WIN0 = CMD_BM0 + BM_MAX,   /* the Window menu's first line ... */
 	CMD_COUNT = CMD_WIN0 + MENU_WINDOWS

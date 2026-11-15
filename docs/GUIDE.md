@@ -226,7 +226,10 @@ field Esc empties the field instead, as in every GEM dialog.
   EHypView's folder: where the library's index (`EHYPVIEW.IDX`) and the fonts measured
   (`EHYPVIEW.FNT`) are kept, the folder `EHYPVIEW.PRG` is in. Where the system draws
   dialogs in 3D (TOS 4, MagiC, N.AES, XaAES, EmuTOS in colour), EHypView's dialogs and alerts are
-  in 3D, as every other program's.
+  in 3D, as every other program's. Last, **Write a log (EHYPVIEW.LOG)**, the same setting as
+  **Options > Write a log**: ticked, the program writes the steps of quitting to `EHYPVIEW.LOG`
+  next to it, for when the machine stops on the way out. It is off until you tick it, and then
+  nothing is written. `CRASH.LOG` is written only after a crash, whatever this says.
 - **Library:** its layout, **Outline** or **Two panes** (see [the library](#the-library)); up to
   three more folders to look for hypertexts in, each with its subfolders. A folder's field holds
   a path of up to 128 characters, more than it shows: it scrolls as you type, the cursor keys
@@ -326,6 +329,7 @@ keeps the notes, and anything it doesn't know, when it writes the file. [Setting
 | `PANECOLS=` | the width of the Two panes layout's subjects, in characters, as its edge was dragged |
 | `EDITED=` | counted up when the library's index was written with subjects changed, so that the program or the accessory, whichever didn't, reads it again |
 | `PATHS=` | more folders to look in, between `;` |
+| `LOG=` | `1`: Write a log, the steps of quitting in `EHYPVIEW.LOG`; `0` or none: no log |
 | `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
 | `PAGEKB=` | the part of it its pages needed at the most, in KB: grows when a viewer window closes having needed more |
 | `HEAPKB=` | the same, set by you: taken instead of `MEMKB=` |
