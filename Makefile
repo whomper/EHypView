@@ -401,6 +401,7 @@ quiet-test: atari
 # ST:mono, ST:med and Falcon-4:16 (SPEED_MACHINES), against the
 # guidelines' times (needs hatari; the accessory's case Xvfb and xdotool)
 SPEED_DIR = build/speed
+PROF      = build/prof
 speed-test: atari $(PROF)/EHYPVIEW.PRG
 	$(MAKE) ATARI=$(SPEED_DIR)/obj HATARI_DIR=$(SPEED_DIR) XEXTRA=-DAES_PROFILE=20 $(SPEED_DIR)/ASKHELP.PRG \
 		$(SPEED_DIR)/LAUNCH.PRG
@@ -412,7 +413,6 @@ speed-test: atari $(PROF)/EHYPVIEW.PRG
 # with AES_PROFILE (common's gem.c and ehypview.c), linked by
 # common/tools/profpad.py at the shipped build's places modulo 256, so the
 # rig times the layout that ships (the hub, 17 Nov 2026, from EPlay 1.45)
-PROF      = build/prof
 PROF_OBJ  = $(patsubst $(ATARI)/gem.o,$(PROF)/gem.o,$(patsubst $(ATARI)/ehypview.o,$(PROF)/ehypview.o,\
             $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o))
 $(PROF):
@@ -428,6 +428,13 @@ $(PROF)/ehypview.elf: $(ATARI)/ehypview.elf $(PROF_OBJ) common/atari/link.ld com
 	    -- $(XCC) $(XLDFLAGS) $(PROF_OBJ) -lgcc
 $(PROF)/EHYPVIEW.PRG: $(PROF)/ehypview.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+
+# the rows of the family's regression gate (Erez, 17 Nov 2026; AERA-Atari
+# standards/TEST-MATRIX.md) the other rigs don't boot, one boot a row:
+# tests/gate.py (ROWS=1 5 ... for some; needs hatari, Xvfb and xdotool,
+# common/tests/xaaes's make base for rows 5 and 6)
+gate-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG
+	python3 tests/gate.py $(HATARI_DIR) build/gate $(ROWS)
 
 # pictures and text in colour in every screen mode: Falcon 4, 16, 256 and
 # true colour, ST medium, TT medium, low and high, checked pixel by pixel
@@ -485,4 +492,4 @@ dist: atari help
 clean:
 	rm -rf build binary dist
 
-.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test speed-test colour-test acc-files-test accnvdi-test clean FORCE
+.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test speed-test gate-test colour-test acc-files-test accnvdi-test clean FORCE

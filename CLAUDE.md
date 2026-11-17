@@ -30,11 +30,20 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   A build must leave every tracked file unchanged and shows the version in `VERSION` as it is (there is
   no `-dev` label). Don't commit built programs, help files or certificates (`binary/`, `dist/`). Never reuse a number.
 - **Only formal releases leave the build machine.** Erez gets vX.Y releases made by the Release workflow from `main`, nothing else: no test builds, no CI artifacts, no builds from a branch. Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, roll back with a release: revert on `main`, release the next number, and say in the bad release's notes that it is withdrawn and which one to use.
-- **Releases go out without asking Erez** (his decision, 23 Oct 2026; guidelines 1.2). Release when
-  work on `main` is ready:
-  - this repo's checks pass;
-  - the rigs on his TOS pass, where this file asks for them;
-  - the hub's family checks pass.
+- **Releases go out without asking Erez** (his decision, 23 Oct 2026; guidelines 1.2), once the candidate
+  has passed **the regression gate** (Erez, 17 Nov 2026: "we need to be extra careful with regression issues as
+  there are users of our software. This means testing across all configurations" and "make sure we don't loose
+  performance"; guidelines 1.2, AERA-Atari standards/TEST-MATRIX.md), in this order:
+  1. this repo's checks (below);
+  2. the rigs on every row of the gate table EHypView runs on, on Erez's TOS images and NVDI (EmuTOS is no
+     evidence): the checks, then `make gate-test` (tests/gate.py: the rows they don't boot; row 11, network,
+     isn't EHypView's), each row named by describe();
+  3. the paired speed run against the last release on Erez's configuration, Falcon-4:16 and ST:mono, timed at
+     the shipped layout (`make speed-test`, common/tools/profpad.py): no row slower beyond a tick; fix it
+     first, only Erez accepts one;
+  4. the candidate's commit and the results to the hub, which runs the family check and answers go or the
+     faults it found;
+  5. then the release. A fault a user reports becomes a case in the rigs, in the release that fixes it.
 
   Then give Erez the link in one line, with anything he has to do, and send the hub the link. Roll
   back a bad release the same way. Decisions that are his still go to him first.
