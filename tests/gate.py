@@ -114,22 +114,24 @@ def xaaes():
             f.write("PATHS=%s\r\nREF=%s\\ALL.REF\r\n" % (guides, guides))
         with open(os.path.join(src, "ehypview.inf"), "w", newline="") as f:
             f.write("; NatFeats for the test rigs (written by the rigs only)\r\nNATFEATS=1\r\n")
+        copy = [os.path.join(src, "ST-GUIDE.INF"), os.path.join(src, "ehypview.inf")]
         args = ["python3", run, work, machines.emutos(), os.path.join(HDIR, "EHYPVIEW.PRG"),
-                "--copy", os.path.join(src, "ST-GUIDE.INF"), "--copy", os.path.join(src, "ehypview.inf"),
                 "--nvdi", "--machine", mach, "--steps", steps]
         if ext2:
             os.makedirs(os.path.join(src, "ext2"))
             shutil.copytree(os.path.join(HDIR, "FIXT"), os.path.join(src, "ext2", "FIXT"))
             args += ["--ext2", os.path.join(src, "ext2")]
         else:
-            args += ["--copy", os.path.join(HDIR, "FIXT")]
+            copy.append(os.path.join(HDIR, "FIXT"))
+        args += ["--copy"] + copy                    # (one --copy, every file after it)
         r = subprocess.run(args, capture_output=True, text=True)
         out = os.path.join(work, "out")
         ok = r.returncode == 0 and not crash_log(out)
         what = "FreeMiNT 1.17 + XaAES on EmuTOS 1.4, NVDI, run.py --machine %s%s" % (
             mach, " with the guides on an ext2 drive" if ext2 else "")
-        note(row, ok, what + ("" if ok else ": " + (r.stdout + r.stderr).strip().splitlines()[-1:][0]
-                               if (r.stdout + r.stderr).strip() else ""))
+        with open(work + ".out", "w") as f:
+            f.write(r.stdout + r.stderr)
+        note(row, ok, what + ("" if ok else " (see %s.out, %s/hatari.log)" % (work, work)))
     note("6", True, "plain TOS on a 68060: machines.py has no such machine; the 68060 runs as XaAES's "
          "ct60 (above) and as the FireBee stand-in (row 7)") if not WANT or "6" in WANT else None
 
