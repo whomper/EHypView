@@ -1428,17 +1428,19 @@ def arrowed():
 # renamed tools through its menu (Esc empties the name first); the edge
 # between the panes dragged wider (PANECOLS=); the index written again
 # holds the new subject. Screenshots refile-NN on Falcon:16
+# the library on the whole desk (D39; WINDOW= not yet saved), its rows 16 pixels
+# higher than when it opened a line below the menu bar (before 2.7)
 REFILE_STEPS = [
     ([], ["library *", "library-layout panes", "library-bar *", "index 20 guides"]),
     ([("home",), ("hover", 620, 380), ("still", 3)], []),   # (off the menu bar)
-    ([("rclick", 330, 183)], ["menu row", "!page *"]),
+    ([("rclick", 330, 167)], ["menu row", "!page *"]),
     ([ESC], ["!page *"]),
-    ([("drag", 330, 183, 60, 204)], [r"refiled C:\GUIDES\S00.HYP Sub01/EHypVie", "index saved edited"]),
-    ([("rclick", 60, 160)], ["menu subject"]),
-    ([("click", 100, 171)], ["dialog ask *"]),
+    ([("drag", 330, 167, 60, 188)], [r"refiled C:\GUIDES\S00.HYP Sub01/EHypVie", "index saved edited"]),
+    ([("rclick", 60, 144)], ["menu subject"]),
+    ([("click", 100, 155)], ["dialog ask *"]),
     ([ESC] + typed("tools") + [RETURN], ["dialog-closed ask tools", r"refiled C:\GUIDES\S00.HYP tools/EHypVie",
                                          r"refiled C:\GUIDES\S01.HYP tools/EHypVie", "index saved edited"]),
-    ([("drag", 224, 300, 304, 300)], ["pane-cols *"]),
+    ([("drag", 224, 284, 304, 284)], ["pane-cols *"]),
     ([("hover", 620, 470), ("still", 5)], []),
     ([("ctrl", Q)], ["quit"]),
 ]
