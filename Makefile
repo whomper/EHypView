@@ -81,8 +81,8 @@ $(HOST)/test_accmem: common/tests/accmem/test_accmem.c common/ui/accmem.c common
 
 # the shared dialog loop and its fields that hold more than they show
 # (guidelines 5.4), against common/tests/dialog's stand-in AES
-$(HOST)/test_dialog: common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c common/ui/field.h common/ui/dialog.h | $(HOST)
-	$(CC) $(CFLAGS) -Icommon/tests/dialog/stub -Icommon/ui -Icommon/atari -o $@ common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c
+$(HOST)/test_dialog: common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c common/ui/field.h common/ui/dialog.h common/ui/eye.c | $(HOST)
+	$(CC) $(CFLAGS) -Icommon/tests/dialog/stub -Icommon/ui -Icommon/atari -o $@ common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c common/ui/eye.c
 
 # the family's Font dialog, its part without GEM (common/tests/fontsel)
 $(HOST)/test_fontsel: common/tests/fontsel/test_fontsel.c common/ui/fontsel.c common/ui/fontsel.h | $(HOST)
@@ -115,7 +115,7 @@ $(HOST)/test_stmem_acc: tests/test_stmem_acc.c src/gem/stmem.c src/gem/stmem.h |
 $(HOST):
 	mkdir -p $@
 
-test: all
+test: all build/prof/EHYPVIEW.PRG    # (the timed build: profpad checks its layout)
 	$(HOST)/test_core tests/fixtures
 	$(HOST)/test_index tests/fixtures
 	$(HOST)/test_view tests/fixtures
@@ -278,10 +278,10 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 $(ATARI)/pagebench.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/pagebench.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/pagebench.o -lgcc
 
-GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
+GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o \
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/tabs.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/ehv_settings.o $(ATARI)/ask.o \
            $(ATARI)/aboutbox.o $(ATARI)/aboutline.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
-           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/text.o $(ATARI)/colour.o \
+           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o \
            $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o $(ATARI)/dlgbuild.o $(ATARI)/panebar.o $(ATARI)/libbar.o $(ATARI)/click.o $(ATARI)/arrowed.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
@@ -298,8 +298,18 @@ FORCE:
 $(ATARI)/version.o: $(ATARI)/version.c
 	$(XCC) $(XFLAGS) -std=c99 -c -o $@ $<
 
-$(ATARI)/ehypview.elf: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o common/atari/link.ld
-	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o -lgcc
+# (its map beside it: common/tools/profpad.py lays the timed build out by it)
+# a page's redraw pinned by link order (the guidelines, Speed: "The hot
+# loop is pinned by link order"): the AES/VDI calls, the text's cell loops,
+# the page's lines and the colours straight after the start-up code, so no
+# other edit moves them in a 68030's 256-byte instruction cache (common
+# b51644b moved them: Falcon-4:16's front page drawn at the start 160 ->
+# 175 ms; pinned, 160). Not hotcode.h's sort: profpad pads by object.
+HOT_OBJ  = $(ATARI)/gem.o $(ATARI)/text.o $(ATARI)/pagedraw.o $(ATARI)/colour.o
+APP_OBJ  = $(wordlist 1,2,$(RT_OBJ)) $(HOT_OBJ) $(filter-out $(ATARI)/gem.o,$(wordlist 3,99,$(RT_OBJ))) \
+           $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o
+$(ATARI)/ehypview.elf: $(APP_OBJ) common/atari/link.ld
+	$(XCC) $(XLDFLAGS) -Wl,-Map,$@.map -o $@ $(APP_OBJ) -lgcc
 
 # one program, two names: it sees at start-up whether TOS loaded it as
 # an accessory or started it as an application (PRGFLAGS 7: fast load,
@@ -400,10 +410,40 @@ quiet-test: atari
 # ST:mono, ST:med and Falcon-4:16 (SPEED_MACHINES), against the
 # guidelines' times (needs hatari; the accessory's case Xvfb and xdotool)
 SPEED_DIR = build/speed
-speed-test: atari
-	$(MAKE) ATARI=$(SPEED_DIR)/obj HATARI_DIR=$(SPEED_DIR) XEXTRA=-DAES_PROFILE=20 $(SPEED_DIR)/EHYPVIEW.PRG \
-		$(SPEED_DIR)/EHYPVIEW.ACC $(SPEED_DIR)/ASKHELP.PRG $(SPEED_DIR)/LAUNCH.PRG
+PROF      = build/prof
+speed-test: atari $(PROF)/EHYPVIEW.PRG
+	$(MAKE) ATARI=$(SPEED_DIR)/obj HATARI_DIR=$(SPEED_DIR) XEXTRA=-DAES_PROFILE=20 $(SPEED_DIR)/ASKHELP.PRG \
+		$(SPEED_DIR)/LAUNCH.PRG
+	cp $(PROF)/EHYPVIEW.PRG $(SPEED_DIR)/EHYPVIEW.PRG
+	cp $(PROF)/EHYPVIEW.PRG $(SPEED_DIR)/EHYPVIEW.ACC
 	python3 tests/hatari/speed.py $(SPEED_DIR) build/speed-out
+
+# the timed EHypView the speed rig runs: the shipped objects but the two
+# with AES_PROFILE (common's gem.c and ehypview.c), linked by
+# common/tools/profpad.py at the shipped build's places modulo 256, so the
+# rig times the layout that ships (the hub, 17 Nov 2026, from EPlay 1.45)
+PROF_OBJ  = $(patsubst $(ATARI)/gem.o,$(PROF)/gem.o,$(patsubst $(ATARI)/ehypview.o,$(PROF)/ehypview.o,\
+            $(APP_OBJ)))
+$(PROF):
+	mkdir -p $@
+$(PROF)/gem.o: common/atari/gem.c $(XHDRS) | $(PROF)
+	$(XCC) $(XFLAGS) -DAES_PROFILE=20 -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
+$(PROF)/ehypview.o: src/gem/ehypview.c src/gem/*.h src/view/*.h $(XHDRS) | $(PROF)
+	$(XCC) $(XFLAGS) -DAES_PROFILE=20 -Isrc/view -Isrc/gem -std=gnu99 -c -o $@ $<
+$(PROF)/ehypview.elf: $(ATARI)/ehypview.elf $(PROF_OBJ) common/atari/link.ld common/tools/profpad.py \
+		      common/atari/codepad.S
+	python3 common/tools/profpad.py --ship $(ATARI)/ehypview.elf --out $@ --cpu=-m68000 --dir $(PROF)/pads \
+	    --exclude $(ATARI)/gem.o --exclude $(PROF)/gem.o --exclude $(ATARI)/ehypview.o --exclude $(PROF)/ehypview.o \
+	    -- $(XCC) $(XLDFLAGS) $(PROF_OBJ) -lgcc
+$(PROF)/EHYPVIEW.PRG: $(PROF)/ehypview.elf common/tools/elf2tos.py
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+
+# the rows of the family's regression gate (Erez, 17 Nov 2026; AERA-Atari
+# standards/TEST-MATRIX.md) the other rigs don't boot, one boot a row:
+# tests/gate.py (ROWS=1 5 ... for some; needs hatari, Xvfb and xdotool,
+# common/tests/xaaes's make base for rows 5 and 6)
+gate-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG
+	python3 tests/gate.py $(HATARI_DIR) build/gate $(ROWS)
 
 # pictures and text in colour in every screen mode: Falcon 4, 16, 256 and
 # true colour, ST medium, TT medium, low and high, checked pixel by pixel
@@ -461,4 +501,4 @@ dist: atari help
 clean:
 	rm -rf build binary dist
 
-.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test speed-test colour-test acc-files-test accnvdi-test clean FORCE
+.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test speed-test gate-test colour-test acc-files-test accnvdi-test clean FORCE

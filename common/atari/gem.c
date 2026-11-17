@@ -146,12 +146,25 @@ static void event_tag(short op)
 		snprintf(ev_tag, sizeof(ev_tag), "timer");
 }
 
+/* conn.c's, where a program links it: the log's file closed in the event
+   wait, a second after a line at most (conn.c, log_write's note) */
+extern void conn_log_idle(void) __attribute__((weak));
+extern void conn_log_flush(void) __attribute__((weak));
+extern short _is_acc;		/* crt0.S */
+
 static short aes(short op, short nin, short nout, short nain, short naout)
 {
 	short r;
 	int ev = op >= 20 && op <= 25;		/* evnt_keybd ... evnt_multi */
 	int idle = op == 12 || op == 13 || op == 79 || op == 107;	/* no work of ours */
 	u32 t0 = 0;
+	if (ev && conn_log_idle)
+		conn_log_idle();
+	/* an accessory's files belong to the program in front, which may end
+	   while we wait: no log file left open across an event call there
+	   (2.2), only a program keeps it a second */
+	if (ev && _is_acc && conn_log_flush)
+		conn_log_flush();
 	if (ev && gap_from && starting) {
 #ifdef AES_PROFILE
 		u32 g = tos_ms() - gap_from;
@@ -215,6 +228,8 @@ static void kq_off(void);
 short appl_exit(void)
 {
 	kq_off();
+	if (conn_log_flush)
+		conn_log_flush();	/* (the log's file closed: on the disk whole) */
 	return aes(19, 0, 1, 0, 0);
 }
 
@@ -893,13 +908,21 @@ static void sup_kq_on(void)
 	unsigned char v;
 	__asm__ volatile("move.b 0x484.w,%0" : "=d"(v));
 	kq_old = v;
+#ifdef __mcoldfire__	/* (no or.b or and.b to memory on a ColdFire) */
+	__asm__ volatile("move.b 0x484.w,%%d0\n\tor.l #8,%%d0\n\tmove.b %%d0,0x484.w" : : : "d0", "cc", "memory");
+#else
 	__asm__ volatile("or.b #8,0x484.w" : : : "cc", "memory");
+#endif
 }
 
 static void sup_kq_off(void)
 {
 	if (!(kq_old & 8))
+#ifdef __mcoldfire__
+		__asm__ volatile("move.b 0x484.w,%%d0\n\tand.l #0xf7,%%d0\n\tmove.b %%d0,0x484.w" : : : "d0", "cc", "memory");
+#else
 		__asm__ volatile("and.b #0xf7,0x484.w" : : : "cc", "memory");
+#endif
 }
 
 static void kq_off(void)
