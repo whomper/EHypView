@@ -1455,14 +1455,15 @@ void libwin_open(void)
 			alert(1, "[3][The system has no window left for EHypView.|Close a window and try again.][ OK ]");
 			return;
 		}
-		wind_calc(WC_BORDER, LKIND, 0, 0, (short) ((want_layout == LIB_PANES ? 78 : 64) * cw + 2 * MARGIN),
-			(short) (desk_h * 3 / 4), &x, &y, &w, &h);
-		if (w > desk_w)
+		/* where it was left (WINDOW=, when it fits this screen), else the
+		   whole desk (D39; Erez, 17 Nov 2026) */
+		if (!app_window_get(&x, &y, &w, &h))
+		{
+			x = desk_x;
+			y = desk_y;
 			w = desk_w;
-		if (h > desk_h)
 			h = desk_h;
-		x = (short) (desk_x + desk_w - w - 8 * cw > desk_x ? desk_x + desk_w - w - 8 * cw : desk_x);
-		y = (short) (desk_y + ch);
+		}
 		/* its text on the 8-pixel grid: the VDI draws it far faster (the
 		   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
 		{
@@ -1505,10 +1506,30 @@ void libwin_open(void)
 	}
 }
 
+/* WINDOW=: where the window is (or was, iconified), written when it
+   changed (as it closes, and at the end) */
+void libwin_save_place(void)
+{
+	short x, y, w, h;
+
+	if (lib_h <= 0)
+		return;
+	if (lib_icon)
+	{
+		x = lib_place[0];
+		y = lib_place[1];
+		w = lib_place[2];
+		h = lib_place[3];
+	} else
+		wind_get(lib_h, WF_CURRXYWH, &x, &y, &w, &h);
+	app_window_set(x, y, w, h);
+}
+
 void libwin_close(void)
 {
 	if (lib_h > 0)
 	{
+		libwin_save_place();
 		if (is_acc)
 			av_window(lib_h, 0);
 		wind_close(lib_h);

@@ -41,7 +41,8 @@
 #include "accmem.h"
 #include "crash.h"
 #include "av.h"
-#include "tooltip.h"               /* common's tooltips (3.4) */
+#include "tooltip.h"
+#include "fontpref.h"               /* common's tooltips (3.4) */
 #include "grect.h"
 #include "press.h"                 /* press_track (5.8) */
 #include "panebar.h"               /* pb_vdi */
@@ -3645,7 +3646,9 @@ static void own_set(char *text)
 }
 
 /* settings no longer used, left out when the file is written:
-   DIALOGS3D= (the 3D dialogs tick, gone: the guidelines 5.6, 27 Oct) */
+   DIALOGS3D= (the 3D dialogs tick, gone: the guidelines 5.6, 27 Oct);
+   and the old keys in their new forms (FONT=name,points, PANES=: D43,
+   D44), so only the new ones are written */
 static char *retired_out(char *t)
 {
 	char *u = t != NULL ? inf_drop(t, "DIALOGS3D") : NULL;
@@ -3653,7 +3656,11 @@ static char *retired_out(char *t)
 	if (u == NULL)
 		return t;
 	free(t);
-	return u;
+	t = fontpref_upgrade(u);
+	if (t == NULL)
+		return u;
+	free(u);
+	return t;
 }
 
 static void own_reload(void)
@@ -3668,6 +3675,22 @@ static void own_reload(void)
 		return;
 	}
 	own_set(pf_load_info(settings_path, NULL, &own_info));
+}
+
+/* the program, at its start: an INF with the old keys (FONT= and POINT=,
+   PANECOLS=) written once in the new forms (6.1, D44) */
+static void inf_new_forms(void)
+{
+	char *t = own_text != NULL ? fontpref_upgrade(own_text) : NULL;
+
+	if (t == NULL)
+		return;
+	if (pf_save(settings_path, t, (unsigned long) strlen(t)) == 0)
+	{
+		own_set(t);
+		log_event("inf-new-forms", NULL, NULL);
+	} else
+		free(t);
 }
 
 int settings_put(const char *key, const char *value, const char *note)
@@ -3749,11 +3772,14 @@ static int library_layout(void)
 	return v != NULL && atari_casecmp(v, "panes") == 0 ? LIB_PANES : LIB_OUTLINE;
 }
 
-/* PANECOLS=: the Subjects pane's width, dragged by its edge (0: the
-   default) */
+/* PANES=: the Subjects pane's width, dragged by its edge (0: the
+   default); PANECOLS=, its old key, read once (D44) */
 int app_pane_cols(void)
 {
-	const char *v = own_inf != NULL ? inf_get(own_inf, "PANECOLS") : NULL;
+	const char *v = own_inf != NULL ? inf_get(own_inf, "PANES") : NULL;
+
+	if (v == NULL && own_inf != NULL)
+		v = inf_get(own_inf, "PANECOLS");
 
 	return v != NULL ? atoi(v) : 0;
 }
@@ -3763,8 +3789,50 @@ void app_pane_cols_set(int cols)
 	char v[8];
 
 	sprintf(v, "%d", cols);
-	settings_put("PANECOLS", v, "the width of the library's Subjects pane (Two panes), in characters, "
-		     "as its edge was dragged");
+	settings_put("PANES", v, PANES_NOTE);
+}
+
+/* WINDOW=x,y,w,h: the library window's place (6.1, D43; Erez, 17 Nov
+   2026: the library only, viewers open as they do), used when it is
+   still on this screen and no smaller than the window can be */
+int app_window_get(short *x, short *y, short *w, short *h)
+{
+	const char *v = own_inf != NULL ? inf_get(own_inf, "WINDOW") : NULL;
+	long n[4];
+	int i, a, b, c, d;
+
+	for (i = 0; v != NULL && i < 4; i++)
+	{
+		char *end;
+
+		n[i] = strtol(v, &end, 10);
+		if (end == v || *end != (i < 3 ? ',' : '\0') || n[i] < 0 || n[i] > 9999)
+			return 0;
+		v = end + 1;
+	}
+	if (v == NULL)
+		return 0;
+	a = (int) n[0];
+	b = (int) n[1];
+	c = (int) n[2];
+	d = (int) n[3];
+	if (a < desk_x || b < desk_y || c < 16 * sys_cw || d < 8 * sys_ch ||
+	    a + c > desk_x + desk_w || b + d > desk_y + desk_h)
+		return 0;
+	*x = (short) a;
+	*y = (short) b;
+	*w = (short) c;
+	*h = (short) d;
+	return 1;
+}
+
+void app_window_set(short x, short y, short w, short h)
+{
+	char v[32];
+
+	sprintf(v, "%d,%d,%d,%d", x, y, w, h);
+	settings_put("WINDOW", v, "where the library window was left: x,y,w,h (it opens there when it fits "
+		     "the screen, else on the whole desk)");
 }
 
 /* BOOKMARK1 to BOOKMARKn (or RECENTn) written back, in one go: the ones
@@ -3881,6 +3949,7 @@ static void find_home(void)
 		}
 		free(old);
 		own_reload();
+		inf_new_forms();
 		f = own_inf != NULL ? inf_get(own_inf, "FOLDER") : NULL;
 		if (f == NULL || atari_casecmp(f, home_dir) != 0)
 			settings_put("FOLDER", home_dir, "where EHypView keeps its files (EHYPVIEW.IDX, the library; "
@@ -4534,6 +4603,7 @@ static void crash_quit(const char *what)
 	}
 	if (libwin_handle() > 0)
 	{
+		libwin_save_place();
 		wind_close(libwin_handle());
 		wind_delete(libwin_handle());
 	}

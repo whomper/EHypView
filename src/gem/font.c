@@ -152,11 +152,10 @@ static short id_of(const char *want)
 
 static void save(void)
 {
-	char pt[12];
+	char v[FONT_NAME_MAX + 8];
 
-	sprintf(pt, "%d", pref.point);
-	settings_put("FONT", pref.name, "the text font: System font, or the name of a GDOS font (Options > Font...)");
-	settings_put("POINT", pt, "its size in points; 0: the usual one");
+	if (fontpref_value(&pref, v, sizeof(v)) > 0)
+		settings_put("FONT", v, FONT_NOTE);
 	inf_seen = stamp(inf_path);
 }
 

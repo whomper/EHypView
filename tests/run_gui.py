@@ -989,7 +989,7 @@ def acc_nvdi():
     xvfb = start_xvfb()
     try:
         ok = run_scenario("accnvdi1", d, ACC_NVDI_BOOT1, auto=r"C:\EHV\EHYPVIEW.PRG", windowed=True)
-        ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=%s" % ACC_NVDI.get("font", "?")])
+        ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=%s,*" % ACC_NVDI.get("font", "?"), "!POINT"])
         ok = ok and run_scenario("accnvdi2", d, ACC_NVDI_BOOT2, auto=r"C:\ASKHELP.PRG", windowed=True)
     finally:
         xvfb.terminate()
@@ -1122,10 +1122,21 @@ def quick_steps(gap, pair=True):
     ]
 
 
-QUICK_STEPS = ([([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
-                ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"])] +
-               quick_steps(70, pair=False) + quick_steps(150) +
-               [([UNDO], ["dialog-closed settings cancel"]), ([("ctrl", Q)], ["quit"])])
+def quick_scenario(gaps):
+    """gaps: (ms, pair) for each round of quick_steps"""
+    steps = [([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
+             ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"])]
+    for gap, pair in gaps:
+        steps += quick_steps(gap, pair=pair)
+    return steps + [([UNDO], ["dialog-closed settings cancel"]), ([("ctrl", Q)], ["quit"])]
+
+
+# the Falcons: 70 and 150 ms, where they test DLG_CLICK. ST-1: 300 ms, above
+# its page draw (210-250 ms on an 8 MHz ST): TOS 1.04 drops a click made
+# wholly inside a busy draw, the machine's, not EHypView's (the hub, 17 Nov
+# 2026; 2.5 and 2.6 lost it there too, 1 in 2 at 150 ms)
+QUICK_STEPS = quick_scenario(((70, False), (150, True)))
+QUICK_STEPS_ST = quick_scenario(((300, True),))
 
 
 def quick():
@@ -1139,7 +1150,8 @@ def quick():
             print("      quick on %s" % machines.Machine(machine, d).describe())
             xvfb = start_xvfb()
             try:
-                ok = run_scenario("quick", d, QUICK_STEPS, auto=LAUNCH, windowed=True, machine=machine) and ok
+                steps = QUICK_STEPS_ST if machine.startswith("ST") else QUICK_STEPS
+                ok = run_scenario("quick", d, steps, auto=LAUNCH, windowed=True, machine=machine) and ok
             finally:
                 xvfb.terminate()
         finally:
@@ -1195,7 +1207,7 @@ def inf_same():
         with open(path, "rb") as f:
             changed = f.read() != before
         print("%s  EHYPVIEW.INF written when START= changed" % ("ok  " if changed else "FAIL"))
-        return same and changed and check_inf(path, ["START=now", "FONT=System font"])
+        return same and changed and check_inf(path, ["START=now", "FONT=System font,8", "!POINT"])
     finally:
         xvfb.terminate()
 
@@ -1433,7 +1445,8 @@ REFILE_STEPS = [
 
 
 def refile():
-    d = copy_dir("refile", "PATHS=C:\\GUIDES\n", "; the layout\nLIBRARY=panes\n")
+    # PANECOLS=, the old key, read once and written as PANES= (D44)
+    d = copy_dir("refile", "PATHS=C:\\GUIDES\n", "; the layout\nLIBRARY=panes\n; the pane\nPANECOLS=0\n")
     shutil.rmtree(os.path.join(d, "FIXT"))
     os.makedirs(os.path.join(d, "GUIDES"))
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "colour.hyp"), "rb") as f:
@@ -1449,7 +1462,7 @@ def refile():
     with open(machines.ci_path(d, "ehypview.idx"), "rb") as f:
         held = f.read().count(b"tools/EHypVie")
     print("%s  EHYPVIEW.IDX files %d hypertexts under tools/EHypVie" % ("ok  " if held == 2 else "FAIL", held))
-    return ok and held == 2 and check_inf(machines.ci_path(d, "ehypview.inf"), ["PANECOLS=*"])
+    return ok and held == 2 and check_inf(machines.ci_path(d, "ehypview.inf"), ["PANES=*", "!PANECOLS"])
 
 
 # the README's pictures (make shots): the hypertexts in SHOT_GUIDES (a folder
@@ -1579,7 +1592,7 @@ def main():
     if sys.argv[3:] == ["viewer"]:                  # the main scenario alone
         return 0 if ok else 1
     if ok:
-        ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=System font", "POINT=8", "FOLDER=C:\\",
+        ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=System font,8", "!POINT", "FOLDER=C:\\",
                                                           "BOOKMARK1="])   # added, then removed
     if ok:
         # DEFHYP is ST-Guide's: EHypView starts in its library all the same
@@ -1598,7 +1611,7 @@ def main():
                      "; a page read lately\nRECENT1=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail\n")
         ok = run_scenario("panes", d, PANES_STEPS)
         ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"),
-                              ["LIBRARY=panes", "RECENT1=C:\\FIXT\\BASIC.HYP|Main|*",
+                              ["LIBRARY=panes", "FONT=System font,8", "!POINT", "RECENT1=C:\\FIXT\\BASIC.HYP|Main|*",
                                "RECENT2=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail"])
     if ok:
         if have_display():
@@ -1642,7 +1655,7 @@ def main():
                 ok = run_scenario("twin", d, TWIN_STEPS, auto=TWIN_AUTO, windowed=True)
             finally:
                 xvfb.terminate()
-            ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FOLDER=C:\\EHV", "POINT=8"]) and ok
+            ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FOLDER=C:\\EHV", "FONT=System font,8", "!POINT"]) and ok
             ok = check_exists(machines.ci_path(d, "EHV/ehypview.idx"), "the program's index, in FOLDER=") and ok
         else:
             print("skip  twin: needs Xvfb and xdotool")
