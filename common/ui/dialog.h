@@ -59,6 +59,12 @@ void dlg_later(OBJECT *tree, short obj);
 void dlg_later_drop(void);
 int dlg_later_waiting(void);		/* 1 while objects wait */
 
+/* A press a loop took itself while it drew in turns (settings.c's page: evnt_multi with MU_BUTTON and a timer of 0
+   between turns), handed on: the next dlg_evnt that asks for the mouse (dlg_do's) gets it as its own event, at once.
+   TOS 1.04 drops a press made while a program draws; a press taken between turns isn't lost. */
+void dlg_press_later(short x, short y, short kstate);
+int dlg_press_waiting(void);		/* 1 while one waits */
+
 /* The band's badge (the Hebrew keyboard's, the guidelines 5.3), drawn by the app over the dialog's title band from
    dlg_band, on TOS where the band shows: when dlg_do starts and after F10 (the band drawn again first). NULL: none */
 extern void (*dlg_badge)(OBJECT *tree, short band);
