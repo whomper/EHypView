@@ -278,10 +278,10 @@ $(ATARI)/ehvcheck.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/ehvcheck.o common/atari/l
 $(ATARI)/pagebench.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/pagebench.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/pagebench.o -lgcc
 
-GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o $(ATARI)/pagedraw.o \
+GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o \
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/tabs.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/ehv_settings.o $(ATARI)/ask.o \
            $(ATARI)/aboutbox.o $(ATARI)/aboutline.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
-           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o $(ATARI)/text.o $(ATARI)/colour.o \
+           $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o \
            $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o $(ATARI)/dlgbuild.o $(ATARI)/panebar.o $(ATARI)/libbar.o $(ATARI)/click.o $(ATARI)/arrowed.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
@@ -299,8 +299,17 @@ $(ATARI)/version.o: $(ATARI)/version.c
 	$(XCC) $(XFLAGS) -std=c99 -c -o $@ $<
 
 # (its map beside it: common/tools/profpad.py lays the timed build out by it)
-$(ATARI)/ehypview.elf: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o common/atari/link.ld
-	$(XCC) $(XLDFLAGS) -Wl,-Map,$@.map -o $@ $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o -lgcc
+# a page's redraw pinned by link order (the guidelines, Speed: "The hot
+# loop is pinned by link order"): the AES/VDI calls, the text's cell loops,
+# the page's lines and the colours straight after the start-up code, so no
+# other edit moves them in a 68030's 256-byte instruction cache (common
+# b51644b moved them: Falcon-4:16's front page drawn at the start 160 ->
+# 175 ms; pinned, 160). Not hotcode.h's sort: profpad pads by object.
+HOT_OBJ  = $(ATARI)/gem.o $(ATARI)/text.o $(ATARI)/pagedraw.o $(ATARI)/colour.o
+APP_OBJ  = $(wordlist 1,2,$(RT_OBJ)) $(HOT_OBJ) $(filter-out $(ATARI)/gem.o,$(wordlist 3,99,$(RT_OBJ))) \
+           $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o
+$(ATARI)/ehypview.elf: $(APP_OBJ) common/atari/link.ld
+	$(XCC) $(XLDFLAGS) -Wl,-Map,$@.map -o $@ $(APP_OBJ) -lgcc
 
 # one program, two names: it sees at start-up whether TOS loaded it as
 # an accessory or started it as an application (PRGFLAGS 7: fast load,
@@ -414,7 +423,7 @@ speed-test: atari $(PROF)/EHYPVIEW.PRG
 # common/tools/profpad.py at the shipped build's places modulo 256, so the
 # rig times the layout that ships (the hub, 17 Nov 2026, from EPlay 1.45)
 PROF_OBJ  = $(patsubst $(ATARI)/gem.o,$(PROF)/gem.o,$(patsubst $(ATARI)/ehypview.o,$(PROF)/ehypview.o,\
-            $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o))
+            $(APP_OBJ)))
 $(PROF):
 	mkdir -p $@
 $(PROF)/gem.o: common/atari/gem.c $(XHDRS) | $(PROF)
