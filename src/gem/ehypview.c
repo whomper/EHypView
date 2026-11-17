@@ -56,7 +56,7 @@
 #include "twin.h"
 #include "bgwork.h"
 #include "bigbuf.h"
-#include "settings.h"
+#include "ehvset.h"
 #include "library.h"
 #include "version.h"
 
@@ -1211,6 +1211,19 @@ static short lines_h(short x, short y, short w, short h)
 
 /* a window that fitted the screen still fits after wind_x8 moved it up
    to 7 pixels right (its text on the 8-pixel grid): as much narrower */
+/* a viewer's smallest size (D38): every toolbar button and six lines,
+   the same for WM_SIZED and when it opens (border sizes) */
+static void viewer_min(short *w, short *h)
+{
+	short d, ww = tb_full_width(sys_cw), wh = (short) (head_h() + 6 * ch);
+
+	wind_calc(WC_BORDER, WKIND, 0, 0, ww, wh, &d, &d, w, h);
+	if (*w > desk_w)
+		*w = desk_w;
+	if (*h > desk_h)
+		*h = desk_h;
+}
+
 static short fit_right(short x, short nx, short w)
 {
 	short right = (short) (desk_x + desk_w);
@@ -1248,6 +1261,13 @@ static void open_window(void)
 		h = desk_h;
 	x = (short) (desk_x + (desk_w - w) / 2);
 	y = (short) (desk_y + (desk_h - h) / 3);
+	{
+		short mw, mh;                      /* the WM_SIZED minimum (D38) */
+
+		viewer_min(&mw, &mh);
+		w = w < mw ? mw : w;
+		h = h < mh ? mh : h;
+	}
 	if (viewer_windows() == 1)             /* the first one: the whole desk (D39) */
 	{
 		x = desk_x;
@@ -2394,7 +2414,7 @@ static void command(int cmd)
 		return;
 	case CMD_SETTINGS:
 		{
-			int changed = settings_dialog(settings_path, home_dir);
+			int changed = ehv_settings(settings_path, home_dir);
 
 			if (changed & SETTINGS_LAYOUT)
 				libwin_layout(library_layout());
@@ -3419,10 +3439,12 @@ static void viewer_message(short *msg)
 			wind_set(cur->h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
 		else if (msg[3] == cur->h)
 		{
-			/* at least the toolbar's Back, Forward and menu, and a few lines */
-			w = msg[6] < 16 * sys_cw ? (short) (16 * sys_cw) : msg[6];
-			w = w < 12 * cw ? (short) (12 * cw) : w;
-			h = msg[7] < 6 * ch + head_h() ? (short) (6 * ch + head_h()) : msg[7];
+			short mw, mh;
+
+			/* no smaller than its content needs (D38) */
+			viewer_min(&mw, &mh);
+			w = msg[6] < mw ? mw : msg[6];
+			h = msg[7] < mh ? mh : msg[7];
 			h = lines_h(msg[4], msg[5], w, h);
 			{
 				short x = wind_x8(WKIND, msg[4], msg[5], w, h);
@@ -3794,7 +3816,7 @@ void app_pane_cols_set(int cols)
 
 /* WINDOW=x,y,w,h: the library window's place (6.1, D43; Erez, 17 Nov
    2026: the library only, viewers open as they do), used when it is
-   still on this screen and no smaller than the window can be */
+   still on this screen */
 int app_window_get(short *x, short *y, short *w, short *h)
 {
 	const char *v = own_inf != NULL ? inf_get(own_inf, "WINDOW") : NULL;
@@ -3816,9 +3838,8 @@ int app_window_get(short *x, short *y, short *w, short *h)
 	b = (int) n[1];
 	c = (int) n[2];
 	d = (int) n[3];
-	if (a < desk_x || b < desk_y || c < 16 * sys_cw || d < 8 * sys_ch ||
-	    a + c > desk_x + desk_w || b + d > desk_y + desk_h)
-		return 0;
+	if (a < desk_x || b < desk_y || a + c > desk_x + desk_w || b + d > desk_y + desk_h)
+		return 0;                      /* (libwin.c checks it against its smallest size) */
 	*x = (short) a;
 	*y = (short) b;
 	*w = (short) c;
@@ -4589,7 +4610,7 @@ static void crash_quit(const char *what)
 
 	log_event("crashed", what, NULL);
 	graf_mouse(ARROW, NULL);
-	snprintf(a, sizeof(a), "[3][EHypView has crashed|(%s).|What happened is in|CRASH.LOG, next to EHYPVIEW.PRG.][ Quit ]", what);
+	snprintf(a, sizeof(a), "[3][EHypView has crashed|(%s).|What happened is in|CRASH.LOG, next to EHYPVIEW.PRG.][Quit]", what);
 	form_alert(1, a);
 	{
 		int i;

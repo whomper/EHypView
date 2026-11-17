@@ -600,7 +600,7 @@ WINDOWMENU, OPTIONS, HELPMENU = (440, 9), (508, 9), (568, 9)
 # choice (a pop-up opens over its button, the choice shown on it: the
 # second just below), the first folder field
 SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 187), (320, 203), (300, 219), (300, 237)
-SET_LAYOUT, SET_LAYOUT_PANES = (340, 181), (330, 197)
+SET_LAYOUT_PANES = (428, 177)    # Library: the "Two panes" radio (5.6)
 SET_LOG = (300, 342)            # General: "Write a log (EHYPVIEW.LOG)", its words
 SET_ORIGIN = (89, 102)          # where the dialog is on 640 x 480, which SET_* are measured on
 
@@ -731,10 +731,9 @@ MOUSE_STEPS = [
     # added after Shift+Right: the whole of it is kept
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
     ([("click",) + SET_LOG], ["settings-log on"]),           # Write a log (6.5): off until ticked
-    ([("click",) + SET_START], ["menu settings-start"]),
+    ([("click",) + SET_START, ("wait", 1)], []),            # the pop-up over its button
     ([("click",) + SET_START_NOW], ["settings-start now"]),
     ([("click",) + SET_LIBRARY], ["settings-page library"]),
-    ([("click",) + SET_LAYOUT], ["menu settings-layout"]),
     ([("click",) + SET_LAYOUT_PANES], ["settings-layout panes"]),
     ([("click",) + SET_FIELD] + typed("C:\\FIXT\\SUB"), []),
     ([TAB] + typed("C:\\NOWHERE"), []),
@@ -1178,7 +1177,7 @@ INF_SAME_STEPS = [
 INF_CHANGE_STEPS = [
     ([], ["menu shown", "index 5 guides"]),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
-    (in_settings(("click",) + SET_START), ["menu settings-start"]),
+    (in_settings(("click",) + SET_START, ("wait", 1)), []),
     (in_settings(("click",) + SET_START_NOW), ["settings-start now"]),
     ([RETURN], ["dialog-closed settings ok"]),
     ([("ctrl", Q)], ["quit"]),
@@ -1222,7 +1221,8 @@ LOOK_STEPS = [
     ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *", "settings-look *"]),
     (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
-    (in_settings(("click",) + SET_LAYOUT), ["menu settings-layout"]),
+    (in_settings(("click",) + SET_GENERAL), ["settings-page general"]),
+    (in_settings(("click",) + SET_START, ("wait", 1)), []),   # START='s pop-up over its button (5.7)
     ([ESC], []),                                        # the pop-up closed, nothing chosen
     ([UNDO], ["dialog-closed settings cancel"]),        # (Esc would empty a folder field)
     (FONT_KEYS, ["dialog font"]),
@@ -1506,7 +1506,6 @@ SHOT_STEPS = [
     (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
     (in_settings(*([("click",) + SET_FIELD] + typed(LONGDIR))), []),
     ([("hover", 620, 470), ("still", 10)], []),                       # settings.png
-    (in_settings(("click",) + SET_LAYOUT), ["menu settings-layout"]),
     (in_settings(("click",) + SET_LAYOUT_PANES), ["settings-layout panes"]),
     ([RETURN], ["dialog-closed settings ok", "settings PATHS " + LONGDIR, "library-layout panes",
                 "index 6 guides"]),

@@ -1426,6 +1426,21 @@ static void log_search(void)
 	log_event("search", q, n);
 }
 
+/* the window's smallest size (D38): the search line, and in Two panes
+   the Subjects at their narrowest beside the rows; six lines below. The
+   same for WM_SIZED and when it opens (border sizes) */
+static void lib_min(short *w, short *h)
+{
+	short d, ww = (short) ((panes() ? PANE_MIN * cw + libbar_width() + ROWS_MIN * cw + 2 * MARGIN : 40 * cw)
+			       + 2 * MARGIN), wh = (short) (header_h() + 6 * ch);
+
+	wind_calc(WC_BORDER, LKIND, 0, 0, ww, wh, &d, &d, w, h);
+	if (*w > desk_w)
+		*w = desk_w;
+	if (*h > desk_h)
+		*h = desk_h;
+}
+
 /* a window that fitted the screen still fits after wind_x8 moved it up
    to 7 pixels right (its text on the 8-pixel grid): as much narrower */
 static short fit_right(short x, short nx, short w)
@@ -1457,7 +1472,10 @@ void libwin_open(void)
 		}
 		/* where it was left (WINDOW=, when it fits this screen), else the
 		   whole desk (D39; Erez, 17 Nov 2026) */
-		if (!app_window_get(&x, &y, &w, &h))
+		short mw, mh;
+
+		lib_min(&mw, &mh);
+		if (!app_window_get(&x, &y, &w, &h) || w < mw || h < mh)
 		{
 			x = desk_x;
 			y = desk_y;
@@ -2493,8 +2511,13 @@ int libwin_message(short *msg)
 			wind_set(lib_h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
 			break;
 		}
-		w = msg[6] < 20 * cw ? (short) (20 * cw) : msg[6];
-		h = msg[7] < 6 * ch ? (short) (6 * ch) : msg[7];
+		{
+			short mw, mh;          /* no smaller than its content needs (D38) */
+
+			lib_min(&mw, &mh);
+			w = msg[6] < mw ? mw : msg[6];
+			h = msg[7] < mh ? mh : msg[7];
+		}
 		{
 			short x = wind_x8(LKIND, msg[4], msg[5], w, h);
 

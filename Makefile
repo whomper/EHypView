@@ -238,9 +238,6 @@ $(ATARI)/fontpref.o: src/view/fontpref.c src/view/fontpref.h $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -Isrc/view -std=c99 -pedantic -Wshadow -c -o $@ $<
 $(ATARI)/bookmark.o: src/view/bookmark.c src/view/bookmark.h $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -Isrc/view -std=c99 -pedantic -Wshadow -c -o $@ $<
-# EHypView's own Settings (common/ui has a settings.c of its own)
-$(ATARI)/ehv_settings.o: src/gem/settings.c src/gem/*.h src/view/*.h $(XHDRS) | $(ATARI)
-	$(XCC) $(XFLAGS) -Isrc/view -Isrc/gem -std=gnu99 -c -o $@ $<
 $(ATARI)/%.o: src/gem/%.c src/gem/*.h src/view/*.h $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -Isrc/view -Isrc/gem -std=gnu99 -c -o $@ $<
 $(ATARI)/ehvcheck.o: tests/ehvcheck.c $(XHDRS) | $(ATARI)
@@ -279,7 +276,7 @@ $(ATARI)/pagebench.elf: $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/pagebench.o common/atari
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(ATARI)/pagebench.o -lgcc
 
 GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookmark.o $(ATARI)/ehypview.o \
-           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/tabs.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/ehv_settings.o $(ATARI)/ask.o \
+           $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/tabs.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/ehvset.o $(ATARI)/settings.o $(ATARI)/ask.o \
            $(ATARI)/aboutbox.o $(ATARI)/aboutline.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o \
            $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o $(ATARI)/dlgbuild.o $(ATARI)/panebar.o $(ATARI)/libbar.o $(ATARI)/click.o $(ATARI)/arrowed.o $(ATARI)/tooltip.o
