@@ -1130,13 +1130,13 @@ def quick_scenario(gaps):
     return steps + [([UNDO], ["dialog-closed settings cancel"]), ([("ctrl", Q)], ["quit"])]
 
 
-# the Falcons: 70 and 150 ms, where they test DLG_CLICK. ST-1: 400 ms, above
-# its whole page switch: common's settings.c draws a page in 20 ms turns, the
-# switch taking 300-400 ms on an 8 MHz ST, and TOS 1.04 drops a press made
-# wholly inside it (the hub, 17 Nov 2026: 3 in 3 lost at 300, none at 400).
-# Back to 300, then 150, when the engine's turns take a press between them
+# the Falcons: 70 and 150 ms, where they test DLG_CLICK. ST-1: 300 ms. common's
+# settings.c draws a page in 20 ms turns, and since 86e37d2 a press made in a
+# turn is kept for the next dlg_do; at 150 ms an 8 MHz ST with TOS 1.04 still
+# lost the pair's second click 2 times in 3, at 300 none in 3 (17 Nov 2026;
+# at 400 before that fix: the hub). 150 when it holds there
 QUICK_STEPS = quick_scenario(((70, False), (150, True)))
-QUICK_STEPS_ST = quick_scenario(((400, True),))
+QUICK_STEPS_ST = quick_scenario(((300, True),))
 
 
 def quick():
