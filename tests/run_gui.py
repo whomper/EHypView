@@ -1130,12 +1130,13 @@ def quick_scenario(gaps):
     return steps + [([UNDO], ["dialog-closed settings cancel"]), ([("ctrl", Q)], ["quit"])]
 
 
-# the Falcons: 70 and 150 ms, where they test DLG_CLICK. ST-1: 300 ms, above
-# its page draw (210-250 ms on an 8 MHz ST): TOS 1.04 drops a click made
-# wholly inside a busy draw, the machine's, not EHypView's (the hub, 17 Nov
-# 2026; 2.5 and 2.6 lost it there too, 1 in 2 at 150 ms)
+# the Falcons: 70 and 150 ms, where they test DLG_CLICK. ST-1: 400 ms, above
+# its whole page switch: common's settings.c draws a page in 20 ms turns, the
+# switch taking 300-400 ms on an 8 MHz ST, and TOS 1.04 drops a press made
+# wholly inside it (the hub, 17 Nov 2026: 3 in 3 lost at 300, none at 400).
+# Back to 300, then 150, when the engine's turns take a press between them
 QUICK_STEPS = quick_scenario(((70, False), (150, True)))
-QUICK_STEPS_ST = quick_scenario(((300, True),))
+QUICK_STEPS_ST = quick_scenario(((400, True),))
 
 
 def quick():
