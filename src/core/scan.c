@@ -1007,25 +1007,6 @@ int ehv_scan_step(ehv_scan *s, unsigned int budget)
 	return 0;
 }
 
-const char *ehv_scan_next_what(const ehv_scan *s)
-{
-	if (ehv_index_build_busy(s->idx))
-		return "names put away";
-	if (s->part != PART_NONE)
-		return "names of a hypertext";
-	if (s->listed)
-		return "folder's listing sorted";
-	if (s->listing)
-		return "folder's entries";
-	if (s->next_file < s->nfiles)
-		return "file";
-	if (s->ndirs > 0)
-		return "folder";
-	if (s->next_root < s->nroots)
-		return "root";
-	return "the end";
-}
-
 int ehv_index_build_busy_scan(const ehv_scan *s)
 {
 	return ehv_index_build_busy(s->idx);
@@ -1165,4 +1146,25 @@ unsigned int ehv_default_roots(const inf_file *inf, const char *own, char ***roo
 	add_root(&list, &n, "*:\\GEMSYS\\GUIDES");
 	*roots = list;
 	return n;
+}
+
+/* (last in the file: only the speed build's AES_PROFILE code calls it, and
+   kept there it moves nothing the shipped build has; common/tools/profpad.py) */
+const char *ehv_scan_next_what(const ehv_scan *s)
+{
+	if (ehv_index_build_busy(s->idx))
+		return "names put away";
+	if (s->part != PART_NONE)
+		return "names of a hypertext";
+	if (s->listed)
+		return "folder's listing sorted";
+	if (s->listing)
+		return "folder's entries";
+	if (s->next_file < s->nfiles)
+		return "file";
+	if (s->ndirs > 0)
+		return "folder";
+	if (s->next_root < s->nroots)
+		return "root";
+	return "the end";
 }

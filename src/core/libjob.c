@@ -120,15 +120,6 @@ int ehv_libjob_next_is_big(const ehv_libjob *j)
 	return 0;
 }
 
-const char *ehv_libjob_doing(const ehv_libjob *j)
-{
-	if (j->phase == EHV_JOB_SORTING)
-		return j->ref != NULL ? "ALL.REF merged" : j->fin != NULL ? ehv_index_finish_doing(j->fin) : "sort begun";
-	if (j->phase == EHV_JOB_SCANNING)
-		return j->scan != NULL ? ehv_scan_next_what(j->scan) : "scan begun";
-	return "";
-}
-
 int ehv_libjob_phase(const ehv_libjob *j)
 {
 	return j->phase;
@@ -295,4 +286,15 @@ int ehv_libjob_step(ehv_libjob *j)
 		return EHV_JOB_DONE;
 	}
 	return EHV_JOB_DONE;
+}
+
+/* (last in the file: only the speed build's AES_PROFILE code calls it, and
+   kept there it moves nothing the shipped build has; common/tools/profpad.py) */
+const char *ehv_libjob_doing(const ehv_libjob *j)
+{
+	if (j->phase == EHV_JOB_SORTING)
+		return j->ref != NULL ? "ALL.REF merged" : j->fin != NULL ? ehv_index_finish_doing(j->fin) : "sort begun";
+	if (j->phase == EHV_JOB_SCANNING)
+		return j->scan != NULL ? ehv_scan_next_what(j->scan) : "scan begun";
+	return "";
 }

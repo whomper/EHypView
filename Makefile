@@ -81,8 +81,8 @@ $(HOST)/test_accmem: common/tests/accmem/test_accmem.c common/ui/accmem.c common
 
 # the shared dialog loop and its fields that hold more than they show
 # (guidelines 5.4), against common/tests/dialog's stand-in AES
-$(HOST)/test_dialog: common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c common/ui/field.h common/ui/dialog.h | $(HOST)
-	$(CC) $(CFLAGS) -Icommon/tests/dialog/stub -Icommon/ui -Icommon/atari -o $@ common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c
+$(HOST)/test_dialog: common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c common/ui/field.h common/ui/dialog.h common/ui/eye.c | $(HOST)
+	$(CC) $(CFLAGS) -Icommon/tests/dialog/stub -Icommon/ui -Icommon/atari -o $@ common/tests/dialog/test_dialog.c common/ui/dialog.c common/ui/field.c common/ui/eye.c
 
 # the family's Font dialog, its part without GEM (common/tests/fontsel)
 $(HOST)/test_fontsel: common/tests/fontsel/test_fontsel.c common/ui/fontsel.c common/ui/fontsel.h | $(HOST)
@@ -115,7 +115,7 @@ $(HOST)/test_stmem_acc: tests/test_stmem_acc.c src/gem/stmem.c src/gem/stmem.h |
 $(HOST):
 	mkdir -p $@
 
-test: all
+test: all build/prof/EHYPVIEW.PRG    # (the timed build: profpad checks its layout)
 	$(HOST)/test_core tests/fixtures
 	$(HOST)/test_index tests/fixtures
 	$(HOST)/test_view tests/fixtures
@@ -298,8 +298,9 @@ FORCE:
 $(ATARI)/version.o: $(ATARI)/version.c
 	$(XCC) $(XFLAGS) -std=c99 -c -o $@ $<
 
+# (its map beside it: common/tools/profpad.py lays the timed build out by it)
 $(ATARI)/ehypview.elf: $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o common/atari/link.ld
-	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o -lgcc
+	$(XCC) $(XLDFLAGS) -Wl,-Map,$@.map -o $@ $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o -lgcc
 
 # one program, two names: it sees at start-up whether TOS loaded it as
 # an accessory or started it as an application (PRGFLAGS 7: fast load,
@@ -400,10 +401,33 @@ quiet-test: atari
 # ST:mono, ST:med and Falcon-4:16 (SPEED_MACHINES), against the
 # guidelines' times (needs hatari; the accessory's case Xvfb and xdotool)
 SPEED_DIR = build/speed
-speed-test: atari
-	$(MAKE) ATARI=$(SPEED_DIR)/obj HATARI_DIR=$(SPEED_DIR) XEXTRA=-DAES_PROFILE=20 $(SPEED_DIR)/EHYPVIEW.PRG \
-		$(SPEED_DIR)/EHYPVIEW.ACC $(SPEED_DIR)/ASKHELP.PRG $(SPEED_DIR)/LAUNCH.PRG
+speed-test: atari $(PROF)/EHYPVIEW.PRG
+	$(MAKE) ATARI=$(SPEED_DIR)/obj HATARI_DIR=$(SPEED_DIR) XEXTRA=-DAES_PROFILE=20 $(SPEED_DIR)/ASKHELP.PRG \
+		$(SPEED_DIR)/LAUNCH.PRG
+	cp $(PROF)/EHYPVIEW.PRG $(SPEED_DIR)/EHYPVIEW.PRG
+	cp $(PROF)/EHYPVIEW.PRG $(SPEED_DIR)/EHYPVIEW.ACC
 	python3 tests/hatari/speed.py $(SPEED_DIR) build/speed-out
+
+# the timed EHypView the speed rig runs: the shipped objects but the two
+# with AES_PROFILE (common's gem.c and ehypview.c), linked by
+# common/tools/profpad.py at the shipped build's places modulo 256, so the
+# rig times the layout that ships (the hub, 17 Nov 2026, from EPlay 1.45)
+PROF      = build/prof
+PROF_OBJ  = $(patsubst $(ATARI)/gem.o,$(PROF)/gem.o,$(patsubst $(ATARI)/ehypview.o,$(PROF)/ehypview.o,\
+            $(RT_OBJ) $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o))
+$(PROF):
+	mkdir -p $@
+$(PROF)/gem.o: common/atari/gem.c $(XHDRS) | $(PROF)
+	$(XCC) $(XFLAGS) -DAES_PROFILE=20 -std=gnu99 -Wno-sign-compare -Wno-unused-parameter -c -o $@ $<
+$(PROF)/ehypview.o: src/gem/ehypview.c src/gem/*.h src/view/*.h $(XHDRS) | $(PROF)
+	$(XCC) $(XFLAGS) -DAES_PROFILE=20 -Isrc/view -Isrc/gem -std=gnu99 -c -o $@ $<
+$(PROF)/ehypview.elf: $(ATARI)/ehypview.elf $(PROF_OBJ) common/atari/link.ld common/tools/profpad.py \
+		      common/atari/codepad.S
+	python3 common/tools/profpad.py --ship $(ATARI)/ehypview.elf --out $@ --cpu=-m68000 --dir $(PROF)/pads \
+	    --exclude $(ATARI)/gem.o --exclude $(PROF)/gem.o --exclude $(ATARI)/ehypview.o --exclude $(PROF)/ehypview.o \
+	    -- $(XCC) $(XLDFLAGS) $(PROF_OBJ) -lgcc
+$(PROF)/EHYPVIEW.PRG: $(PROF)/ehypview.elf common/tools/elf2tos.py
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
 # pictures and text in colour in every screen mode: Falcon 4, 16, 256 and
 # true colour, ST medium, TT medium, low and high, checked pixel by pixel

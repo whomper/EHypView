@@ -463,18 +463,6 @@ int ehv_index_finish_some(ehv_finish *f, unsigned int budget)
 	return 1;
 }
 
-const char *ehv_index_finish_doing(const ehv_finish *f)
-{
-	switch (f->phase)
-	{
-	case F_START: return "tables begun";
-	case F_KEY: case F_PATH: return "tables filled";
-	case F_SORT: return "tables sorted";
-	case F_NAMES: return ehv_names_doing(f->idx);
-	}
-	return "done";
-}
-
 int ehv_index_finish(ehv_index *idx)
 {
 	ehv_finish *f = ehv_index_finish_begin(idx);
@@ -1579,4 +1567,18 @@ ehv_index *ehv_index_load(const char *path)
 		return NULL;
 	}
 	return ehv_index_load_take(l);
+}
+
+/* (last in the file: only the speed build's AES_PROFILE code calls it, and
+   kept there it moves nothing the shipped build has; common/tools/profpad.py) */
+const char *ehv_index_finish_doing(const ehv_finish *f)
+{
+	switch (f->phase)
+	{
+	case F_START: return "tables begun";
+	case F_KEY: case F_PATH: return "tables filled";
+	case F_SORT: return "tables sorted";
+	case F_NAMES: return ehv_names_doing(f->idx);
+	}
+	return "done";
 }
