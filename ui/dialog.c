@@ -1475,6 +1475,27 @@ void dlg_touch(OBJECT *tree, short *next, short x, short y)
 }
 #endif
 
+/* a press taken by a loop's own look between turns of its drawing (settings.c's page), given to the next wait that
+   asks for the mouse as its own event: TOS 1.04 drops a press made while the program draws, and a quick second
+   click on a page's name was lost (EHypView's gui-test on ST-1, 17 Nov 2026) */
+static struct {
+	int on;
+	short x, y, ks;
+} pend;
+
+void dlg_press_later(short x, short y, short kstate)
+{
+	pend.on = 1;
+	pend.x = x;
+	pend.y = y;
+	pend.ks = kstate;
+}
+
+int dlg_press_waiting(void)
+{
+	return pend.on;
+}
+
 static short dlg_evnt_(short flags, short clicks, short mask, short state,
 		       unsigned long timer, short *msg, AEVENT *e)
 {
@@ -1482,6 +1503,16 @@ static short dlg_evnt_(short flags, short clicks, short mask, short state,
 #ifdef DLG_CLICK
 	dlg_touch_up();
 #endif
+	if (pend.on && (flags & MU_BUTTON)) {
+		memset(e, 0, sizeof(*e));
+		e->which = MU_BUTTON;
+		e->mx = pend.x;
+		e->my = pend.y;
+		e->kstate = pend.ks;
+		e->breturn = 1;
+		pend.on = 0;
+		return MU_BUTTON;
+	}
 	if (!dlg_in_window())
 		return evnt_multi_(flags, clicks, mask, state, timer, msg, e);
 	i = ndw - 1;
