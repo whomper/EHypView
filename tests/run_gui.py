@@ -749,7 +749,9 @@ MOUSE_STEPS = [
                 "settings LIBRARY panes", "settings LOG 1", "settings PATHS C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG,
                 "index again", "index 5 guides"]),
     # the same setting in Options, ticked there too: off, and on again
-    ([item(OPTIONS, 3)], ["menu log", "log off"]),
+    # (a second after the index: a menu title pressed in the job's last
+    # turn opened nothing on a Falcon, the item's click then the toolbar's)
+    ([("wait", 1), item(OPTIONS, 3)], ["menu log", "log off"]),
     ([item(OPTIONS, 3)], ["menu log", "log on"]),
     # the guide, when it is nowhere: where to put it
     ([item(HELPMENU, 0)], ["menu guide", "alert no-guide"]),
