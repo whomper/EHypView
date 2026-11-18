@@ -3667,6 +3667,12 @@ static void own_set(char *text)
 	nf_decide(own_inf);              /* the first time: NATFEATS= */
 }
 
+/* the INF as read holds an old key (FONT= with POINT=, PANECOLS=: D44) */
+static int old_keys(void)
+{
+	return own_inf != NULL && (inf_get(own_inf, "POINT") != NULL || inf_get(own_inf, "PANECOLS") != NULL);
+}
+
 /* settings no longer used, left out when the file is written:
    DIALOGS3D= (the 3D dialogs tick, gone: the guidelines 5.6, 27 Oct);
    and the old keys in their new forms (FONT=name,points, PANES=: D43,
@@ -3678,7 +3684,9 @@ static char *retired_out(char *t)
 	if (u == NULL)
 		return t;
 	free(t);
-	t = fontpref_upgrade(u);
+	/* only an INF read with an old key: its name looked for in each INF
+	   written cost an ST a tick a write (the speed rig's start) */
+	t = old_keys() ? fontpref_upgrade(u) : NULL;
 	if (t == NULL)
 		return u;
 	free(u);
@@ -3703,7 +3711,7 @@ static void own_reload(void)
    PANECOLS=) written once in the new forms (6.1, D44) */
 static void inf_new_forms(void)
 {
-	char *t = own_text != NULL ? fontpref_upgrade(own_text) : NULL;
+	char *t = own_text != NULL && old_keys() ? fontpref_upgrade(own_text) : NULL;
 
 	if (t == NULL)
 		return;
@@ -4898,7 +4906,9 @@ int main(void)
 			t = 0;
 		if (sliders_waiting())
 			t = 0;                        /* once: the sliders' turn */
-		if (pending || hover || fts_busy || index_news || t == 0)
+		if (libwin_place_due() && t > BG_PACE)
+			t = BG_PACE;                  /* the library's place, written next turn */
+		if (pending || hover || fts_busy || index_news || t == 0 || libwin_place_due())
 			flags |= MU_TIMER;
 		pf_forget();
 		hyp_forget();
@@ -4919,6 +4929,9 @@ int main(void)
 				graf_mkstate(&hx, &hy, &d, &d);
 			tip_tick(which, hx, hy, tip_text);
 		}
+		/* a turn with nothing else: the closed library's place written */
+		if (which == MU_TIMER && libwin_place_due())
+			libwin_save_place();
 		bg_tick();
 		index_worked = 0;
 		/* a key, a click or a message that may need a page whole */

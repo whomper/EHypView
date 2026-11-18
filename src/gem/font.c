@@ -55,6 +55,8 @@ static short sys_point(void)
 	return (short) (sys_ch >= 16 ? 16 : 8);
 }
 
+static short tf_id = -1, tf_w, tf_h;   /* what text_font was last given */
+
 /* set the font; cw/ch become its cell size.  0 if it isn't there */
 static int set_font(short id, short pt)
 {
@@ -77,7 +79,17 @@ static int set_font(short id, short pt)
 	cw = w;
 	ch = h;
 	vst_alignment(vdi_h, 0, 5);
-	text_font(vdi_h, id, w, h);        /* text.c: its fast ways only for the system font, not under NVDI */
+	/* text.c: its fast ways only for the system font, not under NVDI. Set
+	   up again only when the font changes (common's text.c sets up every
+	   call; around each toolbar's and tab strip's system font it cost an
+	   ST 30 ms a link's page, the speed rig) */
+	if (id != tf_id || w != tf_w || h != tf_h)
+	{
+		text_font(vdi_h, id, w, h);
+		tf_id = id;
+		tf_w = w;
+		tf_h = h;
+	}
 	cur_id = id;
 	cur_pt = pt;
 	return 1;

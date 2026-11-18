@@ -1526,28 +1526,41 @@ void libwin_open(void)
 
 /* WINDOW=: where the window is (or was, iconified), written when it
    changed (as it closes, and at the end) */
+/* WINDOW=: the place the library was closed at, written in a turn of
+   its own once the page under it is drawn (an INF written inside ^U's
+   redraw cost an ST 40 ms, the speed rig's "library closed") */
+static short due_place[4];
+static int place_due;
+
+static void note_place(void)
+{
+	if (lib_icon)
+		memcpy(due_place, lib_place, sizeof(due_place));
+	else
+		wind_get(lib_h, WF_CURRXYWH, &due_place[0], &due_place[1], &due_place[2], &due_place[3]);
+	place_due = 1;
+}
+
+int libwin_place_due(void)
+{
+	return place_due;
+}
+
 void libwin_save_place(void)
 {
-	short x, y, w, h;
-
-	if (lib_h <= 0)
+	if (lib_h > 0)
+		note_place();
+	if (!place_due)
 		return;
-	if (lib_icon)
-	{
-		x = lib_place[0];
-		y = lib_place[1];
-		w = lib_place[2];
-		h = lib_place[3];
-	} else
-		wind_get(lib_h, WF_CURRXYWH, &x, &y, &w, &h);
-	app_window_set(x, y, w, h);
+	place_due = 0;
+	app_window_set(due_place[0], due_place[1], due_place[2], due_place[3]);
 }
 
 void libwin_close(void)
 {
 	if (lib_h > 0)
 	{
-		libwin_save_place();
+		note_place();
 		if (is_acc)
 			av_window(lib_h, 0);
 		wind_close(lib_h);

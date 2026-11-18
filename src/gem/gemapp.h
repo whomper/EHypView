@@ -91,7 +91,8 @@ void app_pane_cols_set(int cols);
    fits this screen; and a new one, written when it changed */
 int app_window_get(short *x, short *y, short *w, short *h);
 void app_window_set(short x, short y, short w, short h);
-void libwin_save_place(void);            /* libwin.c: WINDOW= written, at the end */
+void libwin_save_place(void);            /* libwin.c: WINDOW= written (a turn after the close, and at the end) */
+int libwin_place_due(void);              /* a closed library's place not yet written */
 
 /* ehypview.c: EHYPVIEW.INF, in the boot drive's root (the AERA
    guidelines, 6.1): key=value set, the rest of the file kept; note is the
