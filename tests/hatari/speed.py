@@ -40,7 +40,7 @@ when what an action waits for never came ("no event": a scroll's "top",
 Tab's "select", a page's "page"; the speed build logs them), so a row
 never times a key that did nothing.
 SPEED_ONLY=page,acc runs only those. SPEED_FONT="Courier,14" writes
-EHYPVIEW.INF's FONT= and POINT= (the font's name as the VDI gives it,
+EHYPVIEW.INF's FONT=name,points (the font's name as the VDI gives it,
 trailing blanks off: a GDOS font, under NVDI); unset, the system font.
 """
 import os
@@ -124,7 +124,7 @@ def make_drive(d, nvdi, start=None, acc=False, ask=None):
     if FONT:
         name, _, point = FONT.rpartition(",")
         with open(os.path.join(d, "ehypview.inf"), "w", newline="") as f:
-            f.write("FONT=%s\r\nPOINT=%s\r\n" % (name or point, point if name else "0"))
+            f.write("; the font\r\nFONT=%s,%s\r\n" % (name or point, point if name else "0"))
     if acc:
         shutil.copy(os.path.join(BDIR, "EHYPVIEW.ACC"), d)
     else:

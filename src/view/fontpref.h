@@ -28,12 +28,23 @@ typedef struct {
 void fontpref_default(font_pref *p);
 int fontpref_is_system(const font_pref *p);
 
-/* read FONT= and POINT= from the text of EHYPVIEW.INF (other lines are
-   kept for other settings); missing or bad values leave the default */
+/* the notes written above FONT= and PANES= */
+#define FONT_NOTE  "the text font and its size in points (0: the usual one): System font, or the name of a GDOS font (Options > Font...)"
+#define PANES_NOTE "the width of the library's Subjects pane (Two panes), in characters, as its edge was dragged"
+
+/* read FONT=name,points from the text of EHYPVIEW.INF (other lines are
+   kept for other settings), or the old FONT=name and POINT=pt (read once:
+   the guidelines 6.1, D44); missing or bad values leave the default */
 void fontpref_parse(font_pref *p, const char *text);
 
-/* "FONT=...\r\nPOINT=...\r\n"; the length, or 0 when it doesn't fit */
-unsigned long fontpref_format(const font_pref *p, char *buf, unsigned long size);
+/* FONT='s value, "name,points"; the length, or 0 when it doesn't fit */
+unsigned long fontpref_value(const font_pref *p, char *buf, unsigned long size);
+
+/* the INF's text in the new forms (D43, D44): FONT=name,points for FONT=
+   and POINT=, PANES= for PANECOLS=, the old keys dropped, a new key that is
+   there already winning; a new text (malloc'd), or NULL when there was no
+   old key */
+char *fontpref_upgrade(const char *text);
 
 /*
  * sizes[] is a font's sizes, smallest first.  The index of the size to

@@ -41,7 +41,8 @@
 #include "accmem.h"
 #include "crash.h"
 #include "av.h"
-#include "notify.h"                /* BUBBLEGEM_SHOW */
+#include "tooltip.h"
+#include "fontpref.h"               /* common's tooltips (3.4) */
 #include "grect.h"
 #include "press.h"                 /* press_track (5.8) */
 #include "panebar.h"               /* pb_vdi */
@@ -55,7 +56,7 @@
 #include "twin.h"
 #include "bgwork.h"
 #include "bigbuf.h"
-#include "settings.h"
+#include "ehvset.h"
 #include "library.h"
 #include "version.h"
 
@@ -1210,6 +1211,19 @@ static short lines_h(short x, short y, short w, short h)
 
 /* a window that fitted the screen still fits after wind_x8 moved it up
    to 7 pixels right (its text on the 8-pixel grid): as much narrower */
+/* a viewer's smallest size (D38): every toolbar button and six lines,
+   the same for WM_SIZED and when it opens (border sizes) */
+static void viewer_min(short *w, short *h)
+{
+	short d, ww = tb_full_width(sys_cw), wh = (short) (head_h() + 6 * ch);
+
+	wind_calc(WC_BORDER, WKIND, 0, 0, ww, wh, &d, &d, w, h);
+	if (*w > desk_w)
+		*w = desk_w;
+	if (*h > desk_h)
+		*h = desk_h;
+}
+
 static short fit_right(short x, short nx, short w)
 {
 	short right = (short) (desk_x + desk_w);
@@ -1247,6 +1261,13 @@ static void open_window(void)
 		h = desk_h;
 	x = (short) (desk_x + (desk_w - w) / 2);
 	y = (short) (desk_y + (desk_h - h) / 3);
+	{
+		short mw, mh;                      /* the WM_SIZED minimum (D38) */
+
+		viewer_min(&mw, &mh);
+		w = w < mw ? mw : w;
+		h = h < mh ? mh : h;
+	}
 	if (viewer_windows() == 1)             /* the first one: the whole desk (D39) */
 	{
 		x = desk_x;
@@ -2393,7 +2414,7 @@ static void command(int cmd)
 		return;
 	case CMD_SETTINGS:
 		{
-			int changed = settings_dialog(settings_path, home_dir);
+			int changed = ehv_settings(settings_path, home_dir);
 
 			if (changed & SETTINGS_LAYOUT)
 				libwin_layout(library_layout());
@@ -2916,63 +2937,8 @@ static void bar_menu(short x, short y)
 	command(all[r].cmd);
 }
 
-/* tooltips: a button's, after the mouse rests on it for a second */
-static struct
-{
-	short win;                         /* the window it is in, or -1 */
-	int b;                             /* the button under the mouse, -1 */
-	unsigned long since;               /* when the mouse came there (ms) */
-	short done;                        /* shown, or clicked: not again there */
-	short shown, x, y, w, h;           /* what it covers */
-} tip = { -1, -1, 0, 0, 0, 0, 0, 0, 0 };
-
-static void tip_hide(void)
-{
-	viewer *keep = cur, *v;
-
-	if (!tip.shown)
-		return;
-	tip.shown = 0;
-	v = viewer_of(tip.win);
-	if (v != NULL && !v->icon)
-	{
-		cur = v;
-		redraw(tip.x, tip.y, tip.w, tip.h);
-		cur = keep;
-	}
-}
-
-/* a tip's text where BubbleGEM can read it (global memory under MiNT
-   and MagiC, taken at the start: guidelines 2.2), two in turn: the one
-   before may still be shown */
-#define TIP_TEXT 160
-static char tip_local[2 * TIP_TEXT], *tip_buf = tip_local;
-static short tip_turn;
-
-/* the tip in BubbleGEM's bubble at the mouse (guidelines 3.4), when it
-   runs: 1, it shows it and takes it away itself */
-static int tip_bubble(const char *text, short mx, short my)
-{
-	short id = appl_find("BUBBLE  "), msg[8];
-	char *b;
-
-	if (id < 0)
-		return 0;
-	b = tip_buf + tip_turn * TIP_TEXT;
-	tip_turn ^= 1;
-	strncpy(b, text, TIP_TEXT - 1);
-	b[TIP_TEXT - 1] = '\0';
-	memset(msg, 0, sizeof(msg));
-	msg[0] = (short) BUBBLEGEM_SHOW;
-	msg[1] = ap_id;
-	msg[3] = mx;
-	msg[4] = my;
-	msg[5] = (short) ((unsigned long) b >> 16);
-	msg[6] = (short) (unsigned long) b;
-	appl_write(id, 16, msg);
-	return 1;
-}
-
+/* tooltips (guidelines 3.4): common's tooltip.c, after the pointer rests
+   0.7 s on a toolbar button, or on a tab whose title is cut */
 /* a tab's tip, when its title is cut: the whole title and its hypertext */
 static void tab_tip(int i, char *buf, size_t size)
 {
@@ -2984,119 +2950,46 @@ static void tab_tip(int i, char *buf, size_t size)
 		snprintf(buf, size, "%s", tab_title(i));
 }
 
-/* tip b (a toolbar button, or TB_COUNT + a tab) for the mouse at (mx,
-   my): BubbleGEM's bubble, else EHypView's own box below it */
-static void tip_show(int b, short mx, short my)
+/* the tip for the pointer at (mx, my): a button's or a cut tab's in the
+   viewer in front, 0 elsewhere */
+static int tip_text(short mx, short my, char *out, int size)
 {
-	char text[TIP_TEXT];
-	const char *name;
-	short n, wx, wy, ww, wh, clip[4], ax, ay;
+	short top = top_window(), mb, ks, d;
+	viewer *v = viewer_of(top), *keep = cur;
+	const char *name = NULL;
+	toolbar t;
+	int b;
 
-	if (b < TB_COUNT)
+	if (v == NULL || v->icon)
+		return 0;
+	graf_mkstate(&d, &d, &mb, &ks);
+	if (mb != 0 || wind_find(mx, my) != top)
+		return 0;
+	cur = v;
+	bar(&t);
+	b = tb_hit(&t, mx, my);
+	if (b >= 0)
 	{
-		toolbar t;
-
-		bar(&t);
-		snprintf(text, sizeof(text), "%s", tb_tip(b));
+		snprintf(out, (size_t) size, "%s", tb_tip(b));
 		name = tb_name(b);
-		ax = t.bx[b];
-		ay = (short) (t.by + t.bh + 3);
-	} else
+	} else if (cur->ntabs > 1)
 	{
 		tabstrip s;
+		int i;
 
 		strip(&s);
-		tab_tip(b - TB_COUNT, text, sizeof(text));
-		name = "tab";
-		ax = s.tx[b - TB_COUNT];
-		ay = (short) (s.y + s.h + 3);
-	}
-	tip.done = 1;
-	if (tip_bubble(text, mx, my))
-	{
-		log_event("tip", name, "bubble");
-		return;
-	}
-	n = (short) strlen(text);
-	wind_get(cur->h, WF_WORKXYWH, &wx, &wy, &ww, &wh);
-	font_sys_push();
-	tip.w = (short) ((n + 2) * cw);
-	tip.h = (short) (ch + 4);
-	tip.x = ax;
-	tip.y = ay;
-	if (tip.x + tip.w > wx + ww)
-		tip.x = (short) (wx + ww - tip.w);
-	if (tip.x < wx)
-		tip.x = wx;
-	wind_update(BEG_UPDATE);
-	graf_mouse(M_OFF, NULL);
-	clip[0] = wx;
-	clip[1] = wy;
-	clip[2] = (short) (wx + ww - 1);
-	clip[3] = (short) (wy + wh - 1);
-	text_clip(vdi_h, clip);
-	fill(1, tip.x, tip.y, (short) (tip.x + tip.w - 1), (short) (tip.y + tip.h - 1));
-	fill(0, (short) (tip.x + 1), (short) (tip.y + 1), (short) (tip.x + tip.w - 2), (short) (tip.y + tip.h - 2));
-	vswr_mode(vdi_h, MD_TRANS);
-	vst_color(vdi_h, 1);
-	vst_effects(vdi_h, 0);
-	text_at((short) (tip.x + cw), (short) (tip.y + 2), text, n);
-	text_noclip(vdi_h);
-	graf_mouse(M_ON, NULL);
-	wind_update(END_UPDATE);
-	font_sys_pop();
-	tip.shown = 1;
-	log_event("tip", name, NULL);
-}
-
-/* after each event and timer tick: where the mouse rests; on a toolbar
-   button, or on a tab whose title is cut, its tip after a second */
-static void tip_check(void)
-{
-	short top = top_window(), mx = 0, my = 0, mb, ks;
-	viewer *v = viewer_of(top), *keep = cur;
-	int b = -1;
-
-	if (v != NULL && !v->icon)
-	{
-		toolbar t;
-
-		graf_mkstate(&mx, &my, &mb, &ks);
-		cur = v;
-		bar(&t);
-		if (mb == 0 && wind_find(mx, my) == top)
+		i = tabs_hit(&s, mx, my);
+		if (tabs_cut(&s, i))
 		{
-			b = tb_hit(&t, mx, my);
-			if (b < 0 && cur->ntabs > 1)
-			{
-				tabstrip s;
-				int i;
-
-				strip(&s);
-				i = tabs_hit(&s, mx, my);
-				if (tabs_cut(&s, i))
-					b = TB_COUNT + i;
-			}
+			tab_tip(i, out, (size_t) size);
+			name = "tab";
 		}
-		cur = keep;
 	}
-	if (b != tip.b || top != tip.win)
-	{
-		tip_hide();
-		tip.b = b;
-		tip.win = top;
-		tip.since = tos_ms();
-		tip.done = 0;
-		return;
-	}
-	/* a second, on any machine: tos_ms() corrects a _hz_200 that runs
-	   faster (312 Hz on a Falcon with its timer C set faster) */
-	if (b >= 0 && !tip.done && tos_ms() - tip.since >= 1000)
-	{
-		cur = v;
-		tip_show(b, mx, my);
-		cur = keep;
-	}
+	cur = keep;
+	if (name == NULL)
+		return 0;
+	log_event("tip", name, appl_find("BUBBLE  ") >= 0 ? "bubble" : NULL);
+	return 1;
 }
 
 /* a button held down: shown pressed while the mouse is on it; 1 when
@@ -3195,7 +3088,6 @@ static int bar_click(short mx, short my, short button)
 	if (my < y || my >= y + tb_height(sys_ch) || mx < x || mx >= x + w)
 		return 0;
 	tip_hide();
-	tip.done = 1;
 	bar(&t);
 	b = tb_hit(&t, mx, my);
 	if (b < 0)
@@ -3270,7 +3162,6 @@ static int strip_click(short mx, short my, short button)
 	if (my < s.y || my >= s.y + s.h || mx < s.x || mx >= s.x + s.w)
 		return 0;
 	tip_hide();
-	tip.done = 1;
 	i = tabs_hit(&s, mx, my);
 	if (button & 2)
 	{
@@ -3548,10 +3439,12 @@ static void viewer_message(short *msg)
 			wind_set(cur->h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
 		else if (msg[3] == cur->h)
 		{
-			/* at least the toolbar's Back, Forward and menu, and a few lines */
-			w = msg[6] < 16 * sys_cw ? (short) (16 * sys_cw) : msg[6];
-			w = w < 12 * cw ? (short) (12 * cw) : w;
-			h = msg[7] < 6 * ch + head_h() ? (short) (6 * ch + head_h()) : msg[7];
+			short mw, mh;
+
+			/* no smaller than its content needs (D38) */
+			viewer_min(&mw, &mh);
+			w = msg[6] < mw ? mw : msg[6];
+			h = msg[7] < mh ? mh : msg[7];
 			h = lines_h(msg[4], msg[5], w, h);
 			{
 				short x = wind_x8(WKIND, msg[4], msg[5], w, h);
@@ -3774,8 +3667,16 @@ static void own_set(char *text)
 	nf_decide(own_inf);              /* the first time: NATFEATS= */
 }
 
+/* the INF as read holds an old key (FONT= with POINT=, PANECOLS=: D44) */
+static int old_keys(void)
+{
+	return own_inf != NULL && (inf_get(own_inf, "POINT") != NULL || inf_get(own_inf, "PANECOLS") != NULL);
+}
+
 /* settings no longer used, left out when the file is written:
-   DIALOGS3D= (the 3D dialogs tick, gone: the guidelines 5.6, 27 Oct) */
+   DIALOGS3D= (the 3D dialogs tick, gone: the guidelines 5.6, 27 Oct);
+   and the old keys in their new forms (FONT=name,points, PANES=: D43,
+   D44), so only the new ones are written */
 static char *retired_out(char *t)
 {
 	char *u = t != NULL ? inf_drop(t, "DIALOGS3D") : NULL;
@@ -3783,7 +3684,13 @@ static char *retired_out(char *t)
 	if (u == NULL)
 		return t;
 	free(t);
-	return u;
+	/* only an INF read with an old key: its name looked for in each INF
+	   written cost an ST a tick a write (the speed rig's start) */
+	t = old_keys() ? fontpref_upgrade(u) : NULL;
+	if (t == NULL)
+		return u;
+	free(u);
+	return t;
 }
 
 static void own_reload(void)
@@ -3798,6 +3705,22 @@ static void own_reload(void)
 		return;
 	}
 	own_set(pf_load_info(settings_path, NULL, &own_info));
+}
+
+/* the program, at its start: an INF with the old keys (FONT= and POINT=,
+   PANECOLS=) written once in the new forms (6.1, D44) */
+static void inf_new_forms(void)
+{
+	char *t = own_text != NULL && old_keys() ? fontpref_upgrade(own_text) : NULL;
+
+	if (t == NULL)
+		return;
+	if (pf_save(settings_path, t, (unsigned long) strlen(t)) == 0)
+	{
+		own_set(t);
+		log_event("inf-new-forms", NULL, NULL);
+	} else
+		free(t);
 }
 
 int settings_put(const char *key, const char *value, const char *note)
@@ -3879,11 +3802,14 @@ static int library_layout(void)
 	return v != NULL && atari_casecmp(v, "panes") == 0 ? LIB_PANES : LIB_OUTLINE;
 }
 
-/* PANECOLS=: the Subjects pane's width, dragged by its edge (0: the
-   default) */
+/* PANES=: the Subjects pane's width, dragged by its edge (0: the
+   default); PANECOLS=, its old key, read once (D44) */
 int app_pane_cols(void)
 {
-	const char *v = own_inf != NULL ? inf_get(own_inf, "PANECOLS") : NULL;
+	const char *v = own_inf != NULL ? inf_get(own_inf, "PANES") : NULL;
+
+	if (v == NULL && own_inf != NULL)
+		v = inf_get(own_inf, "PANECOLS");
 
 	return v != NULL ? atoi(v) : 0;
 }
@@ -3893,8 +3819,49 @@ void app_pane_cols_set(int cols)
 	char v[8];
 
 	sprintf(v, "%d", cols);
-	settings_put("PANECOLS", v, "the width of the library's Subjects pane (Two panes), in characters, "
-		     "as its edge was dragged");
+	settings_put("PANES", v, PANES_NOTE);
+}
+
+/* WINDOW=x,y,w,h: the library window's place (6.1, D43; Erez, 17 Nov
+   2026: the library only, viewers open as they do), used when it is
+   still on this screen */
+int app_window_get(short *x, short *y, short *w, short *h)
+{
+	const char *v = own_inf != NULL ? inf_get(own_inf, "WINDOW") : NULL;
+	long n[4];
+	int i, a, b, c, d;
+
+	for (i = 0; v != NULL && i < 4; i++)
+	{
+		char *end;
+
+		n[i] = strtol(v, &end, 10);
+		if (end == v || *end != (i < 3 ? ',' : '\0') || n[i] < 0 || n[i] > 9999)
+			return 0;
+		v = end + 1;
+	}
+	if (v == NULL)
+		return 0;
+	a = (int) n[0];
+	b = (int) n[1];
+	c = (int) n[2];
+	d = (int) n[3];
+	if (a < desk_x || b < desk_y || a + c > desk_x + desk_w || b + d > desk_y + desk_h)
+		return 0;                      /* (libwin.c checks it against its smallest size) */
+	*x = (short) a;
+	*y = (short) b;
+	*w = (short) c;
+	*h = (short) d;
+	return 1;
+}
+
+void app_window_set(short x, short y, short w, short h)
+{
+	char v[32];
+
+	sprintf(v, "%d,%d,%d,%d", x, y, w, h);
+	settings_put("WINDOW", v, "where the library window was left: x,y,w,h (it opens there when it fits "
+		     "the screen, else on the whole desk)");
 }
 
 /* BOOKMARK1 to BOOKMARKn (or RECENTn) written back, in one go: the ones
@@ -4011,6 +3978,7 @@ static void find_home(void)
 		}
 		free(old);
 		own_reload();
+		inf_new_forms();
 		f = own_inf != NULL ? inf_get(own_inf, "FOLDER") : NULL;
 		if (f == NULL || atari_casecmp(f, home_dir) != 0)
 			settings_put("FOLDER", home_dir, "where EHypView keeps its files (EHYPVIEW.IDX, the library; "
@@ -4650,7 +4618,7 @@ static void crash_quit(const char *what)
 
 	log_event("crashed", what, NULL);
 	graf_mouse(ARROW, NULL);
-	snprintf(a, sizeof(a), "[3][EHypView has crashed|(%s).|What happened is in|CRASH.LOG, next to EHYPVIEW.PRG.][ Quit ]", what);
+	snprintf(a, sizeof(a), "[3][EHypView has crashed|(%s).|What happened is in|CRASH.LOG, next to EHYPVIEW.PRG.][Quit]", what);
 	form_alert(1, a);
 	{
 		int i;
@@ -4664,6 +4632,7 @@ static void crash_quit(const char *what)
 	}
 	if (libwin_handle() > 0)
 	{
+		libwin_save_place();
 		wind_close(libwin_handle());
 		wind_delete(libwin_handle());
 	}
@@ -4752,6 +4721,8 @@ int main(void)
 		appl_exit();                   /* EHYPVIEW.ACC runs, and has it */
 		return 0;
 	}
+	if (!is_acc)
+		key_state_init();              /* keys typed during the start keep their Shift and Control (3.2) */
 	if (is_acc)
 	{
 		menu_id = menu_register(ap_id, "  EHypView");
@@ -4775,7 +4746,7 @@ int main(void)
 	planes = work_out[4];
 	start_mark("vdi");
 	pb_vdi(vdi_h);                     /* the Subjects pane's bar: its fast way (common's panebar) */
-	tip_buf = av_shared(tip_local, sizeof(tip_local));   /* BubbleGEM reads the tips there */
+	tip_init(NULL);                    /* BubbleGEM reads the tips from global memory taken now */
 	if (is_acc)
 		acc_heap();                    /* nothing malloc'd before it */
 	{
@@ -4928,14 +4899,16 @@ int main(void)
 		/* 50 ms while work waits (bgwork.h), 200 for the tooltips, else
 		   a second; the full-text search asked for goes on at once in
 		   the program, every 50 ms in the accessory (no timer of 0) */
-		t = bg_timer(pending, hover ? 200 : 1000);
+		t = bg_timer(pending, hover ? tip_wait(200) : 1000);
 		if (urgent || index_news || (fts_busy && is_acc))
 			t = BG_PACE;
 		else if (fts_busy)
 			t = 0;
 		if (sliders_waiting())
 			t = 0;                        /* once: the sliders' turn */
-		if (pending || hover || fts_busy || index_news || t == 0)
+		if (libwin_place_due() && t > BG_PACE)
+			t = BG_PACE;                  /* the library's place, written next turn */
+		if (pending || hover || fts_busy || index_news || t == 0 || libwin_place_due())
 			flags |= MU_TIMER;
 		pf_forget();
 		hyp_forget();
@@ -4948,6 +4921,17 @@ int main(void)
 		/* what holds the machine until the next event call, for the
 		   AESGAP lines of an -DAES_PROFILE build */
 		aes_profile_tag(which & (MU_MESAG | MU_KEYBD | MU_BUTTON) ? "event" : "idle");
+		/* the tooltips: any event takes one away, a rest shows one */
+		{
+			short hx = -1, hy = -1, d;
+
+			if (hover)
+				graf_mkstate(&hx, &hy, &d, &d);
+			tip_tick(which, hx, hy, tip_text);
+		}
+		/* a turn with nothing else: the closed library's place written */
+		if (which == MU_TIMER && libwin_place_due())
+			libwin_save_place();
 		bg_tick();
 		index_worked = 0;
 		/* a key, a click or a message that may need a page whole */
@@ -4964,7 +4948,6 @@ int main(void)
 			viewer *tv = viewer_of(top);
 
 			tip_hide();
-			tip.done = 1;
 
 			if (top > 0 && ((tv != NULL && tv->icon) ||
 					(top == libwin_handle() && libwin_iconified())))
@@ -5069,7 +5052,6 @@ int main(void)
 		}
 		if (which & (MU_MESAG | MU_KEYBD | MU_BUTTON))
 			update_menu();
-		tip_check();
 	}
 
 	{

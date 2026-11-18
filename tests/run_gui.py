@@ -600,7 +600,7 @@ WINDOWMENU, OPTIONS, HELPMENU = (440, 9), (508, 9), (568, 9)
 # choice (a pop-up opens over its button, the choice shown on it: the
 # second just below), the first folder field
 SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 187), (320, 203), (300, 219), (300, 237)
-SET_LAYOUT, SET_LAYOUT_PANES = (340, 181), (330, 197)
+SET_LAYOUT_PANES = (428, 177)    # Library: the "Two panes" radio (5.6)
 SET_LOG = (300, 342)            # General: "Write a log (EHYPVIEW.LOG)", its words
 SET_ORIGIN = (89, 102)          # where the dialog is on 640 x 480, which SET_* are measured on
 
@@ -731,10 +731,9 @@ MOUSE_STEPS = [
     # added after Shift+Right: the whole of it is kept
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
     ([("click",) + SET_LOG], ["settings-log on"]),           # Write a log (6.5): off until ticked
-    ([("click",) + SET_START], ["menu settings-start"]),
+    ([("click",) + SET_START, ("wait", 1)], []),            # the pop-up over its button
     ([("click",) + SET_START_NOW], ["settings-start now"]),
     ([("click",) + SET_LIBRARY], ["settings-page library"]),
-    ([("click",) + SET_LAYOUT], ["menu settings-layout"]),
     ([("click",) + SET_LAYOUT_PANES], ["settings-layout panes"]),
     ([("click",) + SET_FIELD] + typed("C:\\FIXT\\SUB"), []),
     ([TAB] + typed("C:\\NOWHERE"), []),
@@ -750,7 +749,9 @@ MOUSE_STEPS = [
                 "settings LIBRARY panes", "settings LOG 1", "settings PATHS C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG,
                 "index again", "index 5 guides"]),
     # the same setting in Options, ticked there too: off, and on again
-    ([item(OPTIONS, 3)], ["menu log", "log off"]),
+    # (a second after the index: a menu title pressed in the job's last
+    # turn opened nothing on a Falcon, the item's click then the toolbar's)
+    ([("wait", 1), item(OPTIONS, 3)], ["menu log", "log off"]),
     ([item(OPTIONS, 3)], ["menu log", "log on"]),
     # the guide, when it is nowhere: where to put it
     ([item(HELPMENU, 0)], ["menu guide", "alert no-guide"]),
@@ -989,7 +990,7 @@ def acc_nvdi():
     xvfb = start_xvfb()
     try:
         ok = run_scenario("accnvdi1", d, ACC_NVDI_BOOT1, auto=r"C:\EHV\EHYPVIEW.PRG", windowed=True)
-        ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=%s" % ACC_NVDI.get("font", "?")])
+        ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=%s,*" % ACC_NVDI.get("font", "?"), "!POINT"])
         ok = ok and run_scenario("accnvdi2", d, ACC_NVDI_BOOT2, auto=r"C:\ASKHELP.PRG", windowed=True)
     finally:
         xvfb.terminate()
@@ -1122,10 +1123,22 @@ def quick_steps(gap, pair=True):
     ]
 
 
-QUICK_STEPS = ([([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
-                ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"])] +
-               quick_steps(70, pair=False) + quick_steps(150) +
-               [([UNDO], ["dialog-closed settings cancel"]), ([("ctrl", Q)], ["quit"])])
+def quick_scenario(gaps):
+    """gaps: (ms, pair) for each round of quick_steps"""
+    steps = [([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
+             ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"])]
+    for gap, pair in gaps:
+        steps += quick_steps(gap, pair=pair)
+    return steps + [([UNDO], ["dialog-closed settings cancel"]), ([("ctrl", Q)], ["quit"])]
+
+
+# the Falcons: 70 and 150 ms, where they test DLG_CLICK. ST-1: 300 ms. common's
+# settings.c draws a page in 20 ms turns, and since 86e37d2 a press made in a
+# turn is kept for the next dlg_do; at 150 ms an 8 MHz ST with TOS 1.04 still
+# lost the pair's second click 2 times in 3, at 300 none in 3 (17 Nov 2026;
+# at 400 before that fix: the hub). 150 when it holds there
+QUICK_STEPS = quick_scenario(((70, False), (150, True)))
+QUICK_STEPS_ST = quick_scenario(((300, True),))
 
 
 def quick():
@@ -1139,7 +1152,8 @@ def quick():
             print("      quick on %s" % machines.Machine(machine, d).describe())
             xvfb = start_xvfb()
             try:
-                ok = run_scenario("quick", d, QUICK_STEPS, auto=LAUNCH, windowed=True, machine=machine) and ok
+                steps = QUICK_STEPS_ST if machine.startswith("ST") else QUICK_STEPS
+                ok = run_scenario("quick", d, steps, auto=LAUNCH, windowed=True, machine=machine) and ok
             finally:
                 xvfb.terminate()
         finally:
@@ -1166,7 +1180,7 @@ INF_SAME_STEPS = [
 INF_CHANGE_STEPS = [
     ([], ["menu shown", "index 5 guides"]),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
-    (in_settings(("click",) + SET_START), ["menu settings-start"]),
+    (in_settings(("click",) + SET_START, ("wait", 1)), []),
     (in_settings(("click",) + SET_START_NOW), ["settings-start now"]),
     ([RETURN], ["dialog-closed settings ok"]),
     ([("ctrl", Q)], ["quit"]),
@@ -1195,7 +1209,7 @@ def inf_same():
         with open(path, "rb") as f:
             changed = f.read() != before
         print("%s  EHYPVIEW.INF written when START= changed" % ("ok  " if changed else "FAIL"))
-        return same and changed and check_inf(path, ["START=now", "FONT=System font"])
+        return same and changed and check_inf(path, ["START=now", "FONT=System font,8", "!POINT"])
     finally:
         xvfb.terminate()
 
@@ -1210,7 +1224,8 @@ LOOK_STEPS = [
     ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *", "settings-look *"]),
     (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
-    (in_settings(("click",) + SET_LAYOUT), ["menu settings-layout"]),
+    (in_settings(("click",) + SET_GENERAL), ["settings-page general"]),
+    (in_settings(("click",) + SET_START, ("wait", 1)), []),   # START='s pop-up over its button (5.7)
     ([ESC], []),                                        # the pop-up closed, nothing chosen
     ([UNDO], ["dialog-closed settings cancel"]),        # (Esc would empty a folder field)
     (FONT_KEYS, ["dialog font"]),
@@ -1416,24 +1431,27 @@ def arrowed():
 # renamed tools through its menu (Esc empties the name first); the edge
 # between the panes dragged wider (PANECOLS=); the index written again
 # holds the new subject. Screenshots refile-NN on Falcon:16
+# the library on the whole desk (D39; WINDOW= not yet saved), its rows 16 pixels
+# higher than when it opened a line below the menu bar (before 2.7)
 REFILE_STEPS = [
     ([], ["library *", "library-layout panes", "library-bar *", "index 20 guides"]),
     ([("home",), ("hover", 620, 380), ("still", 3)], []),   # (off the menu bar)
-    ([("rclick", 330, 183)], ["menu row", "!page *"]),
+    ([("rclick", 330, 167)], ["menu row", "!page *"]),
     ([ESC], ["!page *"]),
-    ([("drag", 330, 183, 60, 204)], [r"refiled C:\GUIDES\S00.HYP Sub01/EHypVie", "index saved edited"]),
-    ([("rclick", 60, 160)], ["menu subject"]),
-    ([("click", 100, 171)], ["dialog ask *"]),
+    ([("drag", 330, 167, 60, 188)], [r"refiled C:\GUIDES\S00.HYP Sub01/EHypVie", "index saved edited"]),
+    ([("rclick", 60, 144)], ["menu subject"]),
+    ([("click", 100, 155)], ["dialog ask *"]),
     ([ESC] + typed("tools") + [RETURN], ["dialog-closed ask tools", r"refiled C:\GUIDES\S00.HYP tools/EHypVie",
                                          r"refiled C:\GUIDES\S01.HYP tools/EHypVie", "index saved edited"]),
-    ([("drag", 224, 300, 304, 300)], ["pane-cols *"]),
+    ([("drag", 224, 284, 304, 284)], ["pane-cols *"]),
     ([("hover", 620, 470), ("still", 5)], []),
     ([("ctrl", Q)], ["quit"]),
 ]
 
 
 def refile():
-    d = copy_dir("refile", "PATHS=C:\\GUIDES\n", "; the layout\nLIBRARY=panes\n")
+    # PANECOLS=, the old key, read once and written as PANES= (D44)
+    d = copy_dir("refile", "PATHS=C:\\GUIDES\n", "; the layout\nLIBRARY=panes\n; the pane\nPANECOLS=0\n")
     shutil.rmtree(os.path.join(d, "FIXT"))
     os.makedirs(os.path.join(d, "GUIDES"))
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "colour.hyp"), "rb") as f:
@@ -1449,7 +1467,7 @@ def refile():
     with open(machines.ci_path(d, "ehypview.idx"), "rb") as f:
         held = f.read().count(b"tools/EHypVie")
     print("%s  EHYPVIEW.IDX files %d hypertexts under tools/EHypVie" % ("ok  " if held == 2 else "FAIL", held))
-    return ok and held == 2 and check_inf(machines.ci_path(d, "ehypview.inf"), ["PANECOLS=*"])
+    return ok and held == 2 and check_inf(machines.ci_path(d, "ehypview.inf"), ["PANES=*", "!PANECOLS"])
 
 
 # the README's pictures (make shots): the hypertexts in SHOT_GUIDES (a folder
@@ -1491,7 +1509,6 @@ SHOT_STEPS = [
     (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
     (in_settings(*([("click",) + SET_FIELD] + typed(LONGDIR))), []),
     ([("hover", 620, 470), ("still", 10)], []),                       # settings.png
-    (in_settings(("click",) + SET_LAYOUT), ["menu settings-layout"]),
     (in_settings(("click",) + SET_LAYOUT_PANES), ["settings-layout panes"]),
     ([RETURN], ["dialog-closed settings ok", "settings PATHS " + LONGDIR, "library-layout panes",
                 "index 6 guides"]),
@@ -1579,7 +1596,7 @@ def main():
     if sys.argv[3:] == ["viewer"]:                  # the main scenario alone
         return 0 if ok else 1
     if ok:
-        ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=System font", "POINT=8", "FOLDER=C:\\",
+        ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FONT=System font,8", "!POINT", "FOLDER=C:\\",
                                                           "BOOKMARK1="])   # added, then removed
     if ok:
         # DEFHYP is ST-Guide's: EHypView starts in its library all the same
@@ -1598,7 +1615,7 @@ def main():
                      "; a page read lately\nRECENT1=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail\n")
         ok = run_scenario("panes", d, PANES_STEPS)
         ok = ok and check_inf(machines.ci_path(d, "ehypview.inf"),
-                              ["LIBRARY=panes", "RECENT1=C:\\FIXT\\BASIC.HYP|Main|*",
+                              ["LIBRARY=panes", "FONT=System font,8", "!POINT", "RECENT1=C:\\FIXT\\BASIC.HYP|Main|*",
                                "RECENT2=C:\\FIXT\\SUB\\DEEP\\OTHER.HYP|Detail|Other test - Detail"])
     if ok:
         if have_display():
@@ -1642,7 +1659,7 @@ def main():
                 ok = run_scenario("twin", d, TWIN_STEPS, auto=TWIN_AUTO, windowed=True)
             finally:
                 xvfb.terminate()
-            ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FOLDER=C:\\EHV", "POINT=8"]) and ok
+            ok = check_inf(machines.ci_path(d, "ehypview.inf"), ["FOLDER=C:\\EHV", "FONT=System font,8", "!POINT"]) and ok
             ok = check_exists(machines.ci_path(d, "EHV/ehypview.idx"), "the program's index, in FOLDER=") and ok
         else:
             print("skip  twin: needs Xvfb and xdotool")

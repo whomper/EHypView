@@ -1426,6 +1426,21 @@ static void log_search(void)
 	log_event("search", q, n);
 }
 
+/* the window's smallest size (D38): the search line, and in Two panes
+   the Subjects at their narrowest beside the rows; six lines below. The
+   same for WM_SIZED and when it opens (border sizes) */
+static void lib_min(short *w, short *h)
+{
+	short d, ww = (short) ((panes() ? PANE_MIN * cw + libbar_width() + ROWS_MIN * cw + 2 * MARGIN : 40 * cw)
+			       + 2 * MARGIN), wh = (short) (header_h() + 6 * ch);
+
+	wind_calc(WC_BORDER, LKIND, 0, 0, ww, wh, &d, &d, w, h);
+	if (*w > desk_w)
+		*w = desk_w;
+	if (*h > desk_h)
+		*h = desk_h;
+}
+
 /* a window that fitted the screen still fits after wind_x8 moved it up
    to 7 pixels right (its text on the 8-pixel grid): as much narrower */
 static short fit_right(short x, short nx, short w)
@@ -1455,14 +1470,18 @@ void libwin_open(void)
 			alert(1, "[3][The system has no window left for EHypView.|Close a window and try again.][ OK ]");
 			return;
 		}
-		wind_calc(WC_BORDER, LKIND, 0, 0, (short) ((want_layout == LIB_PANES ? 78 : 64) * cw + 2 * MARGIN),
-			(short) (desk_h * 3 / 4), &x, &y, &w, &h);
-		if (w > desk_w)
+		/* where it was left (WINDOW=, when it fits this screen), else the
+		   whole desk (D39; Erez, 17 Nov 2026) */
+		short mw, mh;
+
+		lib_min(&mw, &mh);
+		if (!app_window_get(&x, &y, &w, &h) || w < mw || h < mh)
+		{
+			x = desk_x;
+			y = desk_y;
 			w = desk_w;
-		if (h > desk_h)
 			h = desk_h;
-		x = (short) (desk_x + desk_w - w - 8 * cw > desk_x ? desk_x + desk_w - w - 8 * cw : desk_x);
-		y = (short) (desk_y + ch);
+		}
 		/* its text on the 8-pixel grid: the VDI draws it far faster (the
 		   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
 		{
@@ -1505,10 +1524,43 @@ void libwin_open(void)
 	}
 }
 
+/* WINDOW=: where the window is (or was, iconified), written when it
+   changed (as it closes, and at the end) */
+/* WINDOW=: the place the library was closed at, written in a turn of
+   its own once the page under it is drawn (an INF written inside ^U's
+   redraw cost an ST 40 ms, the speed rig's "library closed") */
+static short due_place[4];
+static int place_due;
+
+static void note_place(void)
+{
+	if (lib_icon)
+		memcpy(due_place, lib_place, sizeof(due_place));
+	else
+		wind_get(lib_h, WF_CURRXYWH, &due_place[0], &due_place[1], &due_place[2], &due_place[3]);
+	place_due = 1;
+}
+
+int libwin_place_due(void)
+{
+	return place_due;
+}
+
+void libwin_save_place(void)
+{
+	if (lib_h > 0)
+		note_place();
+	if (!place_due)
+		return;
+	place_due = 0;
+	app_window_set(due_place[0], due_place[1], due_place[2], due_place[3]);
+}
+
 void libwin_close(void)
 {
 	if (lib_h > 0)
 	{
+		note_place();
 		if (is_acc)
 			av_window(lib_h, 0);
 		wind_close(lib_h);
@@ -2472,8 +2524,13 @@ int libwin_message(short *msg)
 			wind_set(lib_h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
 			break;
 		}
-		w = msg[6] < 20 * cw ? (short) (20 * cw) : msg[6];
-		h = msg[7] < 6 * ch ? (short) (6 * ch) : msg[7];
+		{
+			short mw, mh;          /* no smaller than its content needs (D38) */
+
+			lib_min(&mw, &mh);
+			w = msg[6] < mw ? mw : msg[6];
+			h = msg[7] < mh ? mh : msg[7];
+		}
 		{
 			short x = wind_x8(LKIND, msg[4], msg[5], w, h);
 

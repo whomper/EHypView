@@ -84,9 +84,15 @@ void app_bookmark_remove(int i);         /* Delete in the library, the menu */
 /* the library filed these hypertexts (idx->guides) under other subjects:
    kept for this run and EHYPVIEW.IDX written again (ehypview.c) */
 void app_index_edited(const unsigned long *g, unsigned long n);
-/* the Subjects pane's width in characters (PANECOLS=), and a new one */
+/* the Subjects pane's width in characters (PANES=), and a new one */
 int app_pane_cols(void);
 void app_pane_cols_set(int cols);
+/* WINDOW=x,y,w,h: the library window's place, 1 when there is one that
+   fits this screen; and a new one, written when it changed */
+int app_window_get(short *x, short *y, short *w, short *h);
+void app_window_set(short x, short y, short w, short h);
+void libwin_save_place(void);            /* libwin.c: WINDOW= written (a turn after the close, and at the end) */
+int libwin_place_due(void);              /* a closed library's place not yet written */
 
 /* ehypview.c: EHYPVIEW.INF, in the boot drive's root (the AERA
    guidelines, 6.1): key=value set, the rest of the file kept; note is the

@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * EHypView - the Settings dialog (settings.c): EHYPVIEW.INF's settings.
+ * EHypView - the Settings dialog (ehvset.c, on common's settings.c): EHYPVIEW.INF's settings.
  */
-#ifndef EHV_SETTINGS_H
-#define EHV_SETTINGS_H
+#ifndef EHV_EHVSET_H
+#define EHV_EHVSET_H
 
 #include "inf.h"
 
@@ -18,7 +18,7 @@
  * (FOLDER=, shown). What OK changed is written to the file; returns the
  * SETTINGS_* of what changed, 0 for Cancel (Esc, Undo) or nothing.
  */
-int settings_dialog(const char *inf_path, const char *folder);
+int ehv_settings(const char *inf_path, const char *folder);
 
 #define SETTINGS_LOG_NOTE "Write a log: 1 writes EHYPVIEW.LOG (the steps of quitting) next to the program, " \
 	"0 writes none (the guidelines 6.5)"
