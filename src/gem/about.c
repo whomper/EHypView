@@ -60,6 +60,17 @@ void about_box(void)
 	about_show(&a);
 }
 
+/* the 256-colour icon's pens made ahead, from the first timer event: the
+   About box's first opening then finds them (common a769b86; EUpdate's
+   open 210 -> 130 ms on Erez's configuration) */
+void about_ready(void)
+{
+	ABOUT a = { "EHypView", app_version, "", { NULL, NULL, NULL }, { 0, 0, 0 }, icon_bits, icon16_px,
+		    icon16_rgb, icon256_px, icon256_rgb };
+
+	about_prepare(&a);
+}
+
 /* an iconified window: the icon (common/ui/iconify.c), nothing under it */
 void app_icon_redraw(short h, short x, short y, short w, short ht)
 {

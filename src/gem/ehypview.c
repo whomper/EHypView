@@ -4929,6 +4929,16 @@ int main(void)
 				graf_mkstate(&hx, &hy, &d, &d);
 			tip_tick(which, hx, hy, tip_text);
 		}
+		/* the first timer turn: the About box's icon made ahead */
+		{
+			static int about_made;
+
+			if ((which & MU_TIMER) && !about_made)
+			{
+				about_made = 1;
+				about_ready();
+			}
+		}
 		/* a turn with nothing else: the closed library's place written */
 		if (which == MU_TIMER && libwin_place_due())
 			libwin_save_place();

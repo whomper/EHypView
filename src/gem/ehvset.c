@@ -38,15 +38,14 @@ static char paths[NPATH][PCAP + 1];
 static short o_path[NPATH];
 
 /* ---------------------------------------------------------------- */
-/* START=, as the pop-up shows it (ECal's choices, and the number of */
-/* seconds the file has when it is another)                          */
+/* START=, four radios (D24; Erez, 19 Nov 2026: "Radios, as proposed"). */
+/* Another number of seconds in the file: none chosen, a line says it, */
+/* and the file keeps it until one is clicked                         */
 
 static const char *const start_val[] = { "opened", "now", "60", "300" };
 #define NSTART 4
-static const char *start_name[NSTART + 1] = {
-	"When first opened", "At start", "After a minute", "After 5 minutes", NULL
-};
-static char start_other_name[24];
+static const char *const start_name[NSTART] = { "Opened", "At start", "1 minute", "5 minutes" };
+static char start_other_line[40];
 static short start_sel, start_was;     /* NSTART: another number of seconds */
 
 static void start_from(const char *v)
@@ -54,8 +53,7 @@ static void start_from(const char *v)
 	long s = bg_parse(v != NULL ? v : "opened");
 
 	start_sel = s == BG_OPENED ? 0 : s == BG_NOW ? 1 : s == 60 ? 2 : s == 300 ? 3 : NSTART;
-	sprintf(start_other_name, "After %ld s", s);
-	start_name[NSTART] = start_other_name;
+	sprintf(start_other_line, "Now after %ld s (EHYPVIEW.INF).", s);
 }
 
 /* LIBRARY=, two radios */
@@ -78,8 +76,9 @@ static void page_general(SETTINGS *s, short x, short y, void *user)
 	(void) y;
 	(void) user;
 	set_text(s, x, 4, "The accessory looks through the library:");
-	set_popup(s, (short) (x + 2), (short) (5 | (gap << 8)), 23, start_name,
-		  start_sel == NSTART ? NSTART + 1 : NSTART, &start_sel);
+	set_radio(s, x, (short) (5 | (gap << 8)), 9, start_name, NSTART, &start_sel);
+	if (start_was == NSTART)
+		set_text(s, x, (short) (6 | (gap << 8)), start_other_line);
 	set_text(s, x, (short) (7 | (gap << 8)), "The program looks as it starts.");
 	set_text(s, x, (short) (9 | (gap << 8)), "EHypView's folder (FOLDER=):");
 	set_text(s, (short) (x + 2), (short) (10 | (gap << 8)), folder_text);
