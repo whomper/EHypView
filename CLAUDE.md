@@ -211,7 +211,8 @@ maintenance then comes back:
 2. EHypView's own small dialogs in the family's look: the black title band (D22), bitmap ticks and radio
    buttons up to four choices (D23, D24), buttons 10 wide (D26), an out-of-range number refused with an
    alert that says what to type (D30); common's dlgbuild and engine wherever they fit. "Look there
-   anyway?": its words go to the hub, which puts them to Erez.
+   anyway?" stays as it is (Erez, 19 Nov 2026: "As it is"): `[2][C:\NOWHERE isn't a folder on this
+   Atari.|Look there anyway?][Keep|Change]`, Keep the default.
 The same gate as any release: the pairs against 2.7 (the D39 rows timed at the whole-desk layout), then
 the candidate to the hub for the family check.
 
@@ -226,7 +227,7 @@ Every GEM release still passes the speed rig. When one is done, send the hub one
 4. Help: the guide item reads `EHypView help` with no key, and `Keys...` is added; the Help key still
    shows the hypertext's own help page (D10, D11, MG5, MD4). H.
 5. The asks (`[ Keep |Change]` and the like) get a black title band (D22, C4). H. Alert padding waits
-   for the hub (C19); "Look there anyway?" is still open.
+   for the hub (C19); "Look there anyway?" stays as it is (Erez, 19 Nov 2026).
 6. The viewer's first window on the whole desk (D39, W11). S. Further viewers' place is still open.
 7. INF: `FONT=name` and `POINT=pt` become `FONT=name,points`, `POINT=` read once (D43, D44, W18). S.
    `PANECOLS=` and saving `WINDOW=` are not decided: leave them.
