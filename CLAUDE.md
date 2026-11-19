@@ -204,6 +204,17 @@ issue a release. Applications on maintenance does not mean they contain faults")
 - Nothing runs in the background; the session waits for Erez or the hub.
 - Only Erez's explicit word ends this mode. The hub passes it on quoting him.
 
+**Lifted for two items (Erez, 19 Nov 2026, choosing "Work on 1 and 2")** until both are released;
+maintenance then comes back:
+1. The speed rig's open row, the line scroll within the guidelines' time on ST and Falcon-4, "and every
+   other row too".
+2. EHypView's own small dialogs in the family's look: the black title band (D22), bitmap ticks and radio
+   buttons up to four choices (D23, D24), buttons 10 wide (D26), an out-of-range number refused with an
+   alert that says what to type (D30); common's dlgbuild and engine wherever they fit. "Look there
+   anyway?": its words go to the hub, which puts them to Erez.
+The same gate as any release: the pairs against 2.7 (the D39 rows timed at the whole-desk layout), then
+the candidate to the hub for the family check.
+
 ### UI backlog (Erez's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
 
 Nothing here starts in maintenance mode. Take it with a release made anyway (a fault fix, or one Erez
