@@ -418,9 +418,11 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             mouse.move(k[1], k[2])
             glide = []                                      # in four steps: Hatari takes no jump
             for i in range(1, 5):
-                glide += ["sleep", "%.3f" % (k[5] / 4000.0), "mousemove",
+                glide += ["sleep", "%.3f" % (k[5] / 5000.0), "mousemove",
                           str(wx + k[1] + (k[3] - k[1]) * i // 4), str(wy + k[2] + (k[4] - k[2]) * i // 4)]
-            mouse.xdo("click", "1", *glide, "click", "1")
+            # (the pointer there a fifth of the gap before the press, as a hand's is: Hatari moves it on over
+            # frames, and a press at the glide's last step came before the pointer did)
+            mouse.xdo("click", "1", *glide, "sleep", "%.3f" % (k[5] / 5000.0), "click", "1")
             time.sleep(2)
         elif isinstance(k, tuple) and k[0] == "type":
             type_text(k[1])
