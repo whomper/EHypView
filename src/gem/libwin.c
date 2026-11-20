@@ -30,6 +30,7 @@
 #include "tos.h"
 #include "gem.h"
 #include "gemapp.h"
+#include "wingen.h"
 #include "press.h"
 #include "alert.h"
 #include "hypfile.h"
@@ -109,9 +110,22 @@ static void ensure_model(void)
    (Two panes) the Subjects on the left and a heading, the rows and what
    the row chosen is on the right                                     */
 
+/* the work area, kept until a window could have changed (wingen.h) */
 static void work_area(short *x, short *y, short *w, short *h)
 {
-	wind_get(lib_h, WF_WORKXYWH, x, y, w, h);
+	static short wk[4], wk_h;
+	static unsigned wk_gen;
+
+	if (wk_gen != work_gen || wk_h != lib_h)
+	{
+		(wind_get)(lib_h, WF_WORKXYWH, &wk[0], &wk[1], &wk[2], &wk[3]);
+		wk_gen = work_gen;
+		wk_h = lib_h;
+	}
+	*x = wk[0];
+	*y = wk[1];
+	*w = wk[2];
+	*h = wk[3];
 }
 
 static int panes(void)
@@ -1700,7 +1714,10 @@ static void activate(void)
 
 			snprintf(q, sizeof(q), "\"%s\"", lib.query);
 			log_event("fulltext-start", q, NULL);
-			refresh(R_LIST | R_DETAIL);
+			/* the key answered now, its rows drawn in the next turn
+			   (libwin_idle), as a letter typed: drawn in the key's turn
+			   they were 210 ms of an ST's Return (the speed rig) */
+			rows_due |= R_LIST | R_DETAIL;
 		}
 		break;
 	}
@@ -2467,6 +2484,7 @@ int libwin_message(short *msg)
 
 	if (lib_h <= 0 || msg[3] != lib_h)
 		return 0;
+	work_gen++;                        /* a window may have changed (wingen.h) */
 	switch (msg[0])
 	{
 	case WM_REDRAW:

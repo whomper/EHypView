@@ -51,6 +51,7 @@
 #include "alert.h"
 #include "dialog.h"
 #include "iconify.h"
+#include "wingen.h"
 #include "clip.h"
 #include "dd.h"
 #include "twin.h"
@@ -112,21 +113,9 @@ typedef struct {
 	unsigned work_gen;             /* ...while work_gen is this */
 } viewer;
 
-/*
- * The viewer's work area, asked of the AES once until a window could have
- * changed: an AES call is some 2 ms of an 8 MHz ST, and a line scrolled
- * asked for it eight times (the speed rig, 20 Nov 2026). Every message
- * and every wind_set, wind_open, wind_close and wind_delete of EHypView's
- * own starts a new generation: a window moves or changes size only by
- * those (the AES tells a program by a message, and the program sets it)
- */
-static unsigned work_gen = 1;
+/* the viewer's work area kept until a window could have changed (wingen.h) */
+unsigned work_gen = 1;
 static int scroll_only;                /* this turn's events that only scrolled (update_menu) */
-#define wind_set(...) (work_gen++, (wind_set)(__VA_ARGS__))
-#define wind_open(...) (work_gen++, (wind_open)(__VA_ARGS__))
-#define wind_close(...) (work_gen++, (wind_close)(__VA_ARGS__))
-#define wind_delete(...) (work_gen++, (wind_delete)(__VA_ARGS__))
-#define wind_create(...) (work_gen++, (wind_create)(__VA_ARGS__))
 
 #define MAX_VIEWERS 6
 static unsigned long win_clock;         /* the Window menu: windows in the order opened */
@@ -351,9 +340,9 @@ static short top_window(void);
  * it has a window, else any with a window.  With none, the one kept
  * without a window (its page comes back when it opens again).
  */
-static void pick_current(void)
+static void pick_current_top(short top)
 {
-	viewer *v = viewer_of(top_window());
+	viewer *v = viewer_of(top);
 	int i;
 
 	if (v != NULL)
@@ -375,6 +364,11 @@ static void pick_current(void)
 			;
 		cur = i < MAX_VIEWERS ? &viewers[i] : viewer_new();
 	}
+}
+
+static void pick_current(void)
+{
+	pick_current_top(top_window());
 }
 
 /* ---------------------------------------------------------------- */
@@ -933,17 +927,21 @@ int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short 
 	return 1;
 }
 
-/* redraw an area of the window through the AES rectangle list */
-static void redraw(short x, short y, short w, short h)
+/* redraw areas of the window (n of them, x, y, w, h each) through the
+   AES rectangle list: one wind_update, one hidden mouse and one walk of
+   the list for all (Tab's two lines: half the AES calls, the guidelines'
+   Speed) */
+static void redraw_n(const short *a, int n)
 {
 	short rx, ry, rw, rh;
-	int press = app_pressing, took = 1;
+	int press = app_pressing, took = 1, k;
 
-	if (cur->h <= 0)
+	if (cur->h <= 0 || n <= 0)
 		return;
 	if (cur->icon)
 	{
-		app_icon_redraw(cur->h, x, y, w, h);
+		for (k = 0; k < n; k++)
+			app_icon_redraw(cur->h, a[4 * k], a[4 * k + 1], a[4 * k + 2], a[4 * k + 3]);
 		return;
 	}
 	if (press)
@@ -954,11 +952,14 @@ static void redraw(short x, short y, short w, short h)
 	wind_get(cur->h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
 	while (rw > 0 && rh > 0)
 	{
-		short ix = rx, iy = ry, iw = rw, ih = rh;
+		for (k = 0; k < n; k++)
+		{
+			short ix = rx, iy = ry, iw = rw, ih = rh;
 
-		if (intersect(&ix, &iy, &iw, &ih, x, y, w, h) &&
-			intersect(&ix, &iy, &iw, &ih, desk_x, desk_y, desk_w, desk_h))
-			draw_rect(ix, iy, iw, ih);
+			if (intersect(&ix, &iy, &iw, &ih, a[4 * k], a[4 * k + 1], a[4 * k + 2], a[4 * k + 3]) &&
+			    intersect(&ix, &iy, &iw, &ih, desk_x, desk_y, desk_w, desk_h))
+				draw_rect(ix, iy, iw, ih);
+		}
 		wind_get(cur->h, WF_NEXTXYWH, &rx, &ry, &rw, &rh);
 	}
 	graf_mouse(M_ON, NULL);
@@ -966,6 +967,17 @@ static void redraw(short x, short y, short w, short h)
 		press_update_end(took);
 	else
 		wind_update(END_UPDATE);
+}
+
+static void redraw(short x, short y, short w, short h)
+{
+	short a[4];
+
+	a[0] = x;
+	a[1] = y;
+	a[2] = w;
+	a[3] = h;
+	redraw_n(a, 1);
 }
 
 static void redraw_all(void)
@@ -1407,12 +1419,11 @@ static void close_window(void)
 static unsigned long lib_opened;
 static short win_handle[MENU_WINDOWS];  /* each line's window, as last written */
 
-static void window_menu(void)
+static void window_menu(short top)
 {
 	static char label[MENU_WINDOWS][MENU_WIN_LABEL + 4];
 	const char *title[MENU_WINDOWS];
 	unsigned long when[MENU_WINDOWS];
-	short top = top_window();
 	int i, j, n = 0, front = -1;
 
 	if (!has_menu)
@@ -1880,18 +1891,31 @@ static void rests_finish(void)
 }
 
 /* one line of the page drawn again: a link chosen or left */
-static void redraw_line(long line)
+/* a line's box on the screen (x, y, w, h in a), 0 when it isn't in sight */
+static int line_box(long line, short *a)
 {
 	short x, y, w, h;
 	long ly;
 
 	if (line < cur->view.top || cur->lay.line_y == NULL || cur->icon)
-		return;
+		return 0;
 	work_area(&x, &y, &w, &h);
 	ly = y + cur->lay.line_y[line] - cur->lay.gfx_y[cur->view.top];
 	if (ly >= y + h)
-		return;
-	redraw(x, (short) ly, w, (short) (ly + ch > y + h ? y + h - ly : ch));
+		return 0;
+	a[0] = x;
+	a[1] = (short) ly;
+	a[2] = w;
+	a[3] = (short) (ly + ch > y + h ? y + h - ly : ch);
+	return 1;
+}
+
+static void redraw_line(long line)
+{
+	short a[4];
+
+	if (line_box(line, a))
+		redraw_n(a, 1);
 }
 
 /* the next or previous link chosen: only its line and the one it left
@@ -1907,10 +1931,15 @@ static void select_link(int dir)
 
 		sprintf(num, "%ld", line);
 		log_event("select", num, NULL);
+		short a[8];
+		int n;
+
 		show_line(line);
-		redraw_line(old);
+		/* the line it left and the one it took, in one redraw */
+		n = line_box(old, a);
 		if (line != old)
-			redraw_line(line);
+			n += line_box(line, a + 4 * n);
+		redraw_n(a, n);
 	}
 }
 
@@ -2506,15 +2535,40 @@ static void command(int cmd)
 	after(rc);
 }
 
+#define VIEW_TARGETS (VIEW_SEEALSO + 1)   /* view_can's targets, 0 to VIEW_SEEALSO */
+
 /* grey out what cannot be done now */
 static void update_menu(void)
 {
+	/* what the page's navigation can reach, kept while the page and its
+	   history are the same: each a look through the hypertext's entries
+	   (the guidelines' Speed: update_menu was 18 ms of an ST's Tab) */
+	static const void *nav_page, *nav_doc;
+	static unsigned long nav_hist, nav_fwd;
+	static int nav_set;
+	static signed char nav_ok[VIEW_TARGETS];
 	int c;
-	short obj;
+	short obj, top;
+	int lib_top;
 
 	if (!has_menu)
 		return;
-	pick_current();
+	top = top_window();                /* once: an AES call each */
+	pick_current_top(top);
+	lib_top = libwin_handle() > 0 && top == libwin_handle();
+	if (!nav_set || cur->h <= 0 || cur->view.page != nav_page || (const void *) cur->view.doc != nav_doc ||
+	    cur->view.nhist != nav_hist || cur->view.nfwd != nav_fwd)
+	{
+		int t;
+
+		nav_set = cur->h > 0;        /* without a window: asked again each time */
+		nav_page = cur->view.page;
+		nav_doc = cur->view.doc;
+		nav_hist = cur->view.nhist;
+		nav_fwd = cur->view.nfwd;
+		for (t = 0; t < VIEW_TARGETS; t++)
+			nav_ok[t] = (signed char) (cur->h > 0 && view_can(&cur->view, t));
+	}
 	for (c = CMD_ABOUT; c < CMD_WIN0; c++)
 	{
 		int on = 1, target = nav_target(c);
@@ -2534,11 +2588,11 @@ static void update_menu(void)
 		else if (c == CMD_BM_REMOVE)
 			on = page_bookmark() >= 0;
 		else if (c == CMD_CUT || c == CMD_PASTE)
-			on = libwin_handle() > 0 && top_window() == libwin_handle();
+			on = lib_top;
 		else if (c == CMD_COPY)
-			on = (libwin_handle() > 0 && top_window() == libwin_handle()) || (cur->h > 0 && cur->view.page != NULL);
+			on = lib_top || (cur->h > 0 && cur->view.page != NULL);
 		else if (target >= 0)
-			on = cur->h > 0 && view_can(&cur->view, target);
+			on = target < VIEW_TARGETS && nav_ok[target];
 		if (menu_on[c] != on && (obj = menu_object(&menu, c)) >= 0)
 		{
 			menu_ienable(menu.tree, obj, (short) on);
@@ -2550,7 +2604,7 @@ static void update_menu(void)
 		menu_icheck(menu.tree, obj, (short) write_log);
 		log_ticked = (signed char) write_log;
 	}
-	window_menu();
+	window_menu(top);
 }
 
 static void log_font(void)
