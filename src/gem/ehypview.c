@@ -51,6 +51,7 @@
 #include "alert.h"
 #include "dialog.h"
 #include "iconify.h"
+#include "wingen.h"
 #include "clip.h"
 #include "dd.h"
 #include "twin.h"
@@ -108,7 +109,14 @@ typedef struct {
 	                                  (2 KB less of the accessory resident);
 	                                  tabs[front] unused */
 	unsigned long opened;          /* the Window menu's order (0: not counted yet) */
+	short work[4];                 /* WF_WORKXYWH as last asked (work_raw) */
+	unsigned work_gen;             /* ...while work_gen is this */
 } viewer;
+
+/* the viewer's work area kept until a window could have changed (wingen.h) */
+unsigned work_gen = 1;
+static int scroll_only;                /* this turn's events that only scrolled (update_menu) */
+static int about_made;                 /* the About box's icon made ahead (about_ready) */
 
 #define MAX_VIEWERS 6
 static unsigned long win_clock;         /* the Window menu: windows in the order opened */
@@ -333,9 +341,9 @@ static short top_window(void);
  * it has a window, else any with a window.  With none, the one kept
  * without a window (its page comes back when it opens again).
  */
-static void pick_current(void)
+static void pick_current_top(short top)
 {
-	viewer *v = viewer_of(top_window());
+	viewer *v = viewer_of(top);
 	int i;
 
 	if (v != NULL)
@@ -359,15 +367,21 @@ static void pick_current(void)
 	}
 }
 
+static void pick_current(void)
+{
+	pick_current_top(top_window());
+}
+
 /* ---------------------------------------------------------------- */
 /* window geometry and scrolling                                     */
 
 /* the toolbar of the current viewer's window, laid out */
+static void work_raw(short *x, short *y, short *w, short *h);
 static void bar(toolbar *t)
 {
 	short x, y, w, h;
 
-	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);
+	work_raw(&x, &y, &w, &h);
 	tb_layout(t, x, y, w, sys_cw, sys_ch);
 }
 
@@ -383,6 +397,19 @@ static short head_h(void)
 	return (short) (tb_height(sys_ch) + (cur->ntabs > 1 ? tabs_height(sys_ch) : 0));
 }
 
+static void work_raw(short *x, short *y, short *w, short *h)
+{
+	if (cur->work_gen != work_gen)
+	{
+		(wind_get)(cur->h, WF_WORKXYWH, &cur->work[0], &cur->work[1], &cur->work[2], &cur->work[3]);
+		cur->work_gen = work_gen;
+	}
+	*x = cur->work[0];
+	*y = cur->work[1];
+	*w = cur->work[2];
+	*h = cur->work[3];
+}
+
 static void work_area(short *x, short *y, short *w, short *h)
 {
 	short th = head_h();
@@ -394,7 +421,7 @@ static void work_area(short *x, short *y, short *w, short *h)
 		*w = planned[2];
 		*h = planned[3];
 	} else
-		wind_get(cur->h, WF_WORKXYWH, x, y, w, h);
+		work_raw(x, y, w, h);
 	*y = (short) (*y + th);
 	*h = (short) (*h > th ? *h - th : 0);
 }
@@ -791,7 +818,7 @@ static void strip(tabstrip *s)
 	short x, y, w, h, len[TABS_MAX];
 	int i;
 
-	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);
+	work_raw(&x, &y, &w, &h);
 	for (i = 0; i < cur->ntabs && i < TABS_MAX; i++)
 		len[i] = (short) strlen(tab_title(i));
 	tabs_layout(s, x, (short) (y + tb_height(sys_ch)), w, sys_cw, sys_ch, cur->ntabs, len);
@@ -867,7 +894,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 {
 	short x, y, w, h, ix = cx, iy = cy, iw = cw_, ih = ch_;
 
-	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);
+	work_raw(&x, &y, &w, &h);
 	if (intersect(&ix, &iy, &iw, &ih, x, y, w, tb_height(sys_ch)))
 		draw_bar(ix, iy, iw, ih);
 	ix = cx;
@@ -901,17 +928,21 @@ int intersect(short *x, short *y, short *w, short *h, short x2, short y2, short 
 	return 1;
 }
 
-/* redraw an area of the window through the AES rectangle list */
-static void redraw(short x, short y, short w, short h)
+/* redraw areas of the window (n of them, x, y, w, h each) through the
+   AES rectangle list: one wind_update, one hidden mouse and one walk of
+   the list for all (Tab's two lines: half the AES calls, the guidelines'
+   Speed) */
+static void redraw_n(const short *a, int n)
 {
 	short rx, ry, rw, rh;
-	int press = app_pressing, took = 1;
+	int press = app_pressing, took = 1, k;
 
-	if (cur->h <= 0)
+	if (cur->h <= 0 || n <= 0)
 		return;
 	if (cur->icon)
 	{
-		app_icon_redraw(cur->h, x, y, w, h);
+		for (k = 0; k < n; k++)
+			app_icon_redraw(cur->h, a[4 * k], a[4 * k + 1], a[4 * k + 2], a[4 * k + 3]);
 		return;
 	}
 	if (press)
@@ -922,11 +953,14 @@ static void redraw(short x, short y, short w, short h)
 	wind_get(cur->h, WF_FIRSTXYWH, &rx, &ry, &rw, &rh);
 	while (rw > 0 && rh > 0)
 	{
-		short ix = rx, iy = ry, iw = rw, ih = rh;
+		for (k = 0; k < n; k++)
+		{
+			short ix = rx, iy = ry, iw = rw, ih = rh;
 
-		if (intersect(&ix, &iy, &iw, &ih, x, y, w, h) &&
-			intersect(&ix, &iy, &iw, &ih, desk_x, desk_y, desk_w, desk_h))
-			draw_rect(ix, iy, iw, ih);
+			if (intersect(&ix, &iy, &iw, &ih, a[4 * k], a[4 * k + 1], a[4 * k + 2], a[4 * k + 3]) &&
+			    intersect(&ix, &iy, &iw, &ih, desk_x, desk_y, desk_w, desk_h))
+				draw_rect(ix, iy, iw, ih);
+		}
 		wind_get(cur->h, WF_NEXTXYWH, &rx, &ry, &rw, &rh);
 	}
 	graf_mouse(M_ON, NULL);
@@ -936,13 +970,24 @@ static void redraw(short x, short y, short w, short h)
 		wind_update(END_UPDATE);
 }
 
+static void redraw(short x, short y, short w, short h)
+{
+	short a[4];
+
+	a[0] = x;
+	a[1] = y;
+	a[2] = w;
+	a[3] = h;
+	redraw_n(a, 1);
+}
+
 static void redraw_all(void)
 {
 	short x, y, w, h;
 
 	if (cur->icon)                      /* nothing of the page shows */
 		return;
-	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);   /* the toolbar too */
+	work_raw(&x, &y, &w, &h);   /* the toolbar too */
 	clamp_scroll();
 	set_sliders();
 	redraw(x, y, w, h);
@@ -1375,12 +1420,11 @@ static void close_window(void)
 static unsigned long lib_opened;
 static short win_handle[MENU_WINDOWS];  /* each line's window, as last written */
 
-static void window_menu(void)
+static void window_menu(short top)
 {
 	static char label[MENU_WINDOWS][MENU_WIN_LABEL + 4];
 	const char *title[MENU_WINDOWS];
 	unsigned long when[MENU_WINDOWS];
-	short top = top_window();
 	int i, j, n = 0, front = -1;
 
 	if (!has_menu)
@@ -1567,7 +1611,15 @@ static void scroll_area(short x, short y, short w, short h, long dy)
 	{
 		short pxy[8], clip[4];
 
-		pxy[0] = pxy[4] = x;
+		/* from a 16-pixel group's start where the columns before it are
+		   the page's blank margin (not scrolled sideways): no cut group
+		   at the left of every row (the work area starts at x 8: ST:mono
+		   43 -> 30 ms of a line scrolled, the hub's tests/text) */
+		{
+			short xa = (short) ((x + 15) & ~15);
+
+			pxy[0] = pxy[4] = cur->view.left == 0 && xa - x <= MARGIN && xa < x + w ? xa : x;
+		}
 		pxy[2] = pxy[6] = (short) (x + w - 1);
 		pxy[1] = (short) (y + (dy > 0 ? ady : 0));
 		pxy[3] = (short) (pxy[1] + h - ady - 1);
@@ -1584,11 +1636,14 @@ static void scroll_area(short x, short y, short w, short h, long dy)
 		/* the strip that comes in drawn at once, the screen still held
 		   and the mouse still hidden: nothing drawn between the move and
 		   it (the old rows were shown twice till it came, Erez's video,
-		   13 Nov 2026) */
+		   13 Nov 2026). Straight onto the page: the whole work area
+		   shows (above), so no rectangle list, and the screen and the
+		   mouse are held already (redraw's six AES calls were some 20 ms
+		   of an ST's line scrolled, the speed rig) */
 		if (dy > 0)
-			redraw(x, (short) (y + h - ady), w, ady);
+			draw_page(x, (short) (y + h - ady), w, ady);
 		else
-			redraw(x, y, w, ady);
+			draw_page(x, y, w, ady);
 		graf_mouse(M_ON, NULL);
 		whole = 1;
 	}
@@ -1845,18 +1900,31 @@ static void rests_finish(void)
 }
 
 /* one line of the page drawn again: a link chosen or left */
-static void redraw_line(long line)
+/* a line's box on the screen (x, y, w, h in a), 0 when it isn't in sight */
+static int line_box(long line, short *a)
 {
 	short x, y, w, h;
 	long ly;
 
 	if (line < cur->view.top || cur->lay.line_y == NULL || cur->icon)
-		return;
+		return 0;
 	work_area(&x, &y, &w, &h);
 	ly = y + cur->lay.line_y[line] - cur->lay.gfx_y[cur->view.top];
 	if (ly >= y + h)
-		return;
-	redraw(x, (short) ly, w, (short) (ly + ch > y + h ? y + h - ly : ch));
+		return 0;
+	a[0] = x;
+	a[1] = (short) ly;
+	a[2] = w;
+	a[3] = (short) (ly + ch > y + h ? y + h - ly : ch);
+	return 1;
+}
+
+static void redraw_line(long line)
+{
+	short a[4];
+
+	if (line_box(line, a))
+		redraw_n(a, 1);
 }
 
 /* the next or previous link chosen: only its line and the one it left
@@ -1872,10 +1940,15 @@ static void select_link(int dir)
 
 		sprintf(num, "%ld", line);
 		log_event("select", num, NULL);
+		short a[8];
+		int n;
+
 		show_line(line);
-		redraw_line(old);
+		/* the line it left and the one it took, in one redraw */
+		n = line_box(old, a);
 		if (line != old)
-			redraw_line(line);
+			n += line_box(line, a + 4 * n);
+		redraw_n(a, n);
 	}
 }
 
@@ -2471,15 +2544,40 @@ static void command(int cmd)
 	after(rc);
 }
 
+#define VIEW_TARGETS (VIEW_SEEALSO + 1)   /* view_can's targets, 0 to VIEW_SEEALSO */
+
 /* grey out what cannot be done now */
 static void update_menu(void)
 {
+	/* what the page's navigation can reach, kept while the page and its
+	   history are the same: each a look through the hypertext's entries
+	   (the guidelines' Speed: update_menu was 18 ms of an ST's Tab) */
+	static const void *nav_page, *nav_doc;
+	static unsigned long nav_hist, nav_fwd;
+	static int nav_set;
+	static signed char nav_ok[VIEW_TARGETS];
 	int c;
-	short obj;
+	short obj, top;
+	int lib_top;
 
 	if (!has_menu)
 		return;
-	pick_current();
+	top = top_window();                /* once: an AES call each */
+	pick_current_top(top);
+	lib_top = libwin_handle() > 0 && top == libwin_handle();
+	if (!nav_set || cur->h <= 0 || cur->view.page != nav_page || (const void *) cur->view.doc != nav_doc ||
+	    cur->view.nhist != nav_hist || cur->view.nfwd != nav_fwd)
+	{
+		int t;
+
+		nav_set = cur->h > 0;        /* without a window: asked again each time */
+		nav_page = cur->view.page;
+		nav_doc = cur->view.doc;
+		nav_hist = cur->view.nhist;
+		nav_fwd = cur->view.nfwd;
+		for (t = 0; t < VIEW_TARGETS; t++)
+			nav_ok[t] = (signed char) (cur->h > 0 && view_can(&cur->view, t));
+	}
 	for (c = CMD_ABOUT; c < CMD_WIN0; c++)
 	{
 		int on = 1, target = nav_target(c);
@@ -2499,11 +2597,11 @@ static void update_menu(void)
 		else if (c == CMD_BM_REMOVE)
 			on = page_bookmark() >= 0;
 		else if (c == CMD_CUT || c == CMD_PASTE)
-			on = libwin_handle() > 0 && top_window() == libwin_handle();
+			on = lib_top;
 		else if (c == CMD_COPY)
-			on = (libwin_handle() > 0 && top_window() == libwin_handle()) || (cur->h > 0 && cur->view.page != NULL);
+			on = lib_top || (cur->h > 0 && cur->view.page != NULL);
 		else if (target >= 0)
-			on = cur->h > 0 && view_can(&cur->view, target);
+			on = target < VIEW_TARGETS && nav_ok[target];
 		if (menu_on[c] != on && (obj = menu_object(&menu, c)) >= 0)
 		{
 			menu_ienable(menu.tree, obj, (short) on);
@@ -2515,7 +2613,7 @@ static void update_menu(void)
 		menu_icheck(menu.tree, obj, (short) write_log);
 		log_ticked = (signed char) write_log;
 	}
-	window_menu();
+	window_menu(top);
 }
 
 static void log_font(void)
@@ -2592,7 +2690,6 @@ static void key(short kstate, short kreturn)
 	   EHypView is busy comes with kstate 0 (3.2); a page is rows - 1,
 	   one line kept in sight (W5) */
 	int shift = key_shift(kstate, kreturn), ctrl = key_ctrl(kstate, kreturn);
-	long rows = page_lines();
 	int rc = -2;
 
 	if (ctrl && ascii != 0x09 && app_key(kstate, kreturn))
@@ -2662,15 +2759,19 @@ static void key(short kstate, short kreturn)
 			command(CMD_NEXT);
 			return;
 		case 0x48:                     /* Up */
-			scroll_to(shift ? cur->view.top - rows : cur->view.top - 1, cur->view.left);
+			scroll_only++;
+			scroll_to(shift ? cur->view.top - page_lines() : cur->view.top - 1, cur->view.left);
 			return;
 		case 0x50:                     /* Down */
-			scroll_to(shift ? cur->view.top + rows : cur->view.top + 1, cur->view.left);
+			scroll_only++;
+			scroll_to(shift ? cur->view.top + page_lines() : cur->view.top + 1, cur->view.left);
 			return;
 		case 0x4b:                     /* Left */
+			scroll_only++;
 			scroll_to(cur->view.top, shift ? cur->view.left - visible_cols() : cur->view.left - 1);
 			return;
 		case 0x4d:                     /* Right */
+			scroll_only++;
 			scroll_to(cur->view.top, shift ? cur->view.left + visible_cols() : cur->view.left + 1);
 			return;
 		case 0x77:                     /* ^Clr/Home: TOS gives it this scan code */
@@ -2680,7 +2781,10 @@ static void key(short kstate, short kreturn)
 			if (ctrl)
 				command(CMD_HOME);
 			else
+			{
+				scroll_only++;
 				scroll_to(shift ? max_top() : 0, 0);
+			}
 			return;
 		default:
 			return;
@@ -3084,7 +3188,7 @@ static int bar_click(short mx, short my, short button)
 	short x, y, w, h, px, py;
 	int b;
 
-	wind_get(cur->h, WF_WORKXYWH, &x, &y, &w, &h);
+	work_raw(&x, &y, &w, &h);
 	if (my < y || my >= y + tb_height(sys_ch) || mx < x || mx >= x + w)
 		return 0;
 	tip_hide();
@@ -3459,6 +3563,7 @@ static void viewer_message(short *msg)
 		}
 		break;
 	case WM_ARROWED:
+		scroll_only++;
 		if (msg[3] == cur->h)
 		{
 			long rows = page_lines(), cols = visible_cols();
@@ -3485,10 +3590,12 @@ static void viewer_message(short *msg)
 		}
 		break;
 	case WM_VSLID:
+		scroll_only++;
 		if (msg[3] == cur->h)
 			scroll_to(max_top() * msg[4] / 1000, cur->view.left);
 		break;
 	case WM_HSLID:
+		scroll_only++;
 		if (msg[3] == cur->h)
 			scroll_to(cur->view.top, max_left() * msg[4] / 1000);
 		break;
@@ -3616,6 +3723,7 @@ static void viewer_message(short *msg)
  */
 static void message(short *msg)
 {
+	work_gen++;                        /* a window may have changed (work_raw) */
 	viewer *keep = cur, *v = NULL;
 
 	if (msg[0] >= WM_REDRAW && msg[0] <= WM_ALLICONIFY && (v = viewer_of(msg[3])) != NULL)
@@ -4918,6 +5026,7 @@ int main(void)
 		   click's second press, ECal's 1 Nov 2026 runs; the hub's call
 		   for 1.38). EHypView has no double click of its own */
 		which = evnt_multi_(flags, is_acc ? 0x102 : 0x101, 3, 0, t, msg, &ev);
+		scroll_only = 0;
 		/* what holds the machine until the next event call, for the
 		   AESGAP lines of an -DAES_PROFILE build */
 		aes_profile_tag(which & (MU_MESAG | MU_KEYBD | MU_BUTTON) ? "event" : "idle");
@@ -4984,7 +5093,17 @@ int main(void)
 		}
 		/* the index, in a slice (bgwork.h): not while the user works, nor
 		   while EHYPVIEW.PRG runs (it has the index to itself) */
-		if (which == MU_TIMER && sliders_waiting())
+		if (which == MU_TIMER && !about_made && !pictures_busy() && !sliders_waiting())
+		{
+			/* the About box's icon made ahead (common a769b86), in a
+			   timer turn of its own once the page's pictures are drawn:
+			   in a turn that drew one it made Falcon-4:256's front page
+			   10 ms longer (the speed rig) */
+			aes_profile_tag("about");
+			about_made = 1;
+			about_ready();
+			slid = 1;
+		} else if (which == MU_TIMER && sliders_waiting())
 		{
 			/* the sliders, alone in the turn */
 			aes_profile_tag("sliders");
@@ -5050,7 +5169,11 @@ int main(void)
 			misread = ehv_names_misread;
 			job_again();
 		}
-		if (which & (MU_MESAG | MU_KEYBD | MU_BUTTON))
+		/* the menu as what can be done now: not after a turn that only
+		   scrolled (an arrow, Clr/Home, a slider), which changes none of
+		   it: some 18 ms of an ST's line scrolled (the speed rig) */
+		if ((which & (MU_MESAG | MU_KEYBD | MU_BUTTON)) &&
+		    scroll_only < !!(which & MU_KEYBD) + !!(which & MU_MESAG) + !!(which & MU_BUTTON))
 			update_menu();
 	}
 

@@ -416,6 +416,7 @@ static int make_order(ehv_library *lib)
 	}
 	lib->norder = n;
 	lib->order_of = idx;
+	lib->order_gen++;
 	return 0;
 }
 
@@ -570,6 +571,16 @@ static int build_panes(ehv_library *lib)
 	const gkey *topk = NULL, *partk = NULL;
 	char key[sizeof(lib->pane_name)];
 
+	/* made again only when what they come from changed: a key typed in
+	   the search made them each time (46 ms of an ST's 190, the speed
+	   rig) */
+	if (lib->panes_from.ok && lib->panes_from.order_gen == lib->order_gen &&
+	    lib->panes_from.bm == (const void *) lib->bm && lib->panes_from.recent == (const void *) lib->recent &&
+	    lib->panes_from.nbm == (lib->bm != NULL ? lib->bm->n : 0) &&
+	    lib->panes_from.nrecent == (lib->recent != NULL ? lib->recent->n : 0) &&
+	    lib->panes_from.pane == lib->pane && lib->panes_from.pane_kind == lib->pane_kind &&
+	    strcmp(lib->panes_from.pane_name, lib->pane_name) == 0)
+		return 0;
 	lib->npanes = 0;
 	if (lib->bm != NULL && lib->bm->n > 0 && add_pane(lib, PANE_BOOKMARKS, 0, lib->bm->n, "Bookmarks", LIB_PANE_TEXT) < 0)
 		return -1;
@@ -631,6 +642,15 @@ static int build_panes(ehv_library *lib)
 			lib->pane = k;
 	if (lib->pane < 0 && lib->npanes > 0)
 		lib->pane = 0;
+	lib->panes_from.ok = 1;
+	lib->panes_from.order_gen = lib->order_gen;
+	lib->panes_from.bm = lib->bm;
+	lib->panes_from.recent = lib->recent;
+	lib->panes_from.nbm = lib->bm != NULL ? lib->bm->n : 0;
+	lib->panes_from.nrecent = lib->recent != NULL ? lib->recent->n : 0;
+	lib->panes_from.pane = lib->pane;
+	lib->panes_from.pane_kind = lib->pane_kind;
+	snprintf(lib->panes_from.pane_name, sizeof(lib->panes_from.pane_name), "%s", lib->pane_name);
 	return 0;
 }
 

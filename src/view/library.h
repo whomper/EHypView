@@ -126,6 +126,15 @@ typedef struct {
 	long pane;            /* the one chosen                     */
 	unsigned char pane_kind;         /* it, kept over a new index      */
 	char pane_name[64];
+	unsigned long order_gen;         /* counted up each time order is made */
+	struct {                         /* what the panes were made from      */
+		unsigned long order_gen, nbm, nrecent;
+		const void *bm, *recent;
+		long pane;
+		unsigned char pane_kind;
+		char pane_name[64];
+		int ok;
+	} panes_from;
 	unsigned long folded[LIB_FOLD_MAX];   /* the headings folded, hashed */
 	unsigned int nfolded;
 } ehv_library;

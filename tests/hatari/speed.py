@@ -71,6 +71,30 @@ COMMA, L, U, Q = 0x33, 0x26, 0x16, 0x10
 # the guidelines' times, ms
 KEY, LINE, PAGE, DIALOG, WHOLE, ACC, START = 50, 50, 150, 150, 300, 500, 2000
 SLICE = 100                     # a longer job's slices: a key answered within
+# on an 8 MHz ST (ST, ST-1) a dialog over about half the screen or more,
+# Settings, has 300 ms (the guidelines' table, Erez 1 Nov 2026)
+ST_DIALOG = 300
+# times Erez accepted over the guidelines' (the row, the machine: its figure): the
+# line scroll, the copy at the bus and the scroll's own wind_update (20 Nov 2026,
+# "Accept"; AERA-Atari PERF-REVISIT)
+ACCEPTED = {
+    ("big page: a line scrolled (Down)", "ST:mono"): 70,
+    ("big page: a line scrolled (Down)", "ST:med"): 60,
+    ("big page: a line scrolled (Down)", "Falcon-4:16"): 55,
+    # the ST's rows for 2.9 (20 Nov 2026, "Accept, release 2.9")
+    ("a key: Tab chooses a link", "ST:mono"): 60,
+    ("a key: Tab chooses a link", "ST:med"): 55,
+    ("a letter typed in the library's search", "ST:mono"): 50,
+    ("a letter typed in the library's search", "ST:med"): 55,
+    ("full-text search (Return): the key", "ST:mono"): 65,
+    ("full-text search (Return): the key", "ST:med"): 60,
+    ("search: started, its rows made", "ST:mono"): 140,
+    ("search: started, its rows made", "ST:med"): 145,
+    ("search: the rows found drawn", "ST:mono"): 250,
+    ("search: the rows found drawn", "ST:med"): 210,
+    ("full-text search: its slices", "ST:mono"): 110,
+    ("full-text search: its slices", "ST:med"): 115,
+}
 
 results = {}                    # (action, limit) -> {machine: ms}
 order = []
@@ -530,6 +554,7 @@ def main():
         if xvfb is not None:
             xvfb.terminate()
     over = 0
+    whole_st = []
     w = max(len(a) for a, _ in order) if order else 10
     print("\n%-*s %6s  %s" % (w, "action", "limit", "  ".join("%14s" % s for s in SPECS)))
     for a, lim in order:
@@ -542,9 +567,26 @@ def main():
                 cells.append("%14s" % ("no event" if missing else "-"))
             else:
                 bad = v > lim
+                # on the 8 MHz ST a window is drawn whole where pieces
+                # can't meet the 10 %, at whatever its stretch (Erez, 19
+                # Nov 2026: "Draw whole on the ST"): its 300 isn't its limit
+                if bad and lim == WHOLE and s.split(":")[0] in ("ST", "ST-1"):
+                    bad = False
+                    whole_st.append("%s on %s, %d ms" % (a, s, v))
+                if bad and (a, s) in ACCEPTED:
+                    bad = v > ACCEPTED[(a, s)]
+                    if not bad:
+                        whole_st.append("%s on %s, %d ms (Erez's %d)" % (a, s, v, ACCEPTED[(a, s)]))
+                if bad and a.startswith("Settings opened") and s.split(":")[0] in ("ST", "ST-1"):
+                    bad = v > ST_DIALOG
+                    if not bad:
+                        whole_st.append("%s on %s, %d ms (its %d)" % (a, s, v, ST_DIALOG))
                 over += bad
                 cells.append("%14s" % ("%d%s" % (v, " OVER" if bad else "")))
         print("%-*s %6d  %s" % (w, a, lim, "  ".join(cells)))
+    if whole_st:
+        print("within their own times (the ST's whole draws, Erez 19 Nov 2026; Settings on the ST 300, 1 Nov; "
+              "the times Erez accepted): " + "; ".join(whole_st))
     print("%d over" % over)
     return 1 if over else 0
 

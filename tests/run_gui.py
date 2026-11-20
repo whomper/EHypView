@@ -418,9 +418,11 @@ def run_scenario(name, hdir, steps, auto=r"C:\EHYPVIEW.PRG", windowed=False, ext
             mouse.move(k[1], k[2])
             glide = []                                      # in four steps: Hatari takes no jump
             for i in range(1, 5):
-                glide += ["sleep", "%.3f" % (k[5] / 4000.0), "mousemove",
+                glide += ["sleep", "%.3f" % (k[5] / 5000.0), "mousemove",
                           str(wx + k[1] + (k[3] - k[1]) * i // 4), str(wy + k[2] + (k[4] - k[2]) * i // 4)]
-            mouse.xdo("click", "1", *glide, "click", "1")
+            # (the pointer there a fifth of the gap before the press, as a hand's is: Hatari moves it on over
+            # frames, and a press at the glide's last step came before the pointer did)
+            mouse.xdo("click", "1", *glide, "sleep", "%.3f" % (k[5] / 5000.0), "click", "1")
             time.sleep(2)
         elif isinstance(k, tuple) and k[0] == "type":
             type_text(k[1])
@@ -599,7 +601,9 @@ WINDOWMENU, OPTIONS, HELPMENU = (440, 9), (508, 9), (568, 9)
 # START= popup on General; on Library the layout's popup and its second
 # choice (a pop-up opens over its button, the choice shown on it: the
 # second just below), the first folder field
-SET_LIBRARY, SET_START, SET_START_NOW, SET_FIELD = (135, 187), (320, 203), (300, 219), (300, 237)
+SET_LIBRARY, SET_FIELD = (135, 187), (300, 237)
+# General: START's radios (D24; Erez, 19 Nov 2026), "At start" and "1 minute"
+SET_START_NOW, SET_START_MIN = (332, 203), (416, 203)
 SET_LAYOUT_PANES = (428, 177)    # Library: the "Two panes" radio (5.6)
 SET_LOG = (300, 342)            # General: "Write a log (EHYPVIEW.LOG)", its words
 SET_ORIGIN = (89, 102)          # where the dialog is on 640 x 480, which SET_* are measured on
@@ -731,8 +735,7 @@ MOUSE_STEPS = [
     # added after Shift+Right: the whole of it is kept
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
     ([("click",) + SET_LOG], ["settings-log on"]),           # Write a log (6.5): off until ticked
-    ([("click",) + SET_START, ("wait", 1)], []),            # the pop-up over its button
-    ([("click",) + SET_START_NOW], ["settings-start now"]),
+    ([("click",) + SET_START_NOW], ["settings-start now"]),  # START's "At start" radio
     ([("click",) + SET_LIBRARY], ["settings-page library"]),
     ([("click",) + SET_LAYOUT_PANES], ["settings-layout panes"]),
     ([("click",) + SET_FIELD] + typed("C:\\FIXT\\SUB"), []),
@@ -1180,7 +1183,6 @@ INF_SAME_STEPS = [
 INF_CHANGE_STEPS = [
     ([], ["menu shown", "index 5 guides"]),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
-    (in_settings(("click",) + SET_START, ("wait", 1)), []),
     (in_settings(("click",) + SET_START_NOW), ["settings-start now"]),
     ([RETURN], ["dialog-closed settings ok"]),
     ([("ctrl", Q)], ["quit"]),
@@ -1218,15 +1220,13 @@ def inf_same():
 # EmuTOS in colour), flat on TOS 1 to 3 (and EmuTOS in fewer colours),
 # with no setting for it (27 Oct): an EHYPVIEW.INF that still has
 # DIALOGS3D=0 is read without it, and the first save leaves it out. The
-# screenshots show Settings' two pages (its pop-up open over its button,
-# 5.7), the Font dialog and an alert (look-01, -02, -03, -05, -08)
+# screenshots show Settings' two pages (START's radios, D24), the Font dialog and an alert (look-01, -02, -03, -05, -08)
 LOOK_STEPS = [
     ([], ["menu shown", "page %s Main" % BASIC, "index 5 guides"]),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *", "settings-look *"]),
     (in_settings(("click",) + SET_LIBRARY), ["settings-page library"]),
     (in_settings(("click",) + SET_GENERAL), ["settings-page general"]),
-    (in_settings(("click",) + SET_START, ("wait", 1)), []),   # START='s pop-up over its button (5.7)
-    ([ESC], []),                                        # the pop-up closed, nothing chosen
+    (in_settings(("click",) + SET_START_MIN), ["settings-start 60"]),   # START's radios (D24)
     ([UNDO], ["dialog-closed settings cancel"]),        # (Esc would empty a folder field)
     (FONT_KEYS, ["dialog font"]),
     ([ESC], ["dialog-closed font cancel"]),

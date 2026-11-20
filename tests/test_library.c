@@ -207,6 +207,27 @@ static long pane_of(const ehv_library *lib, const char *name)
 	return -1;
 }
 
+/* the Subjects pane made again only when what it comes from changed: a
+   search keeps it, a bookmark added or gone changes it */
+static void test_panes_kept(const ehv_index *idx)
+{
+	ehv_library lib;
+	ehv_bookmarks bm;
+	unsigned long n0;
+
+	lib_init(&lib, idx);
+	n0 = lib.npanes;
+	CHECK(n0 > 0 && pane_of(&lib, "All hypertexts") >= 0 && pane_of(&lib, "Bookmarks") < 0);
+	CHECK(search(&lib, "image") == 0 && lib.npanes == n0);
+	CHECK(search(&lib, "") == 0 && lib.npanes == n0 && pane_of(&lib, "All hypertexts") >= 0);
+	bm_init(&bm);
+	bm_add(&bm, "C:\\GUIDES\\BASIC.HYP", "Second", "Basic test - Second page");
+	CHECK(lib_set_bookmarks(&lib, &bm) == 0 && lib.npanes == n0 + 1 && pane_of(&lib, "Bookmarks") >= 0);
+	CHECK(lib_set_bookmarks(&lib, NULL) == 0 && lib.npanes == n0 && pane_of(&lib, "Bookmarks") < 0);
+	bm_free(&bm);
+	lib_free(&lib);
+}
+
 static void test_layouts(const ehv_index *idx)
 {
 	ehv_library lib;
@@ -746,6 +767,7 @@ int main(int argc, char **argv)
 		test_all(idx);
 		test_bookmarks(idx);
 		test_layouts(idx);
+		test_panes_kept(idx);
 		test_names(idx);
 		test_subjects();
 		test_refile();
