@@ -215,6 +215,10 @@ maintenance then comes back:
    Atari.|Look there anyway?][Keep|Change]`, Keep the default.
 The same gate as any release: the pairs against 2.7 (the D39 rows timed at the whole-desk layout), then
 the candidate to the hub for the family check.
+Done in 2.9 (20 Nov 2026): the speed rows (the ST's and the line scroll's times over the guidelines
+accepted by Erez, 20 Nov, named in tests/hatari/speed.py's ACCEPTED) and START as four radios. Back in
+maintenance mode. For 2.10, when it comes: the help front page's pictures loaded more frugally (the
+accessory's heap on a 1 MB machine; the hub's (c), 20 Nov).
 
 ### UI backlog (Erez's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
 
