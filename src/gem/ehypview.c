@@ -116,6 +116,7 @@ typedef struct {
 /* the viewer's work area kept until a window could have changed (wingen.h) */
 unsigned work_gen = 1;
 static int scroll_only;                /* this turn's events that only scrolled (update_menu) */
+static int about_made;                 /* the About box's icon made ahead (about_ready) */
 
 #define MAX_VIEWERS 6
 static unsigned long win_clock;         /* the Window menu: windows in the order opened */
@@ -5037,16 +5038,6 @@ int main(void)
 				graf_mkstate(&hx, &hy, &d, &d);
 			tip_tick(which, hx, hy, tip_text);
 		}
-		/* the first timer turn: the About box's icon made ahead */
-		{
-			static int about_made;
-
-			if ((which & MU_TIMER) && !about_made)
-			{
-				about_made = 1;
-				about_ready();
-			}
-		}
 		/* a turn with nothing else: the closed library's place written */
 		if (which == MU_TIMER && libwin_place_due())
 			libwin_save_place();
@@ -5102,7 +5093,17 @@ int main(void)
 		}
 		/* the index, in a slice (bgwork.h): not while the user works, nor
 		   while EHYPVIEW.PRG runs (it has the index to itself) */
-		if (which == MU_TIMER && sliders_waiting())
+		if (which == MU_TIMER && !about_made && !pictures_busy() && !sliders_waiting())
+		{
+			/* the About box's icon made ahead (common a769b86), in a
+			   timer turn of its own once the page's pictures are drawn:
+			   in a turn that drew one it made Falcon-4:256's front page
+			   10 ms longer (the speed rig) */
+			aes_profile_tag("about");
+			about_made = 1;
+			about_ready();
+			slid = 1;
+		} else if (which == MU_TIMER && sliders_waiting())
 		{
 			/* the sliders, alone in the turn */
 			aes_profile_tag("sliders");
