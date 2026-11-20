@@ -1610,7 +1610,15 @@ static void scroll_area(short x, short y, short w, short h, long dy)
 	{
 		short pxy[8], clip[4];
 
-		pxy[0] = pxy[4] = x;
+		/* from a 16-pixel group's start where the columns before it are
+		   the page's blank margin (not scrolled sideways): no cut group
+		   at the left of every row (the work area starts at x 8: ST:mono
+		   43 -> 30 ms of a line scrolled, the hub's tests/text) */
+		{
+			short xa = (short) ((x + 15) & ~15);
+
+			pxy[0] = pxy[4] = cur->view.left == 0 && xa - x <= MARGIN && xa < x + w ? xa : x;
+		}
 		pxy[2] = pxy[6] = (short) (x + w - 1);
 		pxy[1] = (short) (y + (dy > 0 ? ady : 0));
 		pxy[3] = (short) (pxy[1] + h - ady - 1);

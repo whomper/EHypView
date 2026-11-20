@@ -445,6 +445,11 @@ static void update_info(void)
 /* ---------------------------------------------------------------- */
 /* drawing                                                           */
 
+/* set while draw_rect draws: the line type is solid already (vsl_type
+   is one of the VDI calls common's bindings don't skip, a trap each: two
+   or three a row of the list, the speed rig) */
+static int ltype_solid;
+
 static void line_(short x1, short y1, short x2, short y2, short color)
 {
 	short pxy[4];
@@ -455,7 +460,8 @@ static void line_(short x1, short y1, short x2, short y2, short color)
 	pxy[3] = y2;
 	vswr_mode(vdi_h, MD_REPLACE);
 	vsl_color(vdi_h, color);
-	vsl_type(vdi_h, 1);
+	if (!ltype_solid)
+		vsl_type(vdi_h, 1);
 	v_pline(vdi_h, 2, pxy);
 }
 
@@ -469,7 +475,8 @@ static void frame_(short x1, short y1, short x2, short y2, short color)
 	p[5] = p[7] = y2;
 	vswr_mode(vdi_h, MD_REPLACE);
 	vsl_color(vdi_h, color);
-	vsl_type(vdi_h, 1);
+	if (!ltype_solid)
+		vsl_type(vdi_h, 1);
 	v_pline(vdi_h, 5, p);
 }
 
@@ -992,6 +999,10 @@ static void draw_chips(short wx, short ww, short y)
 static void draw_row_parts(long r, const lib_row *row, short rh, short lx, short lw, short y,
                            char *text, char *detail, short color, short dcolor, short acolor, int sel);
 
+/* set while the list's ground is white already (draw_rect fills it once
+   for all the rows: a fill a row was 2.4 ms each on an ST) */
+static int ground_white;
+
 static void draw_row(long r, short lx, short lw, short y)
 {
 	const lib_row *row = &lib.rows[r];
@@ -1009,7 +1020,7 @@ static void draw_row(long r, short lx, short lw, short y)
 	{
 		fill(panes() && focus_left ? grey() : link_color(), lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
 		color = dcolor = acolor = 0;
-	} else
+	} else if (!ground_white)
 		fill(0, lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
 	sel = sel && !(panes() && focus_left && ncolors < 16);
 	white_ground = !sel;
@@ -1170,6 +1181,8 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 	clip[2] = (short) (cx + cw_ - 1);
 	clip[3] = (short) (cy + ch_ - 1);
 	clip_on(clip);
+	vsl_type(vdi_h, 1);
+	ltype_solid = 1;
 	/* each part on its own ground, filled just before it is drawn (no
 	   white over the whole window first: it flickered, slowly drawn),
 	   and only the parts in the rectangle */
@@ -1227,6 +1240,9 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 		if (lc[0] <= lc[2] && lc[1] <= lc[3])
 		{
 			clip_on(lc);
+			/* the rows' ground white once, then each row on it */
+			fill(0, lc[0], lc[1], lc[2], lc[3]);
+			ground_white = 1;
 			y = ly;
 			for (r = lib.top; (unsigned long) r < lib.nrows && y < ly + lh; r++)
 			{
@@ -1236,13 +1252,13 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 					draw_row(r, lx, lw, y);
 				y = (short) (y + rh);
 			}
-			if (y < ly + lh)               /* under the last row */
-				fill(0, lx, y, (short) (lx + lw - 1), (short) (ly + lh - 1));
+			ground_white = 0;
 		}
 	}
 	vst_effects(vdi_h, 0);
 	vst_color(vdi_h, 1);
 	vswr_mode(vdi_h, MD_REPLACE);
+	ltype_solid = 0;
 	clip_off();
 }
 
