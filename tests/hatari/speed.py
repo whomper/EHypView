@@ -74,6 +74,14 @@ SLICE = 100                     # a longer job's slices: a key answered within
 # on an 8 MHz ST (ST, ST-1) a dialog over about half the screen or more,
 # Settings, has 300 ms (the guidelines' table, Erez 1 Nov 2026)
 ST_DIALOG = 300
+# times Erez accepted over the guidelines' (the row, the machine: its figure): the
+# line scroll, the copy at the bus and the scroll's own wind_update (20 Nov 2026,
+# "Accept"; AERA-Atari PERF-REVISIT)
+ACCEPTED = {
+    ("big page: a line scrolled (Down)", "ST:mono"): 70,
+    ("big page: a line scrolled (Down)", "ST:med"): 60,
+    ("big page: a line scrolled (Down)", "Falcon-4:16"): 55,
+}
 
 results = {}                    # (action, limit) -> {machine: ms}
 order = []
@@ -552,6 +560,10 @@ def main():
                 if bad and lim == WHOLE and s.split(":")[0] in ("ST", "ST-1"):
                     bad = False
                     whole_st.append("%s on %s, %d ms" % (a, s, v))
+                if bad and (a, s) in ACCEPTED:
+                    bad = v > ACCEPTED[(a, s)]
+                    if not bad:
+                        whole_st.append("%s on %s, %d ms (Erez's %d, 20 Nov)" % (a, s, v, ACCEPTED[(a, s)]))
                 if bad and a.startswith("Settings opened") and s.split(":")[0] in ("ST", "ST-1"):
                     bad = v > ST_DIALOG
                     if not bad:
@@ -560,7 +572,8 @@ def main():
                 cells.append("%14s" % ("%d%s" % (v, " OVER" if bad else "")))
         print("%-*s %6d  %s" % (w, a, lim, "  ".join(cells)))
     if whole_st:
-        print("within the ST's own times (drawn whole, Erez 19 Nov 2026; Settings 300, 1 Nov): " + "; ".join(whole_st))
+        print("within their own times (the ST's whole draws, Erez 19 Nov 2026; Settings on the ST 300, 1 Nov; "
+              "the times Erez accepted): " + "; ".join(whole_st))
     print("%d over" % over)
     return 1 if over else 0
 
