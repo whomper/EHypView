@@ -81,6 +81,19 @@ ACCEPTED = {
     ("big page: a line scrolled (Down)", "ST:mono"): 70,
     ("big page: a line scrolled (Down)", "ST:med"): 60,
     ("big page: a line scrolled (Down)", "Falcon-4:16"): 55,
+    # the ST's rows for 2.9 (20 Nov 2026, "Accept, release 2.9")
+    ("a key: Tab chooses a link", "ST:mono"): 60,
+    ("a key: Tab chooses a link", "ST:med"): 55,
+    ("a letter typed in the library's search", "ST:mono"): 50,
+    ("a letter typed in the library's search", "ST:med"): 55,
+    ("full-text search (Return): the key", "ST:mono"): 65,
+    ("full-text search (Return): the key", "ST:med"): 60,
+    ("search: started, its rows made", "ST:mono"): 140,
+    ("search: started, its rows made", "ST:med"): 145,
+    ("search: the rows found drawn", "ST:mono"): 250,
+    ("search: the rows found drawn", "ST:med"): 210,
+    ("full-text search: its slices", "ST:mono"): 110,
+    ("full-text search: its slices", "ST:med"): 115,
 }
 
 results = {}                    # (action, limit) -> {machine: ms}
@@ -563,7 +576,7 @@ def main():
                 if bad and (a, s) in ACCEPTED:
                     bad = v > ACCEPTED[(a, s)]
                     if not bad:
-                        whole_st.append("%s on %s, %d ms (Erez's %d, 20 Nov)" % (a, s, v, ACCEPTED[(a, s)]))
+                        whole_st.append("%s on %s, %d ms (Erez's %d)" % (a, s, v, ACCEPTED[(a, s)]))
                 if bad and a.startswith("Settings opened") and s.split(":")[0] in ("ST", "ST-1"):
                     bad = v > ST_DIALOG
                     if not bad:

@@ -549,86 +549,6 @@ static void fill_tint(int tint, short x1, short y1, short x2, short y2, short fr
  * full-text hit, a magnifier for the search action.  h: its height (0:
  * a line's).
  */
-static void glyph_vdi(int kind, short x, short y, short h, short color, int tint)
-{
-	/* as wide as three quarters of its height, on square pixels or tall
-	   ones (the system font is 8x16 on the first, 8x8 on the second) */
-	short w, t = (short) (y + 2), b, r, k;
-
-	if (h <= 0)
-		h = (short) (ch - 4);
-	if (h < 5)
-		h = 5;
-	w = (short) ((long) h * 3 * 2 * sys_cw / (4 * sys_ch));
-	if (w < 5)
-		w = 5;
-	if (w > 3 * cw)
-		w = (short) (3 * cw);
-	b = (short) (t + h - 1);
-	r = (short) (x + w - 1);
-	switch (kind)
-	{
-	case LIB_GUIDE:                        /* a book: its spine in colour, a label */
-		fill(0, x, t, r, b);
-		frame_(x, t, r, b, color);
-		fill_tint(tint < 0 ? 1 : tint, x, t, (short) (x + (w + 2) / 4), b, color);
-		frame_((short) (x + (w + 2) / 4 + 2), (short) (t + 2), (short) (r - 2), (short) (t + 2 + h / 4), color);
-		if (h >= 2 * ch - 6)               /* lines of text on a big one */
-			for (k = (short) (t + 4 + h / 4); k < b - 2; k = (short) (k + 3))
-				line_((short) (x + (w + 2) / 4 + 2), k, (short) (r - 3), k, color);
-		break;
-	case LIB_BOOKMARK:                     /* a ribbon with a notch */
-		fill(color, (short) (x + 1), t, (short) (r - 1), (short) (b - h / 4));
-		for (k = 0; k <= (r - x) / 2 - 1; k++)
-		{
-			line_((short) (x + 1 + k), (short) (b - h / 4), (short) (x + 1 + k), (short) (b - k), color);
-			line_((short) (r - 1 - k), (short) (b - h / 4), (short) (r - 1 - k), (short) (b - k), color);
-		}
-		break;
-	case LIB_PAGE:
-	case LIB_RECENT:
-	case LIB_TEXT:                         /* a page, its corner turned */
-		{
-			short c = (short) (w / 3 + 1), p[12];
-
-			p[0] = x;          p[1] = t;
-			p[2] = (short) (r - c); p[3] = t;
-			p[4] = r;          p[5] = (short) (t + c);
-			p[6] = r;          p[7] = b;
-			p[8] = x;          p[9] = b;
-			p[10] = x;         p[11] = t;
-			vswr_mode(vdi_h, MD_REPLACE);
-			vsl_color(vdi_h, color);
-			v_pline(vdi_h, 6, p);
-			line_((short) (r - c), t, (short) (r - c), (short) (t + c), color);
-			line_((short) (r - c), (short) (t + c), r, (short) (t + c), color);
-			for (k = (short) (t + c + 2); kind == LIB_TEXT && k < b - 1; k = (short) (k + 2))
-				line_((short) (x + 2), k, (short) (r - 2), k, color);
-		}
-		break;
-	case LIB_ACTION:                       /* a magnifier: a lens, a handle */
-		{
-			short d = (short) (w * 2 / 3), dh = (short) ((long) d * sys_ch / (2 * sys_cw)), p[18];
-
-			/* the lens, its corners cut */
-			p[0] = (short) (x + 2);  p[1] = t;
-			p[2] = (short) (x + d - 2); p[3] = t;
-			p[4] = (short) (x + d);  p[5] = (short) (t + 2);
-			p[6] = (short) (x + d);  p[7] = (short) (t + dh - 2);
-			p[8] = (short) (x + d - 2); p[9] = (short) (t + dh);
-			p[10] = (short) (x + 2); p[11] = (short) (t + dh);
-			p[12] = x;               p[13] = (short) (t + dh - 2);
-			p[14] = x;               p[15] = (short) (t + 2);
-			p[16] = (short) (x + 2); p[17] = t;
-			vswr_mode(vdi_h, MD_REPLACE);
-			vsl_color(vdi_h, color);
-			v_pline(vdi_h, 9, p);
-			for (k = 0; k < 3; k++)
-				line_((short) (x + d - 1 + k), (short) (t + dh - 1), r, (short) (b - 2 + k), color);
-		}
-		break;
-	}
-}
 
 /*
  * The glyphs as small bitmaps (the hub's call, 20 Nov 2026): each kind's
@@ -637,10 +557,10 @@ static void glyph_vdi(int kind, short x, short y, short h, short color, int tint
  * row's 8 ms on an ST (a v_pline a line, the text page's lines a pixel row
  * apart). The book's white ground and spine stay as before, the mask over
  * them. TOS's raster copies don't clip, so the copy is cut to the clip
- * draw_rect set (lw_clip); without one, glyph_vdi as before.
+ * draw_rect set (lw_clip). Made straight into ST RAM, as big as the glyph:
+ * the program no bigger than it must be (the accessory's heap on a 1 MB
+ * machine is what is left: colour-test's front page).
  */
-#define GM_W 4                          /* words a mask's row: 64 pixels */
-#define GM_H 72                         /* its rows */
 #define GM_N 8                          /* masks kept */
 
 static short lw_clip[4];
@@ -660,15 +580,15 @@ static void lw_clip_off(void)
 }
 
 static struct gmask {
-	short kind, h, w, rows;
+	short kind, h, w, rows, words;
 	unsigned short *bits;            /* ST RAM: a blitter reads it */
 } gm[GM_N];
-static unsigned short gcanvas[GM_H][GM_W];
+static struct gmask *gnow;              /* the mask being made */
 
 static void gpix(short px, short py)
 {
-	if (px >= 0 && px < GM_W * 16 && py >= 0 && py < GM_H)
-		gcanvas[py][px >> 4] |= (unsigned short) (0x8000u >> (px & 15));
+	if (px >= 0 && px < gnow->words * 16 && py >= 0 && py < gnow->rows)
+		gnow->bits[(long) py * gnow->words + (px >> 4)] |= (unsigned short) (0x8000u >> (px & 15));
 }
 
 /* a line, its ends included, as the VDI's v_pline draws one */
@@ -707,7 +627,7 @@ static void gframe(short x1, short y1, short x2, short y2)
 }
 
 /* the mask of a kind at height h (its lines, relative to x and t = y + 2:
-   the same geometry as glyph_vdi's); NULL when there is no room */
+   the same geometry as the VDI's lines had); NULL when there is no room */
 static struct gmask *gmask_for(int kind, short h, short w)
 {
 	struct gmask *m;
@@ -716,14 +636,18 @@ static struct gmask *gmask_for(int kind, short h, short w)
 	for (i = 0; i < GM_N; i++)
 		if (gm[i].bits != NULL && gm[i].kind == kind && gm[i].h == h && gm[i].w == w)
 			return &gm[i];
-	if (w > GM_W * 16 || rows > GM_H)
-		return NULL;
 	for (i = 0; i < GM_N && gm[i].bits != NULL; i++)
 		;
 	if (i == GM_N)
 		return NULL;                   /* (eight sizes: enough for a font's) */
 	m = &gm[i];
-	memset(gcanvas, 0, sizeof(gcanvas));
+	m->words = (short) ((w + 15) / 16);
+	m->rows = rows;
+	m->bits = st_alloc((long) rows * m->words * 2);
+	if (m->bits == NULL)
+		return NULL;
+	memset(m->bits, 0, (size_t) rows * m->words * 2);
+	gnow = m;
 	switch (kind)
 	{
 	case LIB_GUIDE:                        /* the frame, the label, its lines */
@@ -779,20 +703,21 @@ static struct gmask *gmask_for(int kind, short h, short w)
 				gline((short) (x + d - 1 + k), (short) (t + dh - 1), r, (short) (b - 2 + k));
 		}
 		break;
-	default:
-		return NULL;
 	}
-	m->bits = st_alloc((long) rows * GM_W * 2);
-	if (m->bits == NULL)
-		return NULL;
-	memcpy(m->bits, gcanvas, (size_t) rows * GM_W * 2);
 	m->kind = (short) kind;
 	m->h = h;
 	m->w = w;
-	m->rows = rows;
 	return m;
 }
 
+/*
+ * A small picture in front of a row, a character wide, so the kinds tell
+ * apart at a glance (and in mono): a book for a hypertext (its spine in
+ * its subject's colour), a ribbon for a bookmark, a page with its corner
+ * turned for a page (and a page read lately), lines on it for a
+ * full-text hit, a magnifier for the search action.  h: its height (0:
+ * a line's).
+ */
 static void glyph(int kind, short x, short y, short h, short color, int tint)
 {
 	short w, t = (short) (y + 2), b, r;
@@ -800,12 +725,8 @@ static void glyph(int kind, short x, short y, short h, short color, int tint)
 	short pxy[8], colors[2], x1, y1, x2, y2;
 	MFDB src, scr;
 
-	if (!lw_clip_set || (kind != LIB_GUIDE && kind != LIB_BOOKMARK && kind != LIB_PAGE && kind != LIB_RECENT &&
-			     kind != LIB_TEXT && kind != LIB_ACTION))
-	{
-		glyph_vdi(kind, x, y, h, color, tint);
-		return;
-	}
+	if (!lw_clip_set)
+		return;                        /* (drawn only by draw_rect, which sets it) */
 	if (h <= 0)
 		h = (short) (ch - 4);
 	if (h < 5)
@@ -817,10 +738,7 @@ static void glyph(int kind, short x, short y, short h, short color, int tint)
 		w = (short) (3 * cw);
 	m = gmask_for(kind, h, w);
 	if (m == NULL)
-	{
-		glyph_vdi(kind, x, y, h, color, tint);
-		return;
-	}
+		return;                        /* (no ST RAM left: the row without it) */
 	b = (short) (t + h - 1);
 	r = (short) (x + w - 1);
 	if (kind == LIB_GUIDE)
@@ -831,7 +749,7 @@ static void glyph(int kind, short x, short y, short h, short color, int tint)
 	/* the mask's box cut to the clip */
 	x1 = x > lw_clip[0] ? x : lw_clip[0];
 	y1 = t > lw_clip[1] ? t : lw_clip[1];
-	x2 = (short) (x + GM_W * 16 - 1) < lw_clip[2] ? (short) (x + GM_W * 16 - 1) : lw_clip[2];
+	x2 = r < lw_clip[2] ? r : lw_clip[2];
 	y2 = (short) (t + m->rows - 1) < lw_clip[3] ? (short) (t + m->rows - 1) : lw_clip[3];
 	if (x2 > r)
 		x2 = r;
@@ -840,9 +758,9 @@ static void glyph(int kind, short x, short y, short h, short color, int tint)
 	memset(&src, 0, sizeof(src));
 	memset(&scr, 0, sizeof(scr));
 	src.fd_addr = m->bits;
-	src.fd_w = GM_W * 16;
+	src.fd_w = (short) (m->words * 16);
 	src.fd_h = m->rows;
-	src.fd_wdwidth = GM_W;
+	src.fd_wdwidth = m->words;
 	src.fd_nplanes = 1;
 	pxy[0] = (short) (x1 - x);
 	pxy[1] = (short) (y1 - t);
