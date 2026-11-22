@@ -220,6 +220,14 @@ accepted by Erez, 20 Nov, named in tests/hatari/speed.py's ACCEPTED) and START a
 maintenance mode. For 2.10, when it comes: the help front page's pictures loaded more frugally (the
 accessory's heap on a 1 MB machine; the hub's (c), 20 Nov).
 
+**Lifted for the FireBee edition (Erez, 22 Nov 2026: "Make the other apps native on the FireBee too";
+guidelines 7.4)** until it is released; maintenance then comes back. `ehypfb.prg` and `ehypfb.acc`,
+ColdFire code made by common's `tools/mkfirebee.py --elf build/atari/ehypview.elf`; each file names the
+other (`cpu_cf_alert` in the 68000 files, `cpu_alert` under `__mcoldfire__`; their words Erez's,
+through the hub); the accessory goes in place of `ehypview.acc`, never beside it. Tests: the core under
+`qemu-m68k -cpu cfv4e` against the host's (the HYP reader, the index, the search), the `_CF_` alerts on
+the FireBee stand-in, and the full gate for the 68000 files against 2.9.
+
 ### UI backlog (Erez's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
 
 Nothing here starts in maintenance mode. Take it with a release made anyway (a fault fix, or one Erez

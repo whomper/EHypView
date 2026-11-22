@@ -4796,7 +4796,19 @@ static void start_mark(const char *what)
 #endif
 
 
-int main(void)
+/* the machine checked first (common/atari/cpucheck.c, or cpucheck_cf.S in
+   the FireBee edition: the guidelines, 7.4, Erez 22 Nov 2026 "Make the other
+   apps native on the FireBee too"): each file names the other. Any 68000
+   runs the 68000 file (cpu_need 0); on a FireBee it names its edition */
+const long cpu_need = 0;
+#ifdef __mcoldfire__
+const char cpu_alert[] = "[3][EHYPFB.PRG is for the FireBee.|On an ST, a TT or a Falcon,|run EHYPVIEW.PRG.][ Quit ]";
+#else
+const char cpu_alert[] = "[3][EHypView needs a 68000.][ Quit ]";   /* (never shown: cpu_need 0) */
+const char cpu_cf_alert[] = "[3][EHYPVIEW.PRG is for the ST, TT|and Falcon. On the FireBee,|run EHYPFB.PRG.][ Quit ]";
+#endif
+
+int app_main(void)
 {
 	short work_out[57], msg[8], d, screen_w, screen_h;
 	AEVENT ev;

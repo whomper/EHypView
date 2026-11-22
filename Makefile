@@ -304,7 +304,7 @@ $(ATARI)/version.o: $(ATARI)/version.c
 # 175 ms; pinned, 160). Not hotcode.h's sort: profpad pads by object.
 HOT_OBJ  = $(ATARI)/gem.o $(ATARI)/text.o $(ATARI)/pagedraw.o $(ATARI)/colour.o
 APP_OBJ  = $(wordlist 1,2,$(RT_OBJ)) $(HOT_OBJ) $(filter-out $(ATARI)/gem.o,$(wordlist 3,99,$(RT_OBJ))) \
-           $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o
+           $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/cpucheck.o $(ATARI)/version.o
 $(ATARI)/ehypview.elf: $(APP_OBJ) common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -Wl,-Map,$@.map -o $@ $(APP_OBJ) -lgcc
 
@@ -343,14 +343,25 @@ $(HOST)/pagebench: tests/pagebench.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
 
 atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPVIEW.ACC \
-       binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC
+       binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPFB.PRG binary/EHYPFB.ACC
 	@# no word or long at an odd stack offset: an address error on a 68000
 	@# (common/tools/oddaccess.py; common's accmem at sp+39, 27 Oct 2026)
 	@python3 common/tools/oddaccess.py $(ATARI)/ehypview.elf $(ATARI)/ehvcheck.elf
 
 # what goes onto the Atari: binary/ (built, never committed)
-binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC: binary/%: $(HATARI_DIR)/%
+binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPFB.PRG binary/EHYPFB.ACC: binary/%: $(HATARI_DIR)/%
 	mkdir -p binary
+	cp $< $@
+
+# the FireBee edition (the guidelines, 7.4; Erez, 22 Nov 2026: "Make the
+# other apps native on the FireBee too"): the same program as ColdFire code,
+# made by common's mkfirebee.py from the 68000 build's own rules
+# (build/cf/); EHYPFB.ACC is it under the accessory's name, as EHYPVIEW.ACC
+# is EHYPVIEW.PRG's. Each names the other (cpu_alert, cpu_cf_alert)
+$(HATARI_DIR)/EHYPFB.PRG: $(ATARI)/ehypview.elf common/tools/mkfirebee.py
+	mkdir -p $(HATARI_DIR)
+	python3 common/tools/mkfirebee.py --elf $(ATARI)/ehypview.elf --outdir build/cf/ $@
+$(HATARI_DIR)/EHYPFB.ACC: $(HATARI_DIR)/EHYPFB.PRG
 	cp $< $@
 
 # the icon: src/gem/icon.h and icon16.h (the About box), docs/icon*.png,
@@ -473,6 +484,33 @@ pagebench: $(ATARI)/pagebench.elf $(HOST)/pagebench
 	$(HOST)/pagebench tests/fixtures/big.hyp
 	sh tests/run_bench.sh build/pagebench
 
+# the FireBee edition's core under qemu-m68k -cpu cfv4e (the guidelines, 7.4):
+# EHVCHECK as ColdFire code (mkfirebee.py's objects), TOS stood in for by
+# tests/coldfire/tos_stub.c (drive C: is build/cfcheck), its report compared
+# with the host's: the HYP reader, the pages, the index, the search
+CF_CHECK_OBJ = $(patsubst $(ATARI)/%,build/cf/atari/%,$(filter-out $(ATARI)/crt0.o,$(RT_OBJ) $(XCORE_OBJ) \
+               $(ATARI)/ehvcheck.o)) build/cf/rt/ll64.o
+QEMU_CF ?= $(or $(shell command -v qemu-m68k 2>/dev/null),$(shell command -v qemu-m68k-static 2>/dev/null)) -cpu cfv4e
+CF_GCC  = m68k-linux-gnu-gcc -mcpu=5475
+build/cf/EHVCHECK.PRG: $(ATARI)/ehvcheck.elf common/tools/mkfirebee.py
+	python3 common/tools/mkfirebee.py --elf $(ATARI)/ehvcheck.elf --outdir build/cf/ $@
+build/cf/q/ehvcheck: build/cf/EHVCHECK.PRG tests/coldfire/tos_stub.c tests/coldfire/start.S common/tests/coldfire/rt.S
+	mkdir -p build/cf/q
+	m68k-linux-gnu-objcopy --redefine-sym _start=crt0_start build/cf/atari/crt0.o build/cf/q/crt0.o
+	$(CF_GCC) -O2 -ffreestanding -fno-builtin -nostdinc -isystem $(shell $(XCC) -print-file-name=include) \
+	    -Icommon/atari/include -Wall -Wextra -DROOT='"$(CURDIR)/build/cfcheck"' -c -o build/cf/q/tos_stub.o tests/coldfire/tos_stub.c
+	$(CF_GCC) -c -o build/cf/q/start.o tests/coldfire/start.S
+	$(CF_GCC) -DNO_START -c -o build/cf/q/rt.o common/tests/coldfire/rt.S
+	$(CF_GCC) -nostdlib -static -no-pie -Wl,-z,noexecstack -Wl,--gc-sections -Wl,-e,_start -Wl,-Ttext-segment=0x100000 -o $@ build/cf/q/start.o \
+	    build/cf/q/crt0.o $(CF_CHECK_OBJ) build/cf/q/tos_stub.o build/cf/q/rt.o
+cf-test: build/cf/q/ehvcheck $(HOST)/ehvcheck
+	$(call make_fixt,build/cfcheck)
+	$(HOST)/ehvcheck build/cfcheck/FIXT > build/cf/q/host.txt
+	$(call make_fixt,build/cfcheck)
+	timeout 300 $(QEMU_CF) build/cf/q/ehvcheck | tr -d '\r' | sed -n '/^EHVCHECK /,/^END /p' > build/cf/q/cf.txt
+	@test -s build/cf/q/cf.txt || { echo "FAIL: no report from the ColdFire build"; exit 1; }
+	@diff -u build/cf/q/host.txt build/cf/q/cf.txt && echo "ok    the core as ColdFire code (qemu-m68k -cpu cfv4e) gives the host's report, $$(wc -l < build/cf/q/cf.txt) lines"
+
 hatari-test: atari $(HOST)/ehvcheck
 	$(call make_fixt,build/hostcheck)
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
@@ -483,14 +521,18 @@ hatari-test: atari $(HOST)/ehvcheck
 # every name in lowercase (the guidelines, 6.6: MiNT's ext2 tells the
 # cases apart)
 DIST    := binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPVIEW.HYP binary/EHYPVIEW.REF
+FIREBEE := binary/EHYPFB.PRG binary/EHYPFB.ACC
 ICONS   := icons/EHYPVIEW.RSC icons/EHYPVNV.RSC icons/EHYPVIEW.ICN icons/EHYPVWMK.ICN
 lower    = $$(basename $(1) | tr A-Z a-z)
 dist: atari help
 	@$(HYPCHECK)
 	rm -rf dist
-	mkdir -p dist/zip/icons
-	for f in $(DIST) $(ICONS); do cp $$f dist/$(call lower,$$f); done
+	mkdir -p dist/zip/icons dist/zip/firebee
+	for f in $(DIST) $(FIREBEE) $(ICONS); do cp $$f dist/$(call lower,$$f); done
 	for f in $(DIST); do cp $$f dist/zip/$(call lower,$$f); done
+	# the FireBee's in a folder of their own: its .ACC goes in place of
+	# ehypview.acc, never beside it (a FireBee loads every .ACC in the root)
+	for f in $(FIREBEE); do cp $$f dist/zip/firebee/$(call lower,$$f); done
 	for f in $(ICONS); do cp $$f dist/zip/icons/$(call lower,$$f); done
 	cd dist/zip && zip -q -9 -r ../ehypview-$(VERSION_STR).zip .
 	rm -rf dist/zip
@@ -499,3 +541,8 @@ clean:
 	rm -rf build binary dist
 
 .PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test speed-test gate-test colour-test acc-files-test accnvdi-test clean FORCE
+
+# each file names the other (the guidelines, 7.4): the 68000 build on the
+# FireBee stand-in, the FireBee build on a Falcon, in Hatari's AES trace
+firebee-test: atari
+	python3 tests/hatari/firebee_test.py $(HATARI_DIR) build/firebee
