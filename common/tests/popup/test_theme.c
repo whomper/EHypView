@@ -194,6 +194,13 @@ int main(void)
 	theme_init(1, mine, 3);
 	check(pen[P_SEL] == 12 && nset == 0, "theme_keep: 16 colours as without it");
 	theme_exit();
+	planes = 8;
+	nget = 0;
+	theme_palette = (const short (*)[3])palette;
+	theme_init(1, mine, 3);
+	check(nget == 0 && pen[P_SEL] == 200, "theme_palette: the app's own table, no vq_color, the same pens");
+	theme_exit();
+	theme_palette = 0;
 	theme_keep = 0;
 
 	printf("%d checks, %d failed\n", total, failed);

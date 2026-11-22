@@ -10,6 +10,7 @@
 short pen[THEME_MAX];
 int colour;
 int theme_keep;
+const short (*theme_palette)[3];
 
 #define FIRST_PEN 16		/* past the desktop's sixteen */
 
@@ -60,9 +61,13 @@ void theme_accent4(short role, const short rgb[3])
    pen_nearest allows, while one is left); the palette read once into a table on the stack */
 static void keep256(short all, const THEME_ROLE *extra)
 {
-	short pal[256][3], i, p, n = 256;
-	for (p = 0; p < n; p++)
-		vq_color(vdi_h, p, pal[p]);
+	short own[256][3], i, p, n = 256;
+	const short (*pal)[3] = theme_palette;
+	if (!pal) {
+		for (p = 0; p < n; p++)
+			vq_color(vdi_h, p, own[p]);
+		pal = (const short (*)[3])own;
+	}
 	for (i = 0; i < all; i++) {
 		const THEME_ROLE *r = role(i, extra);
 		short best = -1;
