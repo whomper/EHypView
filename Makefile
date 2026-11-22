@@ -349,7 +349,10 @@ atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPV
 	@python3 common/tools/oddaccess.py $(ATARI)/ehypview.elf $(ATARI)/ehvcheck.elf
 
 # what goes onto the Atari: binary/ (built, never committed)
-binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPFB.PRG binary/EHYPFB.ACC: binary/%: $(HATARI_DIR)/%
+binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC: binary/%: $(HATARI_DIR)/%
+	mkdir -p binary
+	cp $< $@
+binary/EHYPFB.PRG binary/EHYPFB.ACC: binary/%: build/fb/%
 	mkdir -p binary
 	cp $< $@
 
@@ -357,11 +360,13 @@ binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPFB.PRG binary/EHYPFB.ACC: bin
 # other apps native on the FireBee too"): the same program as ColdFire code,
 # made by common's mkfirebee.py from the 68000 build's own rules
 # (build/cf/); EHYPFB.ACC is it under the accessory's name, as EHYPVIEW.ACC
-# is EHYPVIEW.PRG's. Each names the other (cpu_alert, cpu_cf_alert)
-$(HATARI_DIR)/EHYPFB.PRG: $(ATARI)/ehypview.elf common/tools/mkfirebee.py
-	mkdir -p $(HATARI_DIR)
+# is EHYPVIEW.PRG's. Each names the other (cpu_alert, cpu_cf_alert). In
+# build/fb, not HATARI_DIR: the rigs boot that as C:, and TOS loads every
+# .ACC in its root (EHYPFB.ACC on a Falcon would take the boot)
+build/fb/EHYPFB.PRG: $(ATARI)/ehypview.elf common/tools/mkfirebee.py
+	mkdir -p build/fb
 	python3 common/tools/mkfirebee.py --elf $(ATARI)/ehypview.elf --outdir build/cf/ $@
-$(HATARI_DIR)/EHYPFB.ACC: $(HATARI_DIR)/EHYPFB.PRG
+build/fb/EHYPFB.ACC: build/fb/EHYPFB.PRG
 	cp $< $@
 
 # the icon: src/gem/icon.h and icon16.h (the About box), docs/icon*.png,
@@ -545,4 +550,4 @@ clean:
 # each file names the other (the guidelines, 7.4): the 68000 build on the
 # FireBee stand-in, the FireBee build on a Falcon, in Hatari's AES trace
 firebee-test: atari
-	python3 tests/hatari/firebee_test.py $(HATARI_DIR) build/firebee
+	python3 tests/hatari/firebee_test.py $(HATARI_DIR) build/fb build/firebee

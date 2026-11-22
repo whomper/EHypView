@@ -10,7 +10,7 @@ a 68000 runs alike) on a Falcon shows cpu_alert naming EHYPVIEW.PRG; the
 68000 build on a Falcon starts as before. Hatari's AES trace shows each
 call: the alert's text, and whether a window ever came.
 
-    tests/hatari/firebee_test.py HATARI_DIR WORK
+    tests/hatari/firebee_test.py HATARI_DIR FB_DIR WORK  (FB_DIR: the FireBee edition, build/fb)
 """
 import os
 import shutil
@@ -21,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "common", "tools"))
 import machines  # noqa: E402
 
-HDIR, WORK = sys.argv[1], os.path.abspath(sys.argv[2])
+HDIR, FBDIR, WORK = sys.argv[1], sys.argv[2], os.path.abspath(sys.argv[3])
 failed = 0
 
 
@@ -37,7 +37,7 @@ def boot(name, spec, prg):
     shutil.rmtree(w, ignore_errors=True)
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
-    shutil.copy(os.path.join(HDIR, prg), hd)
+    shutil.copy(os.path.join(FBDIR if prg.startswith("EHYPFB") else HDIR, prg), hd)
     m = machines.Machine(spec, hd)
     args = m.args()
     home = w + ".home"
@@ -65,8 +65,8 @@ def main():
     if not shutil.which("hatari"):
         print("skip  firebee: needs hatari")
         return 0
-    for prg in ("EHYPVIEW.PRG", "EHYPFB.PRG"):
-        if not os.path.exists(os.path.join(HDIR, prg)):
+    for d, prg in ((HDIR, "EHYPVIEW.PRG"), (FBDIR, "EHYPFB.PRG")):
+        if not os.path.exists(os.path.join(d, prg)):
             print("FAIL  %s: not built (make atari)" % prg)
             return 1
 
