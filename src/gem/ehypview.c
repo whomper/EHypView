@@ -4912,6 +4912,7 @@ int app_main(void)
 	   pens and none is set, so the pages' pictures keep theirs */
 	theme_keep = 1;
 	theme_palette = screen_palette();  /* the palette read once a start: the page's too */
+	theme_roles = 1UL << P_SEL;        /* the one role the library uses */
 	theme_init(1, NULL, 0);
 	if (colour)
 	{
