@@ -221,12 +221,16 @@ maintenance mode. For 2.10, when it comes: the help front page's pictures loaded
 accessory's heap on a 1 MB machine; the hub's (c), 20 Nov).
 
 **Lifted for the FireBee edition (Erez, 22 Nov 2026: "Make the other apps native on the FireBee too";
-guidelines 7.4)** until it is released; maintenance then comes back. `ehypfb.prg` and `ehypfb.acc`,
-ColdFire code made by common's `tools/mkfirebee.py --elf build/atari/ehypview.elf`; each file names the
-other (`cpu_cf_alert` in the 68000 files, `cpu_alert` under `__mcoldfire__`; their words Erez's,
-through the hub); the accessory goes in place of `ehypview.acc`, never beside it. Tests: the core under
-`qemu-m68k -cpu cfv4e` against the host's (the HYP reader, the index, the search), the `_CF_` alerts on
-the FireBee stand-in, and the full gate for the 68000 files against 2.9.
+guidelines 7.4)** until it is released; maintenance then comes back. Two packages (Erez, 22 Nov: "two
+packages, one for FireBee and the other for standard ST", "Same names"): `ehypview-x.y.zip` as before, and
+`ehypview-x.y-firebee.zip` with the same names, its `ehypview.prg` and `.acc` ColdFire code made by common's
+`tools/mkfirebee.py --elf build/atari/ehypview.elf` (build/fb, binary/firebee); the loose release files are
+the standard package's. Each build names the other package (`cpu_cf_alert` and `cpu_cf_acc_alert` in the
+68000 build, `cpu_alert` and `cpu_acc_alert` under `__mcoldfire__`; Erez's words through the hub, lines of
+30 characters at most); an accessory on the wrong machine shows its alert from its Desk entry. Tests: the
+core under `qemu-m68k -cpu cfv4e` against the host's (`make cf-test`: the HYP reader, the index, the
+search), each build's alert on the wrong machine and each accessory's boot reaching the desktop
+(`make firebee-test`), and the full gate for the 68000 files against 2.9.
 
 ### UI backlog (Erez's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
 

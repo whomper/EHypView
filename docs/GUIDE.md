@@ -14,6 +14,9 @@ when you press Help.
 | `EHYPVIEW.HYP` | this guide (and `EHYPVIEW.REF`, its index for ST-Guide) |
 | `EHYPVIEW.RSC`, `.ICN` | the desktop icon, in the zip's `icons` folder; `EHYPVNV.RSC` is the same for NVDI with its own palette (`EHYPVIEW.RSC` under TOS, EmuTOS, or NVDI with COLORVDI) |
 
+On the FireBee, install the FireBee package (`ehypview-x.y-firebee.zip`): the same files, with
+`EHYPVIEW.PRG` and `.ACC` built for its ColdFire.
+
 - **The program:** copy `EHYPVIEW.PRG` into any folder and start it. It keeps its index
   (`EHYPVIEW.IDX`), its list of fonts (`EHYPVIEW.FNT`) and any `CRASH.LOG` next to itself, so a
   folder of its own, such as `C:\EHYPVIEW\`, keeps them together; `EHYPVIEW.INF` goes in the root

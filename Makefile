@@ -260,6 +260,7 @@ $(ATARI)/acopen.o: tests/acopen.c $(XHDRS) | $(ATARI)
 $(ATARI)/acopen.elf: $(RT_OBJ) $(ATARI)/acopen.o common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(ATARI)/acopen.o -lgcc
 build/fb/ACOPEN.PRG: $(ATARI)/acopen.elf common/tools/elf2tos.py
+	@python3 common/tools/oddaccess.py $<
 	mkdir -p build/fb
 	python3 common/tools/elf2tos.py $< $@
 
@@ -351,7 +352,7 @@ $(HOST)/pagebench: tests/pagebench.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
 
 atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPVIEW.ACC \
-       binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPFB.PRG binary/EHYPFB.ACC
+       binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/firebee/EHYPVIEW.PRG binary/firebee/EHYPVIEW.ACC
 	@# no word or long at an odd stack offset: an address error on a 68000
 	@# (common/tools/oddaccess.py; common's accmem at sp+39, 27 Oct 2026)
 	@python3 common/tools/oddaccess.py $(ATARI)/ehypview.elf $(ATARI)/ehvcheck.elf
@@ -360,21 +361,20 @@ atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPV
 binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC: binary/%: $(HATARI_DIR)/%
 	mkdir -p binary
 	cp $< $@
-binary/EHYPFB.PRG binary/EHYPFB.ACC: binary/%: build/fb/%
-	mkdir -p binary
+binary/firebee/EHYPVIEW.PRG binary/firebee/EHYPVIEW.ACC: binary/firebee/%: build/fb/%
+	mkdir -p binary/firebee
 	cp $< $@
 
-# the FireBee edition (the guidelines, 7.4; Erez, 22 Nov 2026: "Make the
-# other apps native on the FireBee too"): the same program as ColdFire code,
-# made by common's mkfirebee.py from the 68000 build's own rules
-# (build/cf/); EHYPFB.ACC is it under the accessory's name, as EHYPVIEW.ACC
-# is EHYPVIEW.PRG's. Each names the other (cpu_alert, cpu_cf_alert). In
-# build/fb, not HATARI_DIR: the rigs boot that as C:, and TOS loads every
-# .ACC in its root (EHYPFB.ACC on a Falcon would take the boot)
-build/fb/EHYPFB.PRG: $(ATARI)/ehypview.elf common/tools/mkfirebee.py
+# the FireBee package (the guidelines, 7.4; Erez, 22 Nov 2026: "Make the
+# other apps native on the FireBee too", then two packages with "Same
+# names"): the same program as ColdFire code, made by common's mkfirebee.py
+# from the 68000 build's own rules (build/cf/), under the same names. Each
+# build names the other package (cpu_alert, cpu_cf_alert and the
+# accessory's). In build/fb, not HATARI_DIR: the rigs boot that as C:
+build/fb/EHYPVIEW.PRG: $(ATARI)/ehypview.elf common/tools/mkfirebee.py
 	mkdir -p build/fb
 	python3 common/tools/mkfirebee.py --elf $(ATARI)/ehypview.elf --outdir build/cf/ $@
-build/fb/EHYPFB.ACC: build/fb/EHYPFB.PRG
+build/fb/EHYPVIEW.ACC: build/fb/EHYPVIEW.PRG
 	cp $< $@
 
 # the icon: src/gem/icon.h and icon16.h (the About box), docs/icon*.png,
@@ -529,26 +529,27 @@ hatari-test: atari $(HOST)/ehvcheck
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 	MACHINE=ST:mono sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 
-# a release's files: each one in dist/, and all of them in
-# dist/ehypview-x.y.zip (the icons in icons/), for the release workflow;
+# a release's files: the standard package's each one in dist/, and all of
+# them in dist/ehypview-x.y.zip (the icons in icons/); the FireBee package,
+# the same names with its programs, in dist/ehypview-x.y-firebee.zip only
+# (the guidelines, 7.4); for the release workflow;
 # every name in lowercase (the guidelines, 6.6: MiNT's ext2 tells the
 # cases apart)
 DIST    := binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPVIEW.HYP binary/EHYPVIEW.REF
-FIREBEE := binary/EHYPFB.PRG binary/EHYPFB.ACC
+FIREBEE := binary/firebee/EHYPVIEW.PRG binary/firebee/EHYPVIEW.ACC binary/EHYPVIEW.HYP binary/EHYPVIEW.REF
 ICONS   := icons/EHYPVIEW.RSC icons/EHYPVNV.RSC icons/EHYPVIEW.ICN icons/EHYPVWMK.ICN
 lower    = $$(basename $(1) | tr A-Z a-z)
 dist: atari help
 	@$(HYPCHECK)
 	rm -rf dist
-	mkdir -p dist/zip/icons dist/zip/firebee
-	for f in $(DIST) $(FIREBEE) $(ICONS); do cp $$f dist/$(call lower,$$f); done
+	mkdir -p dist/zip/icons dist/fbzip/icons
+	for f in $(DIST) $(ICONS); do cp $$f dist/$(call lower,$$f); done
 	for f in $(DIST); do cp $$f dist/zip/$(call lower,$$f); done
-	# the FireBee's in a folder of their own: its .ACC goes in place of
-	# ehypview.acc, never beside it (a FireBee loads every .ACC in the root)
-	for f in $(FIREBEE); do cp $$f dist/zip/firebee/$(call lower,$$f); done
-	for f in $(ICONS); do cp $$f dist/zip/icons/$(call lower,$$f); done
+	for f in $(FIREBEE); do cp $$f dist/fbzip/$(call lower,$$f); done
+	for f in $(ICONS); do cp $$f dist/zip/icons/$(call lower,$$f); cp $$f dist/fbzip/icons/$(call lower,$$f); done
 	cd dist/zip && zip -q -9 -r ../ehypview-$(VERSION_STR).zip .
-	rm -rf dist/zip
+	cd dist/fbzip && zip -q -9 -r ../ehypview-$(VERSION_STR)-firebee.zip .
+	rm -rf dist/zip dist/fbzip
 
 clean:
 	rm -rf build binary dist

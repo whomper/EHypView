@@ -31,6 +31,9 @@ each file on its own or all in `ehypview-x.y.zip`:
 | `ehypview.hyp`, `ehypview.ref` | its guide |
 | `ehypview.rsc`, `ehypvnv.rsc`, `ehypview.icn`, `ehypvwmk.icn` | the desktop icon (also in the zip's `icons/`) |
 
+On the FireBee, take `ehypview-x.y-firebee.zip` instead: the same files, with the program and the
+accessory built for its ColdFire.
+
 1. Start `EHYPVIEW.PRG` from a folder of its own, or copy `EHYPVIEW.ACC` to the root of the boot drive.
    To be the help viewer for every program, copy the accessory there as `ST-GUIDE.ACC`.
 2. Keep your hypertexts (each `.HYP` with its `.REF`) in `\GUIDES`, or add their folders in

@@ -4797,17 +4797,19 @@ static void start_mark(const char *what)
 
 
 /* the machine checked first (common/atari/cpucheck.c, or cpucheck_cf.S in
-   the FireBee edition: the guidelines, 7.4, Erez 22 Nov 2026 "Make the other
-   apps native on the FireBee too"): each file names the other. Any 68000
-   runs the 68000 file (cpu_need 0); on a FireBee it names its edition */
+   the FireBee package: the guidelines, 7.4, Erez 22 Nov 2026 "Make the other
+   apps native on the FireBee too"). Any 68000 runs the 68000 build
+   (cpu_need 0); on a FireBee it names the FireBee package */
 const long cpu_need = 0;
+/* each build names the other package (the guidelines, 7.4: the FireBee's
+   holds the same file names; Erez, 22 Nov 2026) */
 #ifdef __mcoldfire__
-const char cpu_alert[] = "[3][EHYPFB.PRG is for the FireBee.|On an ST, a TT or a Falcon,|run EHYPVIEW.PRG.][ Quit ]";
-const char cpu_acc_alert[] = "[3][EHYPFB.ACC is for the FireBee.|On an ST, a TT or a Falcon,|put EHYPVIEW.ACC in its place.][ OK ]";
+const char cpu_alert[] = "[3][EHYPVIEW.PRG is for the|FireBee. On an ST, a TT or a|Falcon, install EHypView's|standard package.][ Quit ]";
+const char cpu_acc_alert[] = "[3][EHYPVIEW.ACC is for the|FireBee. On an ST, a TT or a|Falcon, install EHypView's|standard package.][ OK ]";
 #else
 const char cpu_alert[] = "[3][EHypView needs a 68000.][ Quit ]";   /* (never shown: cpu_need 0) */
-const char cpu_cf_alert[] = "[3][EHYPVIEW.PRG is for the ST, TT|and Falcon. On the FireBee,|run EHYPFB.PRG.][ Quit ]";
-const char cpu_cf_acc_alert[] = "[3][EHYPVIEW.ACC is for the ST,|TT and Falcon. On the FireBee,|put EHYPFB.ACC in its place.][ OK ]";
+const char cpu_cf_alert[] = "[3][EHYPVIEW.PRG is for the ST, TT|and Falcon. On the FireBee,|install EHypView's FireBee|package.][ Quit ]";
+const char cpu_cf_acc_alert[] = "[3][EHYPVIEW.ACC is for the ST, TT|and Falcon. On the FireBee,|install EHypView's FireBee|package.][ OK ]";
 #endif
 /* the accessory on the wrong machine: its Desk entry, the alert at each
    opening (common 173309d), as EHypView's own */

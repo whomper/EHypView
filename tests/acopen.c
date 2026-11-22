@@ -2,9 +2,9 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * ACOPEN.PRG - opens an accessory as its Desk entry does: AC_OPEN to the
- * one named in C:\ACOPEN.TXT (its AES name, e.g. EHYPFB), then waits a few
+ * one named in C:\ACOPEN.TXT (its AES name; EHYPVIEW without it), then waits a few
  * seconds and ends. tests/hatari/firebee_test.py starts it after a boot with
- * an accessory of the other machine's (the guidelines, 7.4): its alert must
+ * the other machine's accessory (the guidelines, 7.4): its alert must
  * come at the opening, and the boot must have reached the desktop.
  */
 #include <string.h>
@@ -17,11 +17,14 @@ long nf_on = 1;                 /* a test program: NatFeats looked for (tos.h) *
 
 int main(void)
 {
+	static char name[9];            /* (static: its initialiser on the stack
+	                                   wrote longs at an odd address, an
+	                                   address error on a 68000) */
 	short msg[8], id, me = appl_init();
-	char name[9] = "EHYPVIEW";
 	long fh = Fopen("C:\\ACOPEN.TXT", 0);
 	int i;
 
+	strcpy(name, "EHYPVIEW");
 	if (fh >= 0)
 	{
 		long n = Fread((short) fh, 8, name);
