@@ -221,7 +221,7 @@ The same gate as any release: the pairs against 2.7 (the D39 rows timed at the w
 the candidate to the hub for the family check.
 Done in 2.9 (20 Nov 2026): the speed rows (the ST's and the line scroll's times over the guidelines
 accepted by Erez, 20 Nov, named in tests/hatari/speed.py's ACCEPTED) and START as four radios. Back in
-maintenance mode. For 2.10, when it comes: the help front page's pictures loaded more frugally (the
+maintenance mode. For the next release, when it comes: the help front page's pictures loaded more frugally (the
 accessory's heap on a 1 MB machine; the hub's (c), 20 Nov).
 
 **Lifted for the FireBee edition (Erez, 22 Nov 2026: "Make the other apps native on the FireBee too";
@@ -235,6 +235,10 @@ the standard package's. Each build names the other package (`cpu_cf_alert` and `
 core under `qemu-m68k -cpu cfv4e` against the host's (`make cf-test`: the HYP reader, the index, the
 search), each build's alert on the wrong machine and each accessory's boot reaching the desktop
 (`make firebee-test`), and the full gate for the 68000 files against 2.9.
+Done in 2.10 (22 Nov 2026): the two packages, the alerts, the tests (gate row 7 is now the stand-in's
+refusals and the accessories' boots); the IMAGES start rows at 405 ms on ST:mono and 485 ms on ST:med
+accepted by Erez (22 Nov: "Accept, release 2.10"; AERA-Atari PERF-REVISIT 9b43ddc). Back in maintenance
+mode.
 
 ### UI backlog (Erez's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
 
