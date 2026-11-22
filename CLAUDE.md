@@ -123,7 +123,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   run it when file access changes.
 - Before pushing: `make test`, `make asan`, `make m68k-test`,
   `make hatari-test`, `make gui-test`, `make quiet-test` (these two
-  need hatari, Xvfb and xdotool) and `make colour-test`, and `make atari`
+  need hatari, Xvfb and xdotool) and `make colour-test`, `make cf-test` (qemu-m68k) and `make firebee-test`, and `make atari`
   with no warnings.
 - One build, for the 68000, runs on every ST, STE, TT and Falcon. GCC 13
   joins byte reads into word reads, which fault on a 68000 at an odd

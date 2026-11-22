@@ -255,6 +255,14 @@ $(HATARI_DIR)/ASKHELP.PRG: $(ATARI)/askhelp.elf common/tools/elf2tos.py
 	mkdir -p $(HATARI_DIR)
 	python3 common/tools/elf2tos.py $< $@
 
+$(ATARI)/acopen.o: tests/acopen.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -c -o $@ $<
+$(ATARI)/acopen.elf: $(RT_OBJ) $(ATARI)/acopen.o common/atari/link.ld
+	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(ATARI)/acopen.o -lgcc
+build/fb/ACOPEN.PRG: $(ATARI)/acopen.elf common/tools/elf2tos.py
+	mkdir -p build/fb
+	python3 common/tools/elf2tos.py $< $@
+
 $(ATARI)/launch.o: tests/launch.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -c -o $@ $<
 $(ATARI)/launch.elf: $(RT_OBJ) $(ATARI)/launch.o common/atari/link.ld
@@ -549,5 +557,5 @@ clean:
 
 # each file names the other (the guidelines, 7.4): the 68000 build on the
 # FireBee stand-in, the FireBee build on a Falcon, in Hatari's AES trace
-firebee-test: atari
+firebee-test: atari build/fb/ACOPEN.PRG
 	python3 tests/hatari/firebee_test.py $(HATARI_DIR) build/fb build/firebee

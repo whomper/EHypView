@@ -4803,10 +4803,15 @@ static void start_mark(const char *what)
 const long cpu_need = 0;
 #ifdef __mcoldfire__
 const char cpu_alert[] = "[3][EHYPFB.PRG is for the FireBee.|On an ST, a TT or a Falcon,|run EHYPVIEW.PRG.][ Quit ]";
+const char cpu_acc_alert[] = "[3][EHYPFB.ACC is for the FireBee.|On an ST, a TT or a Falcon,|put EHYPVIEW.ACC in its place.][ OK ]";
 #else
 const char cpu_alert[] = "[3][EHypView needs a 68000.][ Quit ]";   /* (never shown: cpu_need 0) */
 const char cpu_cf_alert[] = "[3][EHYPVIEW.PRG is for the ST, TT|and Falcon. On the FireBee,|run EHYPFB.PRG.][ Quit ]";
+const char cpu_cf_acc_alert[] = "[3][EHYPVIEW.ACC is for the ST,|TT and Falcon. On the FireBee,|put EHYPFB.ACC in its place.][ OK ]";
 #endif
+/* the accessory on the wrong machine: its Desk entry, the alert at each
+   opening (common 173309d), as EHypView's own */
+const char cpu_acc_name[] = "  EHypView";
 
 int app_main(void)
 {

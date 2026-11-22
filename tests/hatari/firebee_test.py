@@ -31,13 +31,19 @@ def check(ok, what):
     failed += not ok
 
 
-def boot(name, spec, prg):
-    """the AES calls of a boot that starts prg from C:, one a line"""
+def boot(name, spec, prg, acc=None):
+    """the AES calls of a boot that starts prg from C:, one a line; acc: an
+    accessory in C:'s root, which prg (ACOPEN.PRG) then opens"""
     w = os.path.join(WORK, name)
     shutil.rmtree(w, ignore_errors=True)
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
-    shutil.copy(os.path.join(FBDIR if prg.startswith("EHYPFB") else HDIR, prg), hd)
+    for f in (prg, acc):
+        if f:
+            shutil.copy(os.path.join(FBDIR if f.startswith(("EHYPFB", "ACOPEN")) else HDIR, f), hd)
+    if acc:
+        with open(os.path.join(hd, "ACOPEN.TXT"), "w") as t:
+            t.write(acc.split(".")[0] + "\r\n")
     m = machines.Machine(spec, hd)
     args = m.args()
     home = w + ".home"
@@ -85,6 +91,18 @@ def main():
     m, calls = boot("falcon-68000", "Falcon-4:16", "EHYPVIEW.PRG")
     check(not alerts(calls) and windows(calls),
           "EHYPVIEW.PRG on %s: no alert, its window" % m.describe())
+
+    # the accessories: the boot reaches the desktop (ACOPEN.PRG runs from
+    # it), the Desk entry is registered, and opening it shows the alert
+    for spec, acc, words in (("Falcon:16", "EHYPFB.ACC", ("EHYPFB.ACC is for the FireBee", "EHYPVIEW.ACC in its place")),
+                             ("FireBee:16", "EHYPVIEW.ACC", ("EHYPVIEW.ACC is for the ST", "EHYPFB.ACC in its place"))):
+        m, calls = boot("acc-" + acc.split(".")[0].lower() + "-" + spec.split(":")[0].lower(), spec, "ACOPEN.PRG", acc)
+        reg = [c for c in calls if " menu_register(" in c and "EHypView" in c]
+        ran = any(" appl_write(" in c for c in calls)
+        a = alerts(calls)
+        check(reg and ran and len(a) == 1 and all(w in a[0] for w in words),
+              "%s on %s: the boot reaches the desktop, its Desk entry, its alert when opened%s"
+              % (acc, m.describe(), "" if a else " (registered %d, opened %s, %d AES calls)" % (len(reg), ran, len(calls))))
 
     print("%d failed" % failed)
     return 1 if failed else 0
