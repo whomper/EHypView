@@ -88,9 +88,13 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
 ## EHypView
 
-- **A release** carries `EHYPVIEW.PRG`, `EHYPVIEW.ACC`, `EHYPVIEW.HYP` and `.REF` (`make help`,
-  hcp from `common/tools/build-hcp.sh`) and the icon (`make atari` copies the programs to
-  `binary/`; the icons are committed in `icons/`). The first release was 1.0.
+- **A release** is two zips and nothing else (guidelines 7.4): `ehypview-x.y.zip` and
+  `ehypview-x.y-firebee.zip`, each with `EHYPVIEW.PRG`, `EHYPVIEW.ACC`, `EHYPVIEW.HYP` and `.REF`
+  (`make help`, hcp from `common/tools/build-hcp.sh`) and the icon in `icons/` (`make atari` copies
+  the programs to `binary/` and `binary/firebee/`; the icons are committed in `icons/`). The
+  release workflow uploads the FireBee zip first and the standard zip last, as a draft until
+  GitHub's API shows that order (an EUpdate up to 2.14 unpacks each zip, the last one wins). The
+  first release was 1.0.
 - The guide is `docs/GUIDE.md` (tools/mkhelp.py, EContact's) with the family's front page
   (guidelines 4.3, `docs/front.json`, `common/tools/helpfront.py`). Its window picture
   `docs/help/WINDOW.IMG` is committed: when the viewer changes, `make shots HCP=...` takes it again

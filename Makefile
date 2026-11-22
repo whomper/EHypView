@@ -19,7 +19,7 @@
 #                   the guidelines' times (tests/hatari/speed.py)
 #   make icons      the icon again from common/icons/EHYPVIEW.txt: src/gem/icon*.h,
 #                   docs/icon*.png, icons/ (python3-pil for the PNGs)
-#   make dist       a release's files in dist/: each file, and ehypview-x.y.zip
+#   make dist       a release in dist/: ehypview-x.y.zip and ehypview-x.y-firebee.zip
 #
 # binary/ is what make builds, never committed: releases carry the
 # programs (.github/workflows/release.yml).
@@ -529,10 +529,11 @@ hatari-test: atari $(HOST)/ehvcheck
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 	MACHINE=ST:mono sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 
-# a release's files: the standard package's each one in dist/, and all of
-# them in dist/ehypview-x.y.zip (the icons in icons/); the FireBee package,
-# the same names with its programs, in dist/ehypview-x.y-firebee.zip only
-# (the guidelines, 7.4); for the release workflow;
+# a release: two zips in dist/ and nothing else (the guidelines, 7.4; Erez,
+# 22 Nov 2026: "Remove all files from root and just have two ZIP files, one
+# for each platform"): ehypview-x.y.zip for the ST, TT and Falcon and
+# ehypview-x.y-firebee.zip, the same names with the programs as ColdFire
+# code (the icons in icons/), for the release workflow;
 # every name in lowercase (the guidelines, 6.6: MiNT's ext2 tells the
 # cases apart)
 DIST    := binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPVIEW.HYP binary/EHYPVIEW.REF
@@ -543,7 +544,6 @@ dist: atari help
 	@$(HYPCHECK)
 	rm -rf dist
 	mkdir -p dist/zip/icons dist/fbzip/icons
-	for f in $(DIST) $(ICONS); do cp $$f dist/$(call lower,$$f); done
 	for f in $(DIST); do cp $$f dist/zip/$(call lower,$$f); done
 	for f in $(FIREBEE); do cp $$f dist/fbzip/$(call lower,$$f); done
 	for f in $(ICONS); do cp $$f dist/zip/icons/$(call lower,$$f); cp $$f dist/fbzip/icons/$(call lower,$$f); done

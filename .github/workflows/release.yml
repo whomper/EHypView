@@ -1,7 +1,8 @@
 name: Release
 
-# Builds EHypView and its guide and publishes them as a GitHub Release:
-# each file on its own, and all of them in ehypview-x.y.zip. Two ways to start it:
+# Builds EHypView and its guide and publishes them as a GitHub Release: two
+# zips and nothing else (the guidelines, 7.4), ehypview-x.y.zip for the ST,
+# TT and Falcon and ehypview-x.y-firebee.zip. Two ways to start it:
 # - Actions > Release > Run workflow, on main, with the notes: it tags
 #   main's commit vX.Y, from VERSION;
 # - push a tag vX.Y that matches VERSION: the tag's message
@@ -70,5 +71,20 @@ jobs:
           else
             printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
           fi
-          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "EHypView $(cat VERSION)" \
+          # the FireBee zip first and the standard zip last, each upload
+          # finished before the next (the guidelines, 7.4: an EUpdate up to
+          # 2.14 unpacks every zip of a release in turn, the last one wins),
+          # as a draft until GitHub's API gives the assets in that order
+          V=$(cat VERSION)
+          FB=ehypview-$V-firebee.zip
+          STD=ehypview-$V.zip
+          test "$(cd dist && ls | sort)" = "$(printf '%s\n' "$FB" "$STD" | sort)" || { echo "::error::dist/ is not the two zips"; ls dist; exit 1; }
+          gh release create "$TAG" "dist/$FB" --draft --target "$GITHUB_SHA" --title "EHypView $V" \
             --notes-file "$RUNNER_TEMP/notes.md"
+          gh release upload "$TAG" "dist/$STD"
+          ORDER=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .assets | map(.name) | join(\" \")")
+          if [ "$ORDER" != "$FB $STD" ]; then
+            echo "::error::the assets are \"$ORDER\", not \"$FB $STD\""
+            exit 1
+          fi
+          gh release edit "$TAG" --draft=false
