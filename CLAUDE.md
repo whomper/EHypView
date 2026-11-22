@@ -88,9 +88,13 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
 ## EHypView
 
-- **A release** carries `EHYPVIEW.PRG`, `EHYPVIEW.ACC`, `EHYPVIEW.HYP` and `.REF` (`make help`,
-  hcp from `common/tools/build-hcp.sh`) and the icon (`make atari` copies the programs to
-  `binary/`; the icons are committed in `icons/`). The first release was 1.0.
+- **A release** is two zips and nothing else (guidelines 7.4): `ehypview-x.y.zip` and
+  `ehypview-x.y-firebee.zip`, each with `EHYPVIEW.PRG`, `EHYPVIEW.ACC`, `EHYPVIEW.HYP` and `.REF`
+  (`make help`, hcp from `common/tools/build-hcp.sh`) and the icon in `icons/` (`make atari` copies
+  the programs to `binary/` and `binary/firebee/`; the icons are committed in `icons/`). The
+  release workflow uploads the FireBee zip first and the standard zip last, as a draft until
+  GitHub's API shows that order (an EUpdate up to 2.14 unpacks each zip, the last one wins). The
+  first release was 1.0.
 - The guide is `docs/GUIDE.md` (tools/mkhelp.py, EContact's) with the family's front page
   (guidelines 4.3, `docs/front.json`, `common/tools/helpfront.py`). Its window picture
   `docs/help/WINDOW.IMG` is committed: when the viewer changes, `make shots HCP=...` takes it again
@@ -123,7 +127,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   run it when file access changes.
 - Before pushing: `make test`, `make asan`, `make m68k-test`,
   `make hatari-test`, `make gui-test`, `make quiet-test` (these two
-  need hatari, Xvfb and xdotool) and `make colour-test`, and `make atari`
+  need hatari, Xvfb and xdotool) and `make colour-test`, `make cf-test` (qemu-m68k) and `make firebee-test`, and `make atari`
   with no warnings.
 - One build, for the 68000, runs on every ST, STE, TT and Falcon. GCC 13
   joins byte reads into word reads, which fault on a 68000 at an odd
@@ -215,6 +219,26 @@ maintenance then comes back:
    Atari.|Look there anyway?][Keep|Change]`, Keep the default.
 The same gate as any release: the pairs against 2.7 (the D39 rows timed at the whole-desk layout), then
 the candidate to the hub for the family check.
+Done in 2.9 (20 Nov 2026): the speed rows (the ST's and the line scroll's times over the guidelines
+accepted by Erez, 20 Nov, named in tests/hatari/speed.py's ACCEPTED) and START as four radios. Back in
+maintenance mode. For the next release, when it comes: the help front page's pictures loaded more frugally (the
+accessory's heap on a 1 MB machine; the hub's (c), 20 Nov).
+
+**Lifted for the FireBee edition (Erez, 22 Nov 2026: "Make the other apps native on the FireBee too";
+guidelines 7.4)** until it is released; maintenance then comes back. Two packages (Erez, 22 Nov: "two
+packages, one for FireBee and the other for standard ST", "Same names"): `ehypview-x.y.zip` as before, and
+`ehypview-x.y-firebee.zip` with the same names, its `ehypview.prg` and `.acc` ColdFire code made by common's
+`tools/mkfirebee.py --elf build/atari/ehypview.elf` (build/fb, binary/firebee); the loose release files are
+the standard package's. Each build names the other package (`cpu_cf_alert` and `cpu_cf_acc_alert` in the
+68000 build, `cpu_alert` and `cpu_acc_alert` under `__mcoldfire__`; Erez's words through the hub, lines of
+30 characters at most); an accessory on the wrong machine shows its alert from its Desk entry. Tests: the
+core under `qemu-m68k -cpu cfv4e` against the host's (`make cf-test`: the HYP reader, the index, the
+search), each build's alert on the wrong machine and each accessory's boot reaching the desktop
+(`make firebee-test`), and the full gate for the 68000 files against 2.9.
+Done in 2.10 (22 Nov 2026): the two packages, the alerts, the tests (gate row 7 is now the stand-in's
+refusals and the accessories' boots); the IMAGES start rows at 405 ms on ST:mono and 485 ms on ST:med
+accepted by Erez (22 Nov: "Accept, release 2.10"; AERA-Atari PERF-REVISIT 9b43ddc). Back in maintenance
+mode.
 
 ### UI backlog (Erez's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
 

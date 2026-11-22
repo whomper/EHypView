@@ -26,6 +26,7 @@
 #include "index.h"
 #include "scan.h"
 #include "resolve.h"
+#include "search.h"
 
 #ifdef EHV_TOS
 #include "tos.h"
@@ -327,6 +328,38 @@ static int run(void)
 	ehv_resolve_xref(&ctx, "BASIC.HYP/zweite", &t);
 	report_target("noindex", "BASIC.HYP/zweite", &t, idx);
 	ehv_target_free(&t);
+
+	/* the full-text search: each hit as the library shows it */
+	{
+		static const char *const queries[] = { "page", "detail" };
+		unsigned int q;
+
+		for (q = 0; q < sizeof(queries) / sizeof(queries[0]); q++)
+		{
+			ehv_fts *fs = ehv_fts_begin(idx, queries[q]);
+			unsigned long nh = 0, h;
+			const ehv_fts_hit *hit;
+			int rr = 0, steps = 0;
+
+			check(fs != NULL, "search begin");
+			if (fs == NULL)
+				continue;
+			while ((rr = ehv_fts_step(fs, 8, NULL)) == 0 && steps < 100000)
+				steps++;
+			check(rr == 1, "search ends");
+			hit = ehv_fts_hits(fs, &nh);
+			snprintf(line, sizeof(line), "search \"%s\": pages=%lu hits=%lu\n", queries[q], ehv_fts_pages(fs), nh);
+			out(line);
+			for (h = 0; h < nh; h++)
+			{
+				snprintf(line, sizeof(line), "  %s/%s line=%u count=%u \"%s\"\n",
+					 rel(idx->guides[hit[h].guide].path), hit[h].node, hit[h].line, hit[h].count,
+					 hit[h].context);
+				out(line);
+			}
+			ehv_fts_free(fs);
+		}
+	}
 
 	/* cache */
 	check(ehv_index_save(idx, cache_path) == 0, "cache save");

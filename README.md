@@ -22,14 +22,17 @@ Atari programs come with, as a program or a desk accessory, and is the viewer th
 
 ## Getting started
 
-Download the latest release from **[Releases](https://github.com/whomper/EHypView/releases/latest)**,
-each file on its own or all in `ehypview-x.y.zip`:
+Download the latest release from **[Releases](https://github.com/whomper/EHypView/releases/latest)**:
+`ehypview-x.y.zip` for the ST, STE, TT and Falcon holds:
 
 | File | What it is |
 |---|---|
 | `ehypview.prg` / `ehypview.acc` | the viewer as a program and as a desk accessory, for every ST, STE, TT and Falcon |
 | `ehypview.hyp`, `ehypview.ref` | its guide |
-| `ehypview.rsc`, `ehypvnv.rsc`, `ehypview.icn`, `ehypvwmk.icn` | the desktop icon (also in the zip's `icons/`) |
+| `ehypview.rsc`, `ehypvnv.rsc`, `ehypview.icn`, `ehypvwmk.icn` | the desktop icon, in `icons/` |
+
+On the FireBee, take `ehypview-x.y-firebee.zip` instead: the same files, with the program and the
+accessory built for its ColdFire.
 
 1. Start `EHYPVIEW.PRG` from a folder of its own, or copy `EHYPVIEW.ACC` to the root of the boot drive.
    To be the help viewer for every program, copy the accessory there as `ST-GUIDE.ACC`.
@@ -54,7 +57,7 @@ sudo apt install gcc-m68k-linux-gnu zip   # Debian/Ubuntu; no MiNTLib needed
 make           # the host tools and tests, hypdump among them
 make atari     # binary/EHYPVIEW.PRG and .ACC, for the 68000
 make help HCP=/path/to/hcp   # EHYPVIEW.HYP and .REF from docs/GUIDE.md
-make dist      # dist/: a release's files and ehypview-x.y.zip
+make dist      # dist/: a release's two zips, ehypview-x.y.zip and ehypview-x.y-firebee.zip
 ```
 
 Releases, hypdump and the guide: [docs/DEVELOPING.md](docs/DEVELOPING.md).

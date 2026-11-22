@@ -19,7 +19,7 @@
 #                   the guidelines' times (tests/hatari/speed.py)
 #   make icons      the icon again from common/icons/EHYPVIEW.txt: src/gem/icon*.h,
 #                   docs/icon*.png, icons/ (python3-pil for the PNGs)
-#   make dist       a release's files in dist/: each file, and ehypview-x.y.zip
+#   make dist       a release in dist/: ehypview-x.y.zip and ehypview-x.y-firebee.zip
 #
 # binary/ is what make builds, never committed: releases carry the
 # programs (.github/workflows/release.yml).
@@ -255,6 +255,15 @@ $(HATARI_DIR)/ASKHELP.PRG: $(ATARI)/askhelp.elf common/tools/elf2tos.py
 	mkdir -p $(HATARI_DIR)
 	python3 common/tools/elf2tos.py $< $@
 
+$(ATARI)/acopen.o: tests/acopen.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -c -o $@ $<
+$(ATARI)/acopen.elf: $(RT_OBJ) $(ATARI)/acopen.o common/atari/link.ld
+	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(ATARI)/acopen.o -lgcc
+build/fb/ACOPEN.PRG: $(ATARI)/acopen.elf common/tools/elf2tos.py
+	@python3 common/tools/oddaccess.py $<
+	mkdir -p build/fb
+	python3 common/tools/elf2tos.py $< $@
+
 $(ATARI)/launch.o: tests/launch.c $(XHDRS) | $(ATARI)
 	$(XCC) $(XFLAGS) -std=gnu99 -c -o $@ $<
 $(ATARI)/launch.elf: $(RT_OBJ) $(ATARI)/launch.o common/atari/link.ld
@@ -304,7 +313,7 @@ $(ATARI)/version.o: $(ATARI)/version.c
 # 175 ms; pinned, 160). Not hotcode.h's sort: profpad pads by object.
 HOT_OBJ  = $(ATARI)/gem.o $(ATARI)/text.o $(ATARI)/pagedraw.o $(ATARI)/colour.o
 APP_OBJ  = $(wordlist 1,2,$(RT_OBJ)) $(HOT_OBJ) $(filter-out $(ATARI)/gem.o,$(wordlist 3,99,$(RT_OBJ))) \
-           $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/version.o
+           $(XCORE_OBJ) $(GEM_OBJ) $(ATARI)/cpucheck.o $(ATARI)/version.o
 $(ATARI)/ehypview.elf: $(APP_OBJ) common/atari/link.ld
 	$(XCC) $(XLDFLAGS) -Wl,-Map,$@.map -o $@ $(APP_OBJ) -lgcc
 
@@ -343,7 +352,7 @@ $(HOST)/pagebench: tests/pagebench.c $(HOST)/libehv.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(HOST)/libehv.a
 
 atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPVIEW.ACC \
-       binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC
+       binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/firebee/EHYPVIEW.PRG binary/firebee/EHYPVIEW.ACC
 	@# no word or long at an odd stack offset: an address error on a 68000
 	@# (common/tools/oddaccess.py; common's accmem at sp+39, 27 Oct 2026)
 	@python3 common/tools/oddaccess.py $(ATARI)/ehypview.elf $(ATARI)/ehvcheck.elf
@@ -351,6 +360,21 @@ atari: $(HATARI_DIR)/EHVCHECK.PRG $(HATARI_DIR)/EHYPVIEW.PRG $(HATARI_DIR)/EHYPV
 # what goes onto the Atari: binary/ (built, never committed)
 binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC: binary/%: $(HATARI_DIR)/%
 	mkdir -p binary
+	cp $< $@
+binary/firebee/EHYPVIEW.PRG binary/firebee/EHYPVIEW.ACC: binary/firebee/%: build/fb/%
+	mkdir -p binary/firebee
+	cp $< $@
+
+# the FireBee package (the guidelines, 7.4; Erez, 22 Nov 2026: "Make the
+# other apps native on the FireBee too", then two packages with "Same
+# names"): the same program as ColdFire code, made by common's mkfirebee.py
+# from the 68000 build's own rules (build/cf/), under the same names. Each
+# build names the other package (cpu_alert, cpu_cf_alert and the
+# accessory's). In build/fb, not HATARI_DIR: the rigs boot that as C:
+build/fb/EHYPVIEW.PRG: $(ATARI)/ehypview.elf common/tools/mkfirebee.py
+	mkdir -p build/fb
+	python3 common/tools/mkfirebee.py --elf $(ATARI)/ehypview.elf --outdir build/cf/ $@
+build/fb/EHYPVIEW.ACC: build/fb/EHYPVIEW.PRG
 	cp $< $@
 
 # the icon: src/gem/icon.h and icon16.h (the About box), docs/icon*.png,
@@ -439,7 +463,7 @@ $(PROF)/EHYPVIEW.PRG: $(PROF)/ehypview.elf common/tools/elf2tos.py
 # standards/TEST-MATRIX.md) the other rigs don't boot, one boot a row:
 # tests/gate.py (ROWS=1 5 ... for some; needs hatari, Xvfb and xdotool,
 # common/tests/xaaes's make base for rows 5 and 6)
-gate-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG
+gate-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG build/fb/ACOPEN.PRG
 	python3 tests/gate.py $(HATARI_DIR) build/gate $(ROWS)
 
 # pictures and text in colour in every screen mode: Falcon 4, 16, 256 and
@@ -473,29 +497,66 @@ pagebench: $(ATARI)/pagebench.elf $(HOST)/pagebench
 	$(HOST)/pagebench tests/fixtures/big.hyp
 	sh tests/run_bench.sh build/pagebench
 
+# the FireBee edition's core under qemu-m68k -cpu cfv4e (the guidelines, 7.4):
+# EHVCHECK as ColdFire code (mkfirebee.py's objects), TOS stood in for by
+# tests/coldfire/tos_stub.c (drive C: is build/cfcheck), its report compared
+# with the host's: the HYP reader, the pages, the index, the search
+CF_CHECK_OBJ = $(patsubst $(ATARI)/%,build/cf/atari/%,$(filter-out $(ATARI)/crt0.o,$(RT_OBJ) $(XCORE_OBJ) \
+               $(ATARI)/ehvcheck.o)) build/cf/rt/ll64.o
+QEMU_CF ?= $(or $(shell command -v qemu-m68k 2>/dev/null),$(shell command -v qemu-m68k-static 2>/dev/null)) -cpu cfv4e
+CF_GCC  = m68k-linux-gnu-gcc -mcpu=5475
+build/cf/EHVCHECK.PRG: $(ATARI)/ehvcheck.elf common/tools/mkfirebee.py
+	python3 common/tools/mkfirebee.py --elf $(ATARI)/ehvcheck.elf --outdir build/cf/ $@
+build/cf/q/ehvcheck: build/cf/EHVCHECK.PRG tests/coldfire/tos_stub.c tests/coldfire/start.S common/tests/coldfire/rt.S
+	mkdir -p build/cf/q
+	m68k-linux-gnu-objcopy --redefine-sym _start=crt0_start build/cf/atari/crt0.o build/cf/q/crt0.o
+	$(CF_GCC) -O2 -ffreestanding -fno-builtin -nostdinc -isystem $(shell $(XCC) -print-file-name=include) \
+	    -Icommon/atari/include -Wall -Wextra -DROOT='"$(CURDIR)/build/cfcheck"' -c -o build/cf/q/tos_stub.o tests/coldfire/tos_stub.c
+	$(CF_GCC) -c -o build/cf/q/start.o tests/coldfire/start.S
+	$(CF_GCC) -DNO_START -c -o build/cf/q/rt.o common/tests/coldfire/rt.S
+	$(CF_GCC) -nostdlib -static -no-pie -Wl,-z,noexecstack -Wl,--gc-sections -Wl,-e,_start -Wl,-Ttext-segment=0x100000 -o $@ build/cf/q/start.o \
+	    build/cf/q/crt0.o $(CF_CHECK_OBJ) build/cf/q/tos_stub.o build/cf/q/rt.o
+cf-test: build/cf/q/ehvcheck $(HOST)/ehvcheck
+	$(call make_fixt,build/cfcheck)
+	$(HOST)/ehvcheck build/cfcheck/FIXT > build/cf/q/host.txt
+	$(call make_fixt,build/cfcheck)
+	timeout 300 $(QEMU_CF) build/cf/q/ehvcheck | tr -d '\r' | sed -n '/^EHVCHECK /,/^END /p' > build/cf/q/cf.txt
+	@test -s build/cf/q/cf.txt || { echo "FAIL: no report from the ColdFire build"; exit 1; }
+	@diff -u build/cf/q/host.txt build/cf/q/cf.txt && echo "ok    the core as ColdFire code (qemu-m68k -cpu cfv4e) gives the host's report, $$(wc -l < build/cf/q/cf.txt) lines"
+
 hatari-test: atari $(HOST)/ehvcheck
 	$(call make_fixt,build/hostcheck)
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 	MACHINE=ST:mono sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 
-# a release's files: each one in dist/, and all of them in
-# dist/ehypview-x.y.zip (the icons in icons/), for the release workflow;
+# a release: two zips in dist/ and nothing else (the guidelines, 7.4; Erez,
+# 22 Nov 2026: "Remove all files from root and just have two ZIP files, one
+# for each platform"): ehypview-x.y.zip for the ST, TT and Falcon and
+# ehypview-x.y-firebee.zip, the same names with the programs as ColdFire
+# code (the icons in icons/), for the release workflow;
 # every name in lowercase (the guidelines, 6.6: MiNT's ext2 tells the
 # cases apart)
 DIST    := binary/EHYPVIEW.PRG binary/EHYPVIEW.ACC binary/EHYPVIEW.HYP binary/EHYPVIEW.REF
+FIREBEE := binary/firebee/EHYPVIEW.PRG binary/firebee/EHYPVIEW.ACC binary/EHYPVIEW.HYP binary/EHYPVIEW.REF
 ICONS   := icons/EHYPVIEW.RSC icons/EHYPVNV.RSC icons/EHYPVIEW.ICN icons/EHYPVWMK.ICN
 lower    = $$(basename $(1) | tr A-Z a-z)
 dist: atari help
 	@$(HYPCHECK)
 	rm -rf dist
-	mkdir -p dist/zip/icons
-	for f in $(DIST) $(ICONS); do cp $$f dist/$(call lower,$$f); done
+	mkdir -p dist/zip/icons dist/fbzip/icons
 	for f in $(DIST); do cp $$f dist/zip/$(call lower,$$f); done
-	for f in $(ICONS); do cp $$f dist/zip/icons/$(call lower,$$f); done
+	for f in $(FIREBEE); do cp $$f dist/fbzip/$(call lower,$$f); done
+	for f in $(ICONS); do cp $$f dist/zip/icons/$(call lower,$$f); cp $$f dist/fbzip/icons/$(call lower,$$f); done
 	cd dist/zip && zip -q -9 -r ../ehypview-$(VERSION_STR).zip .
-	rm -rf dist/zip
+	cd dist/fbzip && zip -q -9 -r ../ehypview-$(VERSION_STR)-firebee.zip .
+	rm -rf dist/zip dist/fbzip
 
 clean:
 	rm -rf build binary dist
 
 .PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test speed-test gate-test colour-test acc-files-test accnvdi-test clean FORCE
+
+# each file names the other (the guidelines, 7.4): the 68000 build on the
+# FireBee stand-in, the FireBee build on a Falcon, in Hatari's AES trace
+firebee-test: atari build/fb/ACOPEN.PRG
+	python3 tests/hatari/firebee_test.py $(HATARI_DIR) build/fb build/firebee
