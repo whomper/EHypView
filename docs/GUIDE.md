@@ -307,6 +307,7 @@ Most menu items have a key, shown beside them in the menu.
 | Clr/Home, ⇧Clr/Home | top / bottom |
 | right mouse button, Insert | the right button's menu |
 | ^L | the library, and back to the viewer |
+| ⇧^S | in the library's Two panes, hide or show the subjects |
 | ^N | a new window, with the same page |
 | ^D | bookmark the page |
 | ^O | open a hypertext |
@@ -329,14 +330,15 @@ keeps the notes, and anything it doesn't know, when it writes the file. [Setting
 | `FOLDER=` | EHypView's folder, for `EHYPVIEW.IDX` and `EHYPVIEW.FNT`: the program writes its own folder, wherever it was started from |
 | `START=` | when the accessory looks through the library: `opened`, `now`, or seconds after boot |
 | `LIBRARY=` | the library's layout: `outline` or `panes` |
-| `PANECOLS=` | the width of the Two panes layout's subjects, in characters, as its edge was dragged |
+| `PANES=` | the width of the Two panes layout's subjects, in characters, as its edge was dragged (`PANECOLS=`, its old name, is read once) |
+| `WINDOW=` | where the library window was left, and its size: `x,y,w,h` |
 | `EDITED=` | counted up when the library's index was written with subjects changed, so that the program or the accessory, whichever didn't, reads it again |
 | `PATHS=` | more folders to look in, between `;` |
 | `LOG=` | `1`: Write a log, the steps of quitting in `EHYPVIEW.LOG`; `0` or none: no log |
 | `MEMKB=` | the memory the accessory takes at boot, in KB, as it measured it |
 | `PAGEKB=` | the part of it its pages needed at the most, in KB: grows when a viewer window closes having needed more |
 | `HEAPKB=` | the same, set by you: taken instead of `MEMKB=` |
-| `FONT=`, `POINT=` | the font and its size |
+| `FONT=` | the font and its size, `name,points` (`POINT=`, the old size, is read once) |
 | `BOOKMARK1=` ... | the bookmarks: the hypertext, the page and the title, between `\|` |
 | `RECENT1=` ... | the pages read last, the newest first, the same way |
 

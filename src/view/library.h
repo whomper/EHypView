@@ -146,7 +146,7 @@ void lib_free(ehv_library *lib);
 int lib_set_index(ehv_library *lib, const ehv_index *idx);
 
 /*
- * Hypertexts filed under other subjects (Erez, 27 Oct 2026): the index
+ * Hypertexts filed under other subjects (decided 27 Oct 2026): the index
  * is where a hypertext belongs, its @subject only where it starts
  * (index.h). These change the index the library shows, which the caller
  * then saves.
@@ -239,6 +239,9 @@ int lib_fulltext_start(ehv_library *lib);
 /* continue it for `budget` pieces, while more() says so (NULL: no
    limit); 1 = finished (or none running), 0 = more, -1 = out of memory */
 int lib_fulltext_step(ehv_library *lib, unsigned int budget, int (*more)(void));
+
+/* stop it where it is, its hits kept (the Undo key): 1 when one was running */
+int lib_fulltext_stop(ehv_library *lib);
 
 /* text of a row for display */
 void lib_row_text(const ehv_library *lib, unsigned long row, char *buf, unsigned long size);

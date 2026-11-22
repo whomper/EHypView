@@ -991,15 +991,21 @@ static void draw_gfx(const playout *L, const hyp_gfx *g, const gimage *im, short
 		{
 			MFDB screen;
 
+			long y0 = y < top ? top - y : 0, y1 = y + im->h - 1 > bottom - 1 ? bottom - 1 - y : im->h - 1;
+
 			memset(&screen, 0, sizeof(screen));
+			/* only its rows in the band drawn (a line scrolled draws a
+			   strip a line high: the whole picture copied under the clip
+			   was most of an ST's 120 ms, the speed rig); its columns
+			   whole, the copy on 16-pixel groups */
 			pxy[0] = 0;
-			pxy[1] = 0;
+			pxy[1] = (short) y0;
 			pxy[2] = (short) (im->w - 1);
-			pxy[3] = (short) (im->h - 1);
+			pxy[3] = (short) y1;
 			pxy[4] = (short) x;
-			pxy[5] = (short) y;
+			pxy[5] = (short) (y + y0);
 			pxy[6] = (short) (x + im->w - 1);
-			pxy[7] = (short) (y + im->h - 1);
+			pxy[7] = (short) (y + y1);
 			{
 				/* for the tests: where it is (tests/run_colour.py) */
 				char at[24], size[16];
@@ -1008,6 +1014,8 @@ static void draw_gfx(const playout *L, const hyp_gfx *g, const gimage *im, short
 				sprintf(size, "%dx%d", im->w, im->h);
 				log_event("picture", at, size);
 			}
+			if (y1 < y0)
+				break;
 			if (im->mono)
 			{
 				short colors[2];
@@ -1067,6 +1075,28 @@ static void draw_gfx(const playout *L, const hyp_gfx *g, const gimage *im, short
 	}
 }
 
+/* a picture, a line or a box under the text line at y (screen rows) */
+static int over_gfx(const playout *L, long oy, long y)
+{
+	const hyp_page *pg = L->pg;
+	unsigned short i;
+
+	for (i = 0; i < pg->ngfx; i++)
+	{
+		const hyp_gfx *g = &pg->gfx[i];
+		long gy = oy + L->gfx_at[i];
+		long gh = g->type == HYP_GFX_IMAGE ? (long) L->images[i].h : (long) g->h * ch;
+
+		if (g->type == HYP_GFX_IMAGE && L->images[i].w <= 0)
+			continue;                      /* not drawn */
+		if (gh <= 0)
+			gh = 1;                        /* a level line */
+		if (y < gy + gh && y + ch > gy)
+			return 1;
+	}
+	return 0;
+}
+
 void layout_draw(const playout *L, short ox, long oy, long top,
                  short cx, short cy, short cw_, short ch_, long sel, long cols)
 {
@@ -1089,7 +1119,6 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 	   way (transparent text is many times slower on an ST), unless a
 	   picture is under it; the VDI told a mode, colour or effect only
 	   when it changes */
-	plain = pg->ngfx == 0;
 	mode = colour = effects = -1;
 	for (l = top; l < pg->nlines; l++)
 	{
@@ -1102,6 +1131,10 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 			break;
 		if (y + ch <= cy)
 			continue;
+		/* transparent only where a picture or a drawing is under the
+		   line, not on every line of a page that has one (a line
+		   scrolled on the help's front page, the speed rig) */
+		plain = !over_gfx(L, oy, y);
 		for (r = 0; r < ln->nruns; r++)
 		{
 			const hyp_run *run = &pg->runs[ln->first_run + r];
@@ -1145,7 +1178,7 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 					   (text_bold_strike, common/ui/text.c). The
 					   VDI's bold widens each letter (NVDI by a pixel
 					   or more), and a run of it ran past its cells,
-					   the next run covering its last letters (Erez's
+					   the next run covering its last letters (a
 					   photo, 27 Oct 2026); the layout's cells are
 					   fixed */
 					short twice = !by_hand && (fx & 1) ? 1 : 0;

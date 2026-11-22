@@ -288,7 +288,7 @@ GEM_OBJ  = $(ATARI)/view.o $(ATARI)/library.o $(ATARI)/fontpref.o $(ATARI)/bookm
            $(ATARI)/libwin.o $(ATARI)/menu.o $(ATARI)/toolbar.o $(ATARI)/tabs.o $(ATARI)/stmem.o $(ATARI)/mbar.o $(ATARI)/font.o $(ATARI)/fontsel.o $(ATARI)/about.o $(ATARI)/ehvset.o $(ATARI)/settings.o $(ATARI)/ask.o \
            $(ATARI)/aboutbox.o $(ATARI)/aboutline.o $(ATARI)/gemui.o $(ATARI)/av.o $(ATARI)/popup.o \
            $(ATARI)/iconify.o $(ATARI)/clip.o $(ATARI)/dd.o $(ATARI)/twin.o $(ATARI)/bgwork.o \
-           $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o $(ATARI)/dlgbuild.o $(ATARI)/panebar.o $(ATARI)/libbar.o $(ATARI)/click.o $(ATARI)/arrowed.o $(ATARI)/tooltip.o
+           $(ATARI)/bigbuf.o $(ATARI)/accmem.o $(ATARI)/field.o $(ATARI)/dlgbuild.o $(ATARI)/panebar.o $(ATARI)/libbar.o $(ATARI)/click.o $(ATARI)/arrowed.o $(ATARI)/tooltip.o $(ATARI)/theme.o
 
 # the version: VERSION holds the last release (major.minor, e.g. 1.0),
 # and the build never writes it. Every build shows it as it is in the
@@ -365,7 +365,7 @@ binary/firebee/EHYPVIEW.PRG binary/firebee/EHYPVIEW.ACC: binary/firebee/%: build
 	mkdir -p binary/firebee
 	cp $< $@
 
-# the FireBee package (the guidelines, 7.4; Erez, 22 Nov 2026: "Make the
+# the FireBee package (the guidelines, 7.4; decided 22 Nov 2026: "Make the
 # other apps native on the FireBee too", then two packages with "Same
 # names"): the same program as ColdFire code, made by common's mkfirebee.py
 # from the 68000 build's own rules (build/cf/), under the same names. Each
@@ -411,7 +411,7 @@ HYPCHECK = grep -q "EHYPVIEW.HYP $$(cat VERSION)" binary/EHYPVIEW.HYP || \
 gui-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG $(HATARI_DIR)/BUBBLE.ACC
 	python3 tests/run_gui.py $(HATARI_DIR) build/gui
 
-# the accessory with a GDOS font under Erez's NVDI, alone (AERA_WITH_NVDI=1;
+# the accessory with a GDOS font under the owner's NVDI, alone (AERA_WITH_NVDI=1;
 # skipped without it): tests/run_gui.py's accnvdi
 accnvdi-test: atari $(HATARI_DIR)/ASKHELP.PRG
 	python3 tests/run_gui.py $(HATARI_DIR) build/gui accnvdi
@@ -459,7 +459,7 @@ $(PROF)/ehypview.elf: $(ATARI)/ehypview.elf $(PROF_OBJ) common/atari/link.ld com
 $(PROF)/EHYPVIEW.PRG: $(PROF)/ehypview.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
-# the rows of the family's regression gate (Erez, 17 Nov 2026; AERA-Atari
+# the rows of the family's regression gate (decided 17 Nov 2026; AERA-Atari
 # standards/TEST-MATRIX.md) the other rigs don't boot, one boot a row:
 # tests/gate.py (ROWS=1 5 ... for some; needs hatari, Xvfb and xdotool,
 # common/tests/xaaes's make base for rows 5 and 6)
@@ -529,7 +529,7 @@ hatari-test: atari $(HOST)/ehvcheck
 	sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 	MACHINE=ST:mono sh tests/run_hatari.sh $(HOST)/ehvcheck build/hostcheck/FIXT $(HATARI_DIR)
 
-# a release: two zips in dist/ and nothing else (the guidelines, 7.4; Erez,
+# a release: two zips in dist/ and nothing else (the guidelines, 7.4; decided
 # 22 Nov 2026: "Remove all files from root and just have two ZIP files, one
 # for each platform"): ehypview-x.y.zip for the ST, TT and Falcon and
 # ehypview-x.y-firebee.zip, the same names with the programs as ColdFire

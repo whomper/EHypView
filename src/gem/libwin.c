@@ -47,6 +47,7 @@
 #include "ask.h"
 #include "arrowed.h"
 #include "stmem.h"
+#include "theme.h"
 
 #define LKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
 #define MARGIN 8
@@ -68,7 +69,8 @@ static char info_shown[120];           /* the info line the window has */
 static int want_layout = LIB_OUTLINE;  /* LIBRARY= */
 static int focus_left;                 /* Two panes: the Subjects have the keys */
 static long pane_top;                  /* the first line of the Subjects shown */
-static short pane_want;                /* its width as asked for (PANECOLS=), in characters */
+static short pane_want;                /* its width as asked for (PANES=), in characters */
+static int pane_hidden;                /* the Subjects pane hidden: ⇧^S (D45) */
 static short pane_n = PANE_COLS;       /* and as the window has room for */
 
 short libwin_handle(void)
@@ -191,7 +193,7 @@ static short strip_h(void)
 /* the Subjects pane, its bar at its right included */
 static short pane_w(void)
 {
-	return panes() ? (short) (pane_n * cw + 2 * MARGIN + libbar_width()) : 0;
+	return panes() && !pane_hidden ? (short) (pane_n * cw + 2 * MARGIN + libbar_width()) : 0;
 }
 
 /* its lines' part: the pane less the bar */
@@ -493,6 +495,13 @@ static short tint_color(int tint)
 	if (ncolors >= 4)
 		return tint == 0 ? 1 : c4[(tint - 1) % 2];
 	return 1;
+}
+
+/* the selection: the family's one colour (theme.c's P_SEL; D42), black
+   on black and white */
+static short sel_color(void)
+{
+	return colour ? pen[P_SEL] : 1;
 }
 
 static short about_color(void)
@@ -1052,7 +1061,7 @@ static void draw_panes(short wx, short wy, short wh, short cx, short cy, short c
 			frame_((short) (wx + 1), y, (short) (wx + pw - 2), (short) (y + lh - 1), 1);
 		else if ((long) i == lib.pane)
 		{
-			fill(focus_left ? link_color() : grey(), (short) (wx + 1), y,
+			fill(focus_left ? sel_color() : grey(), (short) (wx + 1), y,
 			     (short) (wx + pw - 2), (short) (y + lh - 1));
 			color = 0;
 		}
@@ -1132,7 +1141,7 @@ static void draw_chips(short wx, short ww, short y)
 		int sel = i == lib.sel;
 
 		lib_row_text(&lib, (unsigned long) i, t, sizeof(t));
-		fill(sel ? link_color() : 0, x, cy, (short) (x + w - 1), (short) (cy + chh - 1));
+		fill(sel ? sel_color() : 0, x, cy, (short) (x + w - 1), (short) (cy + chh - 1));
 		frame_(x, cy, (short) (x + w - 1), (short) (cy + chh - 1), 1);
 		line_((short) (x + 2), (short) (cy + chh), (short) (x + w), (short) (cy + chh), 1);
 		line_((short) (x + w), (short) (cy + 2), (short) (x + w), (short) (cy + chh), 1);
@@ -1164,7 +1173,7 @@ static void draw_row(long r, short lx, short lw, short y)
 		frame_(lx, y, (short) (lx + lw - 1), (short) (y + rh - 1), 1);     /* the keys are elsewhere */
 	} else if (sel)
 	{
-		fill(panes() && focus_left ? grey() : link_color(), lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
+		fill(panes() && focus_left ? grey() : sel_color(), lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
 		color = dcolor = acolor = 0;
 	} else if (!ground_white)
 		fill(0, lx, y, (short) (lx + lw - 1), (short) (y + rh - 1));
@@ -1346,7 +1355,7 @@ static void draw_rect(short cx, short cy, short cw_, short ch_)
 		const lib_pane *p = lib.pane >= 0 ? &lib.panes[lib.pane] : NULL;
 		short hx = (short) (lx + MARGIN), hy = (short) (wy + header_h() + 4);
 
-		if (cx < wx + pane_w() + 4)
+		if (!pane_hidden && cx < wx + pane_w() + 4)
 			draw_panes(wx, wy, wh, cx, cy, cw_, ch_);
 		if (cy < ly)
 		{
@@ -1647,7 +1656,7 @@ void libwin_open(void)
 			return;
 		}
 		/* where it was left (WINDOW=, when it fits this screen), else the
-		   whole desk (D39; Erez, 17 Nov 2026) */
+		   whole desk (D39; decided 17 Nov 2026) */
 		short mw, mh;
 
 		lib_min(&mw, &mh);
@@ -1918,7 +1927,7 @@ static void rows_now(void)
 /* Two panes: the Subjects pane takes the keys, or gives them back */
 static void focus(int left)
 {
-	if (!panes() || left == focus_left || (left && lib.query[0] != '\0'))
+	if (!panes() || left == focus_left || (left && (lib.query[0] != '\0' || pane_hidden)))
 		return;
 	focus_left = left;
 	log_event("library-focus", left ? "subjects" : "rows", NULL);
@@ -2069,12 +2078,34 @@ void libwin_key(short kstate, short kreturn)
 			old_top = lib.top;
 		}
 	}
+	if (scan == 0x61 && !ctrl && lib_fulltext_stop(&lib))
+	{
+		/* Undo stops a full-text search, its pages found kept (the
+		   guidelines, 3.2: the Undo key stops a job) */
+		log_event("fulltext-stop", lib.note, NULL);
+		rows_due |= R_LIST | R_DETAIL;
+		update_info();
+		return;
+	}
 	if (scan == 0x01 || ascii == 0x1b)
 	{
 		/* Esc (and ^[) empties the search and does nothing else: the
 		   window stays (the guidelines, 3.5) */
 		if (n > 0)
 			set_query("");
+		return;
+	}
+	if (ctrl && shift && scan == 0x1f)
+	{
+		/* ⇧^S shows or hides the sidebar, the Subjects pane (the
+		   guidelines, 3.2; D45, the hub 22 Nov 2026); the outline has none */
+		if (panes())
+		{
+			pane_hidden = !pane_hidden;
+			focus_left = 0;
+			log_event("sidebar", pane_hidden ? "hidden" : "shown", NULL);
+			redraw_all();
+		}
 		return;
 	}
 	if (ctrl)
@@ -2170,7 +2201,7 @@ void libwin_key(short kstate, short kreturn)
 }
 
 /* ---------------------------------------------------------------- */
-/* hypertexts filed under other subjects (Erez, 27 Oct 2026): dragged */
+/* hypertexts filed under other subjects (decided 27 Oct 2026): dragged */
 /* onto a Subjects line or an Outline heading, or from the right      */
 /* button's menu; a subject renamed. The index is where a hypertext   */
 /* belongs (index.h): it changes, and EHYPVIEW.IDX is written again   */
@@ -2412,7 +2443,7 @@ static void file_under(unsigned long g, short mx, short my)
 }
 
 /* the right button: a menu for the line or row under the mouse; it is
-   chosen, never opened (Erez, 27 Oct 2026; the guidelines, 3.3) */
+   chosen, never opened (decided 27 Oct 2026; the guidelines, 3.3) */
 static void right_click(short mx, short my)
 {
 	short x, y, w, h, top;

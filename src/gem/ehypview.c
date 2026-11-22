@@ -60,6 +60,7 @@
 #include "ehvset.h"
 #include "library.h"
 #include "version.h"
+#include "theme.h"
 
 #define VA_START   0x4711
 #define AC_HELP    1025
@@ -101,7 +102,7 @@ typedef struct {
 	char name[160], info[200];
 	ehv_view view;
 	playout lay;                   /* the page laid out (pagedraw.c)  */
-	/* its tabs (Erez, 31 Oct 2026): `view` is the one in front; the
+	/* its tabs (decided 31 Oct 2026): `view` is the one in front; the
 	   others are put away, their place and history kept, their page
 	   read again when one comes to the front. Two or more: the strip */
 	short ntabs, front;
@@ -193,7 +194,7 @@ static long probe_depth(void)
 #endif
 
 /* NatFeats only where EHYPVIEW.INF says NATFEATS=1, which only the test
-   rigs write (Erez, 15 Nov 2026: "make it a .INF setting so that it can be
+   rigs write (decided 15 Nov 2026: "make it a .INF setting so that it can be
    added in our testing but have no bearing outside"; guidelines 6.5): on a
    real machine nf_debug never probes, so the probe's illegal instruction
    never runs (a Vampire V4SA ended EHypView with it). The lines before the
@@ -1276,6 +1277,18 @@ static short fit_right(short x, short nx, short w)
 	return (short) (x + w <= right && nx + w > right ? right - nx : w);
 }
 
+/* where the last viewer window opened (D39's cascade) */
+static short last_place[2];
+
+/* a window's title bar: its height, the cascade's step */
+static short title_h(void)
+{
+	short x, y, w, h;
+
+	wind_calc(WC_WORK, NAME, 0, 0, 200, 200, &x, &y, &w, &h);
+	return y > 0 ? y : (short) (sys_ch + 3);
+}
+
 static void open_window(void)
 {
 	short x, y, w, h, cols;
@@ -1321,14 +1334,33 @@ static void open_window(void)
 		h = desk_h;
 	} else
 	{
-		/* each further window a little down and to the right (this
-		   one, just made, is counted too) */
-		short step = (short) (2 * sys_ch), n = (short) (viewer_windows() - 1);
+		/* each further one cascaded: a title bar's height down and to
+		   the right of the last one opened, the same size, so every
+		   title shows; one that would leave the desk starts again at
+		   its top (decided 22 Nov 2026: "Cascaded"; D39) */
+		short t = title_h(), nx = (short) (last_place[0] + t), ny = (short) (last_place[1] + t);
 
-		if (x + w + n * step <= desk_x + desk_w)
-			x = (short) (x + n * step);
-		if (y + h + n * step <= desk_y + desk_h)
-			y = (short) (y + n * step);
+		/* the same size each, with room for four steps on the desk (a
+		   page's width is the desk's on a 640-wide screen: else every one
+		   would start at the top again) */
+		if (w > desk_w - 4 * t)
+			w = (short) (desk_w - 4 * t);
+		if (h > desk_h - 4 * t)
+			h = (short) (desk_h - 4 * t);
+
+		if (nx + w > desk_x + desk_w || ny + h > desk_y + desk_h)
+		{
+			nx = desk_x;
+			ny = desk_y;
+		}
+		x = nx;
+		y = ny;
+		{
+			char ts[8];
+
+			sprintf(ts, "%d", t);
+			log_event("cascade", ts, NULL);   /* for the tests: the step */
+		}
 	}
 	/* its text on the 8-pixel grid: the VDI draws it far faster (the
 	   guidelines' Speed; TOS 1.04: 65 ms a line on an ST otherwise) */
@@ -1350,6 +1382,8 @@ static void open_window(void)
 	set_sliders();
 	planning = 0;
 	wind_open(cur->h, x, y, w, h);
+	last_place[0] = x;                 /* the next one cascades from it */
+	last_place[1] = y;
 	cur->opened = ++win_clock;         /* the Window menu's order */
 	{
 		char at[32];
@@ -1391,7 +1425,7 @@ static void close_window(void)
 		recent_save();
 	}
 	cur->h = -1;
-	tabs_drop(cur);                    /* its tabs aren't kept (Erez, 31 Oct 2026) */
+	tabs_drop(cur);                    /* its tabs aren't kept (decided 31 Oct 2026) */
 	/* the accessory's last window gone: the pictures kept for going back
 	   let go of (its ST RAM is the pages') */
 	if (is_acc && viewer_windows() == 0)
@@ -1411,7 +1445,7 @@ static void close_window(void)
  * window open nothing.
  */
 /*
- * The Window menu (Erez, 14 Nov 2026; EWeb 1.11's): EHypView's windows,
+ * The Window menu (decided 14 Nov 2026; EWeb 1.11's): EHypView's windows,
  * the viewers by their pages' titles and the library, oldest first, the one in
  * front ticked; one chosen comes to the front as Next window brings it.
  * Its lines are written in the menu's tree after each event (update_menu):
@@ -1635,7 +1669,7 @@ static void scroll_area(short x, short y, short w, short h, long dy)
 		text_noclip(vdi_h);
 		/* the strip that comes in drawn at once, the screen still held
 		   and the mouse still hidden: nothing drawn between the move and
-		   it (the old rows were shown twice till it came, Erez's video,
+		   it (the old rows were shown twice till it came, a video,
 		   13 Nov 2026). Straight onto the page: the whole work area
 		   shows (above), so no rectangle list, and the screen and the
 		   mouse are held already (redraw's six AES calls were some 20 ms
@@ -1779,7 +1813,7 @@ static int pictures_idle(void)
 /*
  * A big page shown from its head (view.h: its first lines at once, the
  * whole page loaded a piece at a time between event calls; the
- * guidelines' Speed, Erez 13 Nov 2026): the rest in the same idle turns
+ * guidelines' Speed, decided 13 Nov 2026): the rest in the same idle turns
  * as the pictures, and in the head's place once the window's pictures
  * are done (a picture half made would be begun again). Before a key, a
  * click or a message that may need the whole page, it is finished at
@@ -2123,7 +2157,7 @@ static void new_window(int follow)
 }
 
 /* ---------------------------------------------------------------- */
-/* tabs (Erez, 31 Oct 2026): several pages in one window              */
+/* tabs (decided 31 Oct 2026): several pages in one window              */
 
 static void set_status(const char *text);
 
@@ -3838,7 +3872,7 @@ int settings_put(const char *key, const char *value, const char *note)
 	const char *was = own_inf != NULL ? inf_get(own_inf, key) : NULL;
 
 	/* the INF is written only when a setting changed (guidelines 6.1,
-	   Erez 12 Nov 2026): the same value as the file has (as it was read
+	   decided 12 Nov 2026): the same value as the file has (as it was read
 	   or last written) leaves it alone, not even opened */
 	if (was != NULL && strcmp(was, value) == 0)
 	{
@@ -3930,7 +3964,7 @@ void app_pane_cols_set(int cols)
 	settings_put("PANES", v, PANES_NOTE);
 }
 
-/* WINDOW=x,y,w,h: the library window's place (6.1, D43; Erez, 17 Nov
+/* WINDOW=x,y,w,h: the library window's place (6.1, D43; decided 17 Nov
    2026: the library only, viewers open as they do), used when it is
    still on this screen */
 int app_window_get(short *x, short *y, short *w, short *h)
@@ -4269,7 +4303,7 @@ static void job_step(void)
 
 /* ---------------------------------------------------------------- */
 /* the index edited in the library: hypertexts filed under other      */
-/* subjects (Erez, 27 Oct 2026; index.h: the index is where a         */
+/* subjects (decided 27 Oct 2026; index.h: the index is where a         */
 /* hypertext belongs). Each change is kept for this run, by path, and */
 /* made again in every index the job hands over (it may have read the */
 /* hypertext before the change); EHYPVIEW.IDX is written again in     */
@@ -4693,7 +4727,7 @@ static void acc_mem_grow(void)
  */
 /* one step of quitting, in ehypview.log next to the program, on the disk
    at once: if the machine bombs once the window has gone (EFTP and EMail
-   did, Erez 10 Nov 2026), the last line says where (EFTP's quit_step).
+   did, decided 10 Nov 2026), the last line says where (EFTP's quit_step).
    Only with Write a log ticked (LOG=1, the guidelines 6.5): else no file,
    not one line */
 static void quit_step(const char *what)
@@ -4797,12 +4831,12 @@ static void start_mark(const char *what)
 
 
 /* the machine checked first (common/atari/cpucheck.c, or cpucheck_cf.S in
-   the FireBee package: the guidelines, 7.4, Erez 22 Nov 2026 "Make the other
+   the FireBee package: the guidelines, 7.4, decided 22 Nov 2026 "Make the other
    apps native on the FireBee too"). Any 68000 runs the 68000 build
    (cpu_need 0); on a FireBee it names the FireBee package */
 const long cpu_need = 0;
 /* each build names the other package (the guidelines, 7.4: the FireBee's
-   holds the same file names; Erez, 22 Nov 2026) */
+   holds the same file names; decided 22 Nov 2026) */
 #ifdef __mcoldfire__
 const char cpu_alert[] = "[3][EHYPVIEW.PRG is for the|FireBee. On an ST, a TT or a|Falcon, install EHypView's|standard package.][ Quit ]";
 const char cpu_acc_alert[] = "[3][EHYPVIEW.ACC is for the|FireBee. On an ST, a TT or a|Falcon, install EHypView's|standard package.][ OK ]";
@@ -4873,6 +4907,20 @@ int app_main(void)
 	planes = work_out[4];
 	start_mark("vdi");
 	pb_vdi(vdi_h);                     /* the Subjects pane's bar: its fast way (common's panebar) */
+	/* the family's UI palette (theme.c; D42, 5.2): the library's
+	   selection. In 256 colours its roles take the nearest of the screen's
+	   pens and none is set, so the pages' pictures keep theirs */
+	theme_keep = 1;
+	theme_init(1, NULL, 0);
+	if (colour)
+	{
+		short rgb[3];
+		char v[24];
+
+		vq_color(vdi_h, pen[P_SEL], rgb);
+		sprintf(v, "%d %d %d", rgb[0], rgb[1], rgb[2]);
+		log_event("theme-sel", v, NULL);   /* for the tests: the selection's colour */
+	}
 	tip_init(NULL);                    /* BubbleGEM reads the tips from global memory taken now */
 	if (is_acc)
 		acc_heap();                    /* nothing malloc'd before it */
