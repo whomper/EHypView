@@ -240,6 +240,9 @@ int lib_fulltext_start(ehv_library *lib);
    limit); 1 = finished (or none running), 0 = more, -1 = out of memory */
 int lib_fulltext_step(ehv_library *lib, unsigned int budget, int (*more)(void));
 
+/* stop it where it is, its hits kept (the Undo key): 1 when one was running */
+int lib_fulltext_stop(ehv_library *lib);
+
 /* text of a row for display */
 void lib_row_text(const ehv_library *lib, unsigned long row, char *buf, unsigned long size);
 

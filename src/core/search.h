@@ -43,7 +43,10 @@ int ehv_fts_step(ehv_fts *s, unsigned int budget, int (*more)(void));
 
 const ehv_fts_hit *ehv_fts_hits(const ehv_fts *s, unsigned long *count);
 unsigned long ehv_fts_pages(const ehv_fts *s);     /* pages searched so far */
+int ehv_fts_percent(const ehv_fts *s);             /* how far, 0-100 */
 int ehv_fts_done(const ehv_fts *s);
+int ehv_fts_stopped(const ehv_fts *s);             /* ended by ehv_fts_stop */
+void ehv_fts_stop(ehv_fts *s);                     /* end it now, its hits kept */
 const char *ehv_fts_query(const ehv_fts *s);
 
 void ehv_fts_free(ehv_fts *s);

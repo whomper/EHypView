@@ -1013,12 +1013,13 @@ static void fts_note(ehv_library *lib)
 
 	ehv_fts_hits(lib->fts, &nh);
 	if (!ehv_fts_done(lib->fts))
-		snprintf(lib->note, sizeof(lib->note), "Searching... %lu pages", ehv_fts_pages(lib->fts));
+		snprintf(lib->note, sizeof(lib->note), "Searching... %d%%", ehv_fts_percent(lib->fts));
 	else if (nh == 0)
-		snprintf(lib->note, sizeof(lib->note), "Not found in %lu pages", ehv_fts_pages(lib->fts));
+		snprintf(lib->note, sizeof(lib->note), "Not found in %lu pages%s", ehv_fts_pages(lib->fts),
+			ehv_fts_stopped(lib->fts) ? " (stopped)" : "");
 	else
 		snprintf(lib->note, sizeof(lib->note), "Found on %lu of %lu pages%s", nh,
-			ehv_fts_pages(lib->fts), nh >= EHV_FTS_MAX_HITS ? " (stopped)" : "");
+			ehv_fts_pages(lib->fts), nh >= EHV_FTS_MAX_HITS || ehv_fts_stopped(lib->fts) ? " (stopped)" : "");
 }
 
 /* the hits that came added to the rows as they are, the full-text rows
@@ -1460,6 +1461,16 @@ int lib_fulltext_start(ehv_library *lib)
 	if (lib->fts == NULL)
 		return -1;
 	return rebuild(lib, 0, 0);
+}
+
+/* the full-text search stopped where it is (the Undo key): 1 when one ran */
+int lib_fulltext_stop(ehv_library *lib)
+{
+	if (lib->fts == NULL || ehv_fts_done(lib->fts))
+		return 0;
+	ehv_fts_stop(lib->fts);
+	fts_note(lib);
+	return 1;
 }
 
 int lib_fulltext_step(ehv_library *lib, unsigned int budget, int (*more)(void))

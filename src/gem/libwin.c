@@ -2069,6 +2069,15 @@ void libwin_key(short kstate, short kreturn)
 			old_top = lib.top;
 		}
 	}
+	if (scan == 0x61 && !ctrl && lib_fulltext_stop(&lib))
+	{
+		/* Undo stops a full-text search, its pages found kept (the
+		   guidelines, 3.2: the Undo key stops a job) */
+		log_event("fulltext-stop", lib.note, NULL);
+		rows_due |= R_LIST | R_DETAIL;
+		update_info();
+		return;
+	}
 	if (scan == 0x01 || ascii == 0x1b)
 	{
 		/* Esc (and ^[) empties the search and does nothing else: the

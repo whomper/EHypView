@@ -20,7 +20,7 @@ struct ehv_fts {
 	unsigned long guide;          /* hypertext being searched     */
 	hyp_doc *doc;                 /* open for the current guide   */
 	unsigned short entry;         /* next entry to look at        */
-	int done;
+	int done, stopped;
 	unsigned long pages;
 	ehv_fts_hit *hits;
 	unsigned long nhits, cap;
@@ -83,7 +83,40 @@ const ehv_fts_hit *ehv_fts_hits(const ehv_fts *s, unsigned long *count)
 }
 
 unsigned long ehv_fts_pages(const ehv_fts *s) { return s->pages; }
+
+/* how far it is, 0-100: the hypertexts searched, and the part of the one
+   being searched (the guidelines' job formats: 45%, D35) */
+int ehv_fts_percent(const ehv_fts *s)
+{
+	unsigned long n = s->idx->nguides, part = 0;
+
+	if (s->done || n == 0)
+		return 100;
+	if (s->guide >= n)
+		return 99;
+	if (s->doc != NULL && s->doc->num_entries > 0)
+		part = (unsigned long) s->entry * 100 / s->doc->num_entries;
+	return (int) ((s->guide * 100 + part) / n);
+}
 int ehv_fts_done(const ehv_fts *s) { return s->done; }
+int ehv_fts_stopped(const ehv_fts *s) { return s->stopped; }
+
+/* stopped by the user (the Undo key, the guidelines' 3.2: a job's stop): the
+   hits so far kept, the hypertext being read let go */
+void ehv_fts_stop(ehv_fts *s)
+{
+	if (s == NULL || s->done)
+		return;
+	hyp_page_job_free(s->job);
+	s->job = NULL;
+	hyp_page_free(s->pg);
+	s->pg = NULL;
+	free(s->first_text);
+	s->first_text = NULL;
+	hyp_close(s->doc);
+	s->doc = NULL;
+	s->done = s->stopped = 1;
+}
 const char *ehv_fts_query(const ehv_fts *s) { return s->query; }
 
 /* the text of one line, as typed and folded; -1 when out of memory */

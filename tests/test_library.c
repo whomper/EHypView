@@ -726,8 +726,19 @@ static void test_fulltext(const ehv_index *idx)
 		const ehv_fts_hit *ha, *hb;
 
 		CHECK(a != NULL && b != NULL);
-		while (ehv_fts_step(a, 1, NULL) == 0)
-			steps++;
+		{
+			int last = 0, ok = 1;              /* how far: never back, under 100 until done */
+
+			while (ehv_fts_step(a, 1, NULL) == 0)
+			{
+				int p = ehv_fts_percent(a);
+
+				ok = ok && p >= last && p < 100;
+				last = p;
+				steps++;
+			}
+			CHECK(ok && last > 0 && ehv_fts_percent(a) == 100);
+		}
 		CHECK(ehv_fts_step(b, 100000, NULL) == 1);
 		ha = ehv_fts_hits(a, &na);
 		hb = ehv_fts_hits(b, &nb);
@@ -743,6 +754,22 @@ static void test_fulltext(const ehv_index *idx)
 		ehv_fts_free(a);
 		ehv_fts_free(b);
 		CHECK(ehv_fts_begin(NULL, "x") == NULL);
+	}
+
+	/* stopped (the Undo key): the hits so far kept, done at once */
+	{
+		ehv_fts *s = ehv_fts_begin(idx, "page");
+		unsigned long n0, n1;
+
+		CHECK(s != NULL);
+		CHECK(ehv_fts_step(s, 3, NULL) == 0);
+		ehv_fts_hits(s, &n0);
+		ehv_fts_stop(s);
+		CHECK(ehv_fts_done(s) && ehv_fts_stopped(s) && ehv_fts_percent(s) == 100);
+		CHECK(ehv_fts_step(s, 100, NULL) == 1);
+		ehv_fts_hits(s, &n1);
+		CHECK(n1 == n0);
+		ehv_fts_free(s);
 	}
 }
 
