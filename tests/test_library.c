@@ -451,7 +451,7 @@ static void test_subjects(void)
 }
 
 /*
- * Filing hypertexts under other subjects (Erez, 27 Oct 2026): the
+ * Filing hypertexts under other subjects (decided 27 Oct 2026): the
  * subject a hypertext dropped on a Subjects line gets, and renaming a
  * subject or a part in the index.
  */
@@ -542,7 +542,7 @@ static void test_refile(void)
 
 /*
  * "Documentation/Editors" and "Dokumentation/Editoren" are filed under
- * their part (Erez, 22 Oct 2026): no Documentation subject over them.
+ * their part (decided 22 Oct 2026): no Documentation subject over them.
  */
 static void test_documentation(void)
 {

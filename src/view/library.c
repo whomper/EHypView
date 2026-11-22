@@ -170,7 +170,7 @@ static int build_recent(ehv_library *lib)
 
 /* the subject a hypertext is filed under: "Documentation/Editors" and
    "Dokumentation/Editoren" under their part, as Editors, since
-   Documentation alone says nothing of what a hypertext is about (Erez,
+   Documentation alone says nothing of what a hypertext is about (decided
    22 Oct 2026); "Documentation" without a part stays as it is */
 const char *lib_subject(const char *s)
 {

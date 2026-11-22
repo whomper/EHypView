@@ -146,7 +146,7 @@ void lib_free(ehv_library *lib);
 int lib_set_index(ehv_library *lib, const ehv_index *idx);
 
 /*
- * Hypertexts filed under other subjects (Erez, 27 Oct 2026): the index
+ * Hypertexts filed under other subjects (decided 27 Oct 2026): the index
  * is where a hypertext belongs, its @subject only where it starts
  * (index.h). These change the index the library shows, which the caller
  * then saves.

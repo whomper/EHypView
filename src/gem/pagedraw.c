@@ -1178,7 +1178,7 @@ void layout_draw(const playout *L, short ox, long oy, long top,
 					   (text_bold_strike, common/ui/text.c). The
 					   VDI's bold widens each letter (NVDI by a pixel
 					   or more), and a run of it ran past its cells,
-					   the next run covering its last letters (Erez's
+					   the next run covering its last letters (a
 					   photo, 27 Oct 2026); the layout's cells are
 					   fixed */
 					short twice = !by_hand && (fx & 1) ? 1 : 0;

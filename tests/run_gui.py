@@ -23,6 +23,7 @@ import os
 import shutil
 import subprocess
 import sys
+import struct
 import time
 import types
 
@@ -43,6 +44,7 @@ N, D, DELETE = 0x31, 0x20, 0x53
 C_KEY = 0x2E
 INSERT = 0x52
 T_KEY = 0x14
+S_KEY = 0x1F
 # Font... has no key (Options > Font..., D6): Insert's menu on a page, Up
 # from the bottom (About EHypView...) to Font..., Return
 FONT_KEYS = [INSERT, 0x48, 0x48, RETURN]
@@ -89,6 +91,24 @@ def tab_menu_item(i, n):
         rig.press(("click", int(at[-1][i + 1]) + 24, int(at[-1][0]) + 15 + 16 * n))
         return True
     return step
+
+
+def cascaded(rig):
+    """the second and third viewer windows cascaded (decided 22 Nov 2026,
+    "Cascaded"; D39): each a title bar's height ("cascade T") down and to
+    the right of the last one (right by T, then onto the 8-pixel grid), the
+    two the same size"""
+    evs = rig.events()
+    at = [tuple(int(v) for v in ev.split()[1:5]) for ev in evs if ev.startswith("window-at ")][-3:]
+    ts = [int(ev.split()[1]) for ev in evs if ev.startswith("cascade ")][-2:]
+    ok = len(at) == 3 and len(ts) == 2 and ts[0] > 0
+    if ok:
+        (x1, y1, _, _), (x2, y2, w2, h2), (x3, y3, w3, h3) = at
+        t = ts[0]
+        ok = (y2 - y1 == t and y3 - y2 == t and 0 <= x2 - (x1 + t) < 8 and 0 <= x3 - (x2 + t) < 8 and
+              (w2, h2) == (w3, h3))
+    print("%s  viewers 2 and 3 cascaded: %s, step %s" % ("ok  " if ok else "FAIL", at, ts))
+    return ok
 
 
 STEPS = [
@@ -144,6 +164,7 @@ STEPS = [
     ([("ctrl", N)], ["window new 2", "page %s Index" % IMAGES]),
     # six at most; the alert that says so: Esc and Undo close it, no window more
     ([("ctrl", N)], ["window new 3"]),
+    (cascaded, []),
     ([("ctrl", N)], ["window new 4"]),
     ([("ctrl", N)], ["window new 5"]),
     ([("ctrl", N)], ["window new 6"]),
@@ -594,7 +615,7 @@ def copy_dir(name, inf, settings=None, start=None):
 # with the mouse (8x16 system font, Falcon VGA): a link, the right
 # button's menu, and each menu (title x, y, then the item's x, y)
 DESK, FILE, EDIT, VIEW, NAV, BOOK = (56, 9), (120, 9), (168, 9), (216, 9), (280, 9), (364, 9)
-# the Window menu (Erez, 14 Nov 2026) after Bookmarks: Options and Help 64 pixels on
+# the Window menu (decided 14 Nov 2026) after Bookmarks: Options and Help 64 pixels on
 WINDOWMENU, OPTIONS, HELPMENU = (440, 9), (508, 9), (568, 9)
 
 # the Settings dialog, centred on the screen: its pages on the left, the
@@ -602,7 +623,7 @@ WINDOWMENU, OPTIONS, HELPMENU = (440, 9), (508, 9), (568, 9)
 # choice (a pop-up opens over its button, the choice shown on it: the
 # second just below), the first folder field
 SET_LIBRARY, SET_FIELD = (135, 187), (300, 237)
-# General: START's radios (D24; Erez, 19 Nov 2026), "At start" and "1 minute"
+# General: START's radios (D24; decided 19 Nov 2026), "At start" and "1 minute"
 SET_START_NOW, SET_START_MIN = (332, 203), (416, 203)
 SET_LAYOUT_PANES = (428, 177)    # Library: the "Two panes" radio (5.6)
 SET_LOG = (300, 342)            # General: "Write a log (EHYPVIEW.LOG)", its words
@@ -671,6 +692,11 @@ PANES_STEPS = [
     ([RETURN], ["library-focus rows"]),
     ([RETURN], ["page %s Main" % BASIC]),             # its first hypertext
     ([("ctrl", L)], ["library *"]),
+    # ⇧^S hides the sidebar, the Subjects pane (D45), and shows it again;
+    # Left can't take the keys there while it is hidden
+    ([("ctrl+shift", S_KEY)], ["sidebar hidden"]),
+    ([LEFT], ["!library-focus subjects"]),
+    ([("ctrl+shift", S_KEY)], ["sidebar shown"]),
     ([("ctrl", Q)], ["quit"]),
 ]
 
@@ -769,7 +795,7 @@ MOUSE_STEPS = [
     ([("rclick", vx(120), vy(142))], ["menu popup"]),               # on a link, the menu has
     ([("click", vx(150), vy(189))], ["menu link-window", "window new 2", "page %s Second" % BASIC]),
     ([("ctrl", U)], ["closed viewer"]),
-    # tabs (Erez, 31 Oct 2026): the link's menu has "Link in new tab"
+    # tabs (decided 31 Oct 2026): the link's menu has "Link in new tab"
     ([("rclick", vx(120), vy(142))], ["menu popup"]),
     ([("click", vx(150), vy(207))], ["menu link-tab", "tab new 2", "page %s Second" % BASIC, "strip *"]),
     ([BACKSPACE], ["page %s Main" % BASIC]),                   # its Back: where the link was
@@ -865,7 +891,7 @@ def check_scrap(d):
 
 
 # The accessory with a GDOS font under NVDI (guidelines 2.2), for the hub's
-# runs with Erez's NVDI (AERA_WITH_NVDI=1, common/tools/machines.py; the
+# runs with the owner's NVDI (AERA_WITH_NVDI=1, common/tools/machines.py; the
 # case is skipped without it). Keyboard only, but for the desktop's Desk
 # menu, so no TOS's layout matters. Boot 1: EHYPVIEW.PRG (--auto) measures
 # the GDOS fonts in its selector (EHYPVIEW.FNT) and quits; the accessory,
@@ -984,7 +1010,7 @@ def acc_nvdi_dir():
 
 def acc_nvdi():
     if not (os.environ.get("AERA_WITH_NVDI") or os.environ.get("ACC_NVDI_TRY")):
-        print("skip  accnvdi: runs under Erez's NVDI only (AERA_WITH_NVDI=1 make accnvdi-test)")
+        print("skip  accnvdi: runs under the owner's NVDI only (AERA_WITH_NVDI=1 make accnvdi-test)")
         return True
     if not have_display():
         print("skip  accnvdi: needs Xvfb and xdotool")
@@ -1108,7 +1134,7 @@ def st_field():
 # 2026): each page shown on a press is let go before anything is drawn,
 # so a second press 70 or 150 ms later is never taken for the first's
 # release: a double click on a page, then a click on one page and at
-# once on the other, both seen; on an ST and on Erez's Falcon with NVDI
+# once on the other, both seen; on an ST and on the owner's Falcon with NVDI
 SET_GENERAL = (135, 147)
 
 
@@ -1144,6 +1170,68 @@ QUICK_STEPS = quick_scenario(((70, False), (150, True)))
 QUICK_STEPS_ST = quick_scenario(((300, True),))
 
 
+def sel_bar(rig):
+    """the library's chosen row filled with the family's selection colour
+    (theme.c's P_SEL, D42; "theme-sel R G B", VDI 0-1000): a run of at
+    least 150 pixels of it on the screen"""
+    sel = [ev.split()[1:4] for ev in rig.events() if ev.startswith("theme-sel ")]
+    if not sel:
+        print("FAIL  no theme-sel")
+        return False
+    want = tuple(int(v) * 255 // 1000 for v in sel[-1])
+    shot = os.path.abspath(os.path.join(OUT, "selbar.bmp"))
+    if os.path.exists(shot):
+        os.remove(shot)
+    rig.send("hatari-debug screenshot %s" % shot)
+    deadline = time.time() + 10
+    while time.time() < deadline and not (os.path.exists(shot) and os.path.getsize(shot) > 0):
+        time.sleep(0.5)
+    time.sleep(1)
+    data = open(shot, "rb").read()
+    off = struct.unpack_from("<I", data, 10)[0]
+    w, h, _, bpp = struct.unpack_from("<iiHH", data, 18)
+    step, top_down, h = bpp // 8, h < 0, abs(h)
+    stride = (w * step + 3) & ~3
+    best = 0
+    for y in range(h):
+        row = off + (y if top_down else h - 1 - y) * stride
+        run = 0
+        for x in range(w):
+            i = row + x * step
+            c = (data[i + 2], data[i + 1], data[i])
+            run = run + 1 if all(abs(c[k] - want[k]) <= 8 for k in range(3)) else 0
+            best = max(best, run)
+    ok = best >= 150
+    print("%s  the library's selection in %s (VDI %s): a run of %d pixels" % ("ok  " if ok else "FAIL", want,
+                                                                           " ".join(sel[-1]), best))
+    return ok
+
+
+SELBAR_STEPS = [
+    ([], ["menu shown", "index 5 guides"]),
+    ([("ctrl", L)], ["library *"]),
+    ([DOWN, DOWN], []),
+    (sel_bar, []),
+    ([("ctrl", Q)], ["quit"]),
+]
+
+
+def selbar():
+    """the selection bar in 256 colours, on the owner's configuration"""
+    d = copy_dir("selbar", "PATHS=C:\\FIXT\nREF=C:\\FIXT\\ALL.REF\n")
+    keep = os.environ.get("AERA_WITH_NVDI")
+    if machines.erz_env().get("AERA_WITH_NVDI"):
+        os.environ["AERA_WITH_NVDI"] = "1"
+    try:
+        print("      selbar on %s" % machines.Machine(machines.ERZ_MACHINE, d).describe())
+        return run_scenario("selbar", d, SELBAR_STEPS, machine=machines.ERZ_MACHINE)
+    finally:
+        if keep is None:
+            os.environ.pop("AERA_WITH_NVDI", None)
+        else:
+            os.environ["AERA_WITH_NVDI"] = keep
+
+
 def quick():
     ok = True
     for machine, nvdi in (("ST-1:mono", False), (machines.ERZ_MACHINE, True)):
@@ -1167,7 +1255,7 @@ def quick():
     return ok
 
 
-# EHYPVIEW.INF written only when a setting changed (guidelines 6.1, Erez
+# EHYPVIEW.INF written only when a setting changed (guidelines 6.1, decided
 # 12 Nov 2026): the Font dialog and Settings left with OK and nothing
 # different, then a quit, leave the file as it was, its date too (the
 # second run; the first may write what it adds); Settings with START=
@@ -1178,6 +1266,10 @@ INF_SAME_STEPS = [
     ([RETURN], ["font-chosen *"]),
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
     ([RETURN], ["dialog-closed settings ok"]),
+    # the library opened and closed where it was: WINDOW= (and PANES=)
+    # written only when they changed (decided 22 Nov 2026, "Both"; 6.1)
+    ([("ctrl", L)], ["library *"]),
+    ([("ctrl", U)], ["closed library"]),
     ([("ctrl", Q)], ["quit"]),
 ]
 INF_CHANGE_STEPS = [
@@ -1305,7 +1397,7 @@ def panebar():
 
 # one click, one step (guidelines 5.1, 28 Oct 2026): the AES sent a click
 # on a window's track or arrow twice, so the window moved two pages a
-# click (Erez: "still jumping two positions"); TOS 4.04 every click, TOS
+# click (a report: "still jumping two positions"); TOS 4.04 every click, TOS
 # 1.04 now and then (ClaudeST); common's evnt_multi_ drops the echo. On
 # the Falcon-4 with TOS 4.04 and the ST in mono with TOS 1.04: BIG.HYP,
 # whose window must fit the screen (wind_x8 had moved it 7 pixels past
@@ -1424,7 +1516,7 @@ def arrowed():
     return ok
 
 
-# hypertexts filed under other subjects (Erez, 27 Oct 2026; the index is
+# hypertexts filed under other subjects (decided 27 Oct 2026; the index is
 # where a hypertext belongs): the twenty of the pane bar's run, each its
 # own subject, SubNN/EHypVie. A right click on a row chooses it and shows
 # its menu, never opens it; S00 dragged onto Sub01 is filed there; Sub01
@@ -1474,7 +1566,7 @@ def refile():
 # the person taking them gives: nothing is fetched, no other AERA program's
 # files come from here, guidelines 1.2) and EHypView's own in C:\\GUIDES,
 # on the Falcon in 256 colours
-# (Erez, 28 Oct 2026: the pictures shown are the 256-colour ones; MACHINE=
+# (decided 28 Oct 2026: the pictures shown are the 256-colour ones; MACHINE=
 # another); each step's screenshot named in SHOT_FILES goes to docs/
 SHOT_GUIDE = r"C:\GUIDES\EHYPVIEW.HYP"
 SHOT_MACHINE = os.environ.get("MACHINE", "Falcon:256")
@@ -1629,6 +1721,7 @@ def main():
                                   ["START=now", "PATHS=C:\\FIXT\\SUB;C:\\NOWHERE;" + LONG, "LIBRARY=panes"])
             ok = ok and st_field()
             ok = ok and quick()
+            ok = ok and selbar()
             ok = ok and inf_same()
             ok = ok and look()
             ok = ok and panebar()
