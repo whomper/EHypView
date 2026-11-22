@@ -57,6 +57,9 @@ extern int theme_keep;
 /* with theme_keep, a palette the app has read already (256 entries, VDI 0-1000): taken instead of the 256
    vq_color calls (80 ms under NVDI at EHypView's start, 22 Nov 2026); 0 reads it as before */
 extern const short (*theme_palette)[3];
+/* with theme_keep, the roles wanted as bits (1 << P_SEL...); 0 every role. A role left out keeps black and white's
+   pen (P_PANEL 0, the others 1): EHypView takes P_SEL alone, its start 15 ms sooner under NVDI (22 Nov 2026) */
+extern unsigned long theme_roles;
 
 /* after the VDI is open: colour_on is the app's option; extra the app's roles (P_BASE, P_BASE + 1, ...), n of
    them (n + P_BASE <= THEME_MAX); 0 and 0 for the six alone. Calls theme_exit first, so it may be repeated

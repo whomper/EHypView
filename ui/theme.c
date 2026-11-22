@@ -11,6 +11,7 @@ short pen[THEME_MAX];
 int colour;
 int theme_keep;
 const short (*theme_palette)[3];
+unsigned long theme_roles;
 
 #define FIRST_PEN 16		/* past the desktop's sixteen */
 
@@ -61,7 +62,8 @@ void theme_accent4(short role, const short rgb[3])
    light pens while a dark one is left: the light pens marked once, the differences in shorts (16 x 16 bits, the
    68000's own multiply, not libgcc's 32-bit one), an exact match ending the search. 16 colours: want16, 256: rgb.
    EHypView's start (22 Nov 2026): 25 ms on a 16-colour Falcon, 70 under NVDI in 256, before this */
-static void nearest_roles(const short (*pal)[3], short n, short all, const THEME_ROLE *extra, int by_rgb)
+static void nearest_roles(const short (*pal)[3], short n, short all, const THEME_ROLE *extra, int by_rgb,
+			  unsigned long want_roles)
 {
 	unsigned char light[256];
 	short i, p;
@@ -70,6 +72,8 @@ static void nearest_roles(const short (*pal)[3], short n, short all, const THEME
 	for (i = 0; i < all; i++) {
 		const THEME_ROLE *r = role(i, extra);
 		const short *want = by_rgb ? r->rgb : r->want16;
+		if (want_roles && !(want_roles & (1UL << i)))
+			continue;	/* left at black and white's pen */
 		short best = -1;
 		long bd = 0x7fffffffL;
 		int pass;
@@ -92,9 +96,10 @@ static void nearest_roles(const short (*pal)[3], short n, short all, const THEME
 			}
 		pen[i] = best < 0 ? 1 : best;
 	}
-	for (i = P_BASE; i < all; i++)
-		if (role(i, extra)->not_dim && pen[i] == pen[P_DIM])
-			pen[i] = pen[P_TEXT];
+	if (!want_roles || (want_roles & (1UL << P_DIM)))
+		for (i = P_BASE; i < all; i++)
+			if (role(i, extra)->not_dim && pen[i] == pen[P_DIM])
+				pen[i] = pen[P_TEXT];
 }
 
 /* the screen's first n pens: theme_palette when the app holds it, else read once (n vq_color calls) */
@@ -125,7 +130,7 @@ void theme_init(int colour_on, const THEME_ROLE *extra, short n)
 		return;
 	if (planes >= 8 && theme_keep) {
 		short own[256][3];
-		nearest_roles(palette_of(256, own), 256, all, extra, 1);
+		nearest_roles(palette_of(256, own), 256, all, extra, 1, theme_roles);
 	} else if (planes >= 8) {
 		for (i = 0; i < all; i++) {
 			short rgb[3];
@@ -140,6 +145,6 @@ void theme_init(int colour_on, const THEME_ROLE *extra, short n)
 		nset = all;
 	} else {
 		short own[16][3];
-		nearest_roles(palette_of(16, own), 16, all, extra, 0);	/* the 16 read once, not once a role */
+		nearest_roles(palette_of(16, own), 16, all, extra, 0, theme_keep ? theme_roles : 0);	/* the 16 read once, not once a role */
 	}
 }
