@@ -8,13 +8,19 @@ the gate table; guidelines 1.2) that `make test`, `make gui-test`,
 named by machines.py's describe(). With ROWs (the table's numbers), those
 alone.
 
-- 1-4, 7-9: the program on the machine with a page given on its command
+- 1-4, 8, 9: the program on the machine with a page given on its command
   line, the index built, Settings opened and cancelled, the library opened
   and closed, quit: by keys, so it holds on any screen; no CRASH.LOG.
 - 5, 6: common/tests/xaaes (FreeMiNT 1.17 and XaAES on EmuTOS, Erez's NVDI)
   on its Falcon, its TT and its 68060 (a CT60's stand-in), and once with
   the guides on a case-sensitive ext2 drive (6.6): the library, Settings,
   quit.
+- 7: the FireBee stand-in (a 68060, so not the FireBee build's ColdFire
+  code: that is make cf-test's) has the standard build refuse, as the
+  guidelines' 7.4 wants: tests/hatari/firebee_test.py on FireBee:16 and
+  FireBee:256, the program's alert naming the FireBee package and no
+  window, the accessory's boot reaching the desktop and its alert when
+  opened; with its Falcon and ST cases, the FireBee build's alerts.
 - 10: tests/hatari/acc_files.py on ST-1:mono (first and second boot; the
   Falcon's is make acc-files-test).
 - 12: one boot with no NATFEATS= (the program says nothing through
@@ -54,8 +60,6 @@ BOOTS = [
     ("3", "Falcon:65536", True),
     ("4", "TT:ttmed", False),
     ("4", "TT:mono", False),
-    ("7", "FireBee:16", False),
-    ("7", "FireBee:256", False),
     ("8", "ST:mono", False),
     ("8", "ST:med", False),
     ("8", "ST-1:mono", False),
@@ -133,7 +137,24 @@ def xaaes():
             f.write(r.stdout + r.stderr)
         note(row, ok, what + ("" if ok else " (see %s.out, %s/hatari.log)" % (work, work)))
     note("6", True, "plain TOS on a 68060: machines.py has no such machine; the 68060 runs as XaAES's "
-         "ct60 (above) and as the FireBee stand-in (row 7)") if not WANT or "6" in WANT else None
+         "ct60 (above); the FireBee stand-in's 68060 (row 7) has the standard build refuse") if not WANT or "6" in WANT else None
+
+
+def firebee():
+    if WANT and "7" not in WANT:
+        return
+    out = os.path.join(OUT, "gate-firebee")
+    env = dict(os.environ, FIREBEE_STANDIN="FireBee:16,FireBee:256")
+    env.pop("AERA_WITH_NVDI", None)
+    r = subprocess.run(["python3", os.path.join(HERE, "hatari", "firebee_test.py"), HDIR,
+                        os.path.join(ROOT, "build", "fb"), out], capture_output=True, text=True, env=env)
+    with open(out + ".log", "w") as f:
+        f.write(r.stdout + r.stderr)
+    lines = [l for l in r.stdout.splitlines() if l.startswith(("ok  ", "FAIL"))]
+    for l in lines:
+        note("7", l.startswith("ok"), l[6:])
+    if r.returncode != 0 and all(l.startswith("ok") for l in lines):
+        note("7", False, "firebee_test.py ended %d (see %s.log)" % (r.returncode, out))
 
 
 def accessory():
@@ -208,6 +229,7 @@ def main():
     xvfb = None
     boots()
     xaaes()
+    firebee()
     accessory()
     natfeats_off()
     if xvfb:

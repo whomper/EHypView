@@ -463,7 +463,7 @@ $(PROF)/EHYPVIEW.PRG: $(PROF)/ehypview.elf common/tools/elf2tos.py
 # standards/TEST-MATRIX.md) the other rigs don't boot, one boot a row:
 # tests/gate.py (ROWS=1 5 ... for some; needs hatari, Xvfb and xdotool,
 # common/tests/xaaes's make base for rows 5 and 6)
-gate-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG
+gate-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG build/fb/ACOPEN.PRG
 	python3 tests/gate.py $(HATARI_DIR) build/gate $(ROWS)
 
 # pictures and text in colour in every screen mode: Falcon 4, 16, 256 and

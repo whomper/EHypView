@@ -26,6 +26,9 @@ import machines  # noqa: E402
 
 HDIR, FBDIR, WORK = sys.argv[1], sys.argv[2], os.path.abspath(sys.argv[3])
 STD, FB = HDIR, FBDIR
+# the stand-in's rows (FIREBEE_STANDIN=FireBee:16,FireBee:256 from the gate's
+# row 7, tests/gate.py)
+STANDIN = os.environ.get("FIREBEE_STANDIN", "FireBee:16").split(",")
 failed = 0
 
 
@@ -83,9 +86,9 @@ def main():
                 return 1
 
     # the programs: the alert at once, and nothing after it
-    for name, spec, d, words in (("std-firebee", "FireBee:16", STD, TO_FB),
-                                 ("fb-falcon", "Falcon-4:16", FB, TO_STD),
-                                 ("fb-st", "ST:mono", FB, TO_STD)):
+    for name, spec, d, words in ([("std-" + s.replace(":", "-").lower(), s, STD, TO_FB) for s in STANDIN] +
+                                 [("fb-falcon", "Falcon-4:16", FB, TO_STD),
+                                  ("fb-st", "ST:mono", FB, TO_STD)]):
         m, calls = boot(name, spec, [(d, "EHYPVIEW.PRG")], "EHYPVIEW.PRG")
         a = alerts(calls)
         check(len(a) == 1 and "EHYPVIEW.PRG " + words in a[0] and "[ Quit ]" in a[0] and not windows(calls),
@@ -99,9 +102,9 @@ def main():
 
     # the accessories: the boot reaches the desktop (ACOPEN.PRG runs from
     # it), the Desk entry is registered, and opening it shows the alert
-    for name, spec, d, words in (("acc-fb-falcon", "Falcon:16", FB, TO_STD),
-                                 ("acc-fb-st", "ST:mono", FB, TO_STD),
-                                 ("acc-std-firebee", "FireBee:16", STD, TO_FB)):
+    for name, spec, d, words in ([("acc-fb-falcon", "Falcon:16", FB, TO_STD),
+                                  ("acc-fb-st", "ST:mono", FB, TO_STD)] +
+                                 [("acc-std-" + s.replace(":", "-").lower(), s, STD, TO_FB) for s in STANDIN]):
         m, calls = boot(name, spec, [(d, "EHYPVIEW.ACC"), (FB, "ACOPEN.PRG")], "ACOPEN.PRG")
         reg = [c for c in calls if " menu_register(" in c and "EHypView" in c]
         ran = any(" appl_write(" in c for c in calls)
