@@ -215,6 +215,11 @@ int main(void)
 	theme_init(1, mine, 3);
 	check(nget == 0 && pen[P_SEL] == 200, "theme_palette: the app's own table, no vq_color, the same pens");
 	theme_exit();
+	theme_roles = 1UL << P_SEL;
+	theme_init(1, mine, 3);
+	check(pen[P_SEL] == 200 && pen[P_TEXT] == 1 && pen[P_PANEL] == 0, "theme_roles: P_SEL alone found, the others black and white");
+	theme_exit();
+	theme_roles = 0;
 	theme_palette = 0;
 	theme_keep = 0;
 
