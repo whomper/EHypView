@@ -13,7 +13,7 @@ stretch from it to the program's next event calls (the stretches of the
 background index, "idx-*", are left out).
 
 On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
-"Falcon-4:16+nvdi" under Erez's NVDI, which machines.py installs):
+"Falcon-4:16+nvdi" under the reference configuration's NVDI, which machines.py installs):
 
   page     EHYPVIEW.PRG started with BIG.HYP (a page of 900 lines): the
            start; Down, Shift+Down (a line, a page); Tab (a link chosen);
@@ -26,7 +26,7 @@ On each machine in SPEED_MACHINES (default ST:mono, ST:med, Falcon-4:16;
   front    ECal's guide from its release (the family's front page, 4.3)
   acc      EHYPVIEW.ACC opened from the Desk menu (Xvfb and xdotool)
            (acc and help skip ST and Falcon-4: the accessory on those
-           4 MB machines is no longer a test configuration, Erez, 4 Nov
+           4 MB machines is no longer a test configuration, decided 4 Nov
            2026, AERA-Atari 21ba998)
   click    a link in BIG.HYP pressed and let go (Xvfb and xdotool; the
            guidelines, 5.8): the press, the link drawn chosen; the
@@ -72,9 +72,9 @@ COMMA, L, U, Q = 0x33, 0x26, 0x16, 0x10
 KEY, LINE, PAGE, DIALOG, WHOLE, ACC, START = 50, 50, 150, 150, 300, 500, 2000
 SLICE = 100                     # a longer job's slices: a key answered within
 # on an 8 MHz ST (ST, ST-1) a dialog over about half the screen or more,
-# Settings, has 300 ms (the guidelines' table, Erez 1 Nov 2026)
+# Settings, has 300 ms (the guidelines' table, decided 1 Nov 2026)
 ST_DIALOG = 300
-# times Erez accepted over the guidelines' (the row, the machine: its figure): the
+# times accepted over the guidelines' (the row, the machine: its figure): the
 # line scroll, the copy at the bus and the scroll's own wind_update (20 Nov 2026,
 # "Accept"; AERA-Atari PERF-REVISIT)
 ACCEPTED = {
@@ -94,6 +94,25 @@ ACCEPTED = {
     ("search: the rows found drawn", "ST:med"): 210,
     ("full-text search: its slices", "ST:mono"): 110,
     ("full-text search: its slices", "ST:med"): 115,
+    # for 2.11 (23 Nov 2026, "Accept and release"): the ticks over the
+    # figures above, the big page under NVDI, and the picture pages, whose
+    # "line" is a picture's (48-80 px): their lines stay owed
+    ("big page: a line scrolled (Down)", "ST:med"): 65,
+    ("big page: a line scrolled (Down)", "Falcon-4:256+nvdi"): 80,
+    ("a key: Tab chooses a link", "ST:mono"): 65,
+    ("a key: Tab chooses a link", "ST:med"): 65,
+    ("a letter typed in the library's search", "ST:mono"): 55,
+    ("search: started, its rows made", "ST:mono"): 145,
+    ("IMAGES.HYP (16-colour picture): a line scrolled (Down)", "ST:mono"): 85,
+    ("IMAGES.HYP (16-colour picture): a line scrolled (Down)", "ST:med"): 75,
+    ("IMAGES.HYP (16-colour picture): a line scrolled (Down)", "Falcon-4:16"): 55,
+    ("IMAGES.HYP (16-colour picture): a line scrolled (Down)", "Falcon-4:256+nvdi"): 85,
+    ("a front page (program): a line scrolled (Down)", "ST:mono"): 125,
+    ("a front page (program): a line scrolled (Down)", "ST:med"): 120,
+    ("a front page (program): a line scrolled (Down)", "Falcon-4:16"): 60,
+    ("a front page (program): a line scrolled (Down)", "Falcon-4:256+nvdi"): 85,
+    ("a front page (program): a page scrolled (Shift+Down)", "ST:mono"): 185,
+    ("a front page (program): a page scrolled (Shift+Down)", "ST:med"): 190,
 }
 
 results = {}                    # (action, limit) -> {machine: ms}
@@ -568,7 +587,7 @@ def main():
             else:
                 bad = v > lim
                 # on the 8 MHz ST a window is drawn whole where pieces
-                # can't meet the 10 %, at whatever its stretch (Erez, 19
+                # can't meet the 10 %, at whatever its stretch (decided 19
                 # Nov 2026: "Draw whole on the ST"): its 300 isn't its limit
                 if bad and lim == WHOLE and s.split(":")[0] in ("ST", "ST-1"):
                     bad = False
@@ -576,7 +595,7 @@ def main():
                 if bad and (a, s) in ACCEPTED:
                     bad = v > ACCEPTED[(a, s)]
                     if not bad:
-                        whole_st.append("%s on %s, %d ms (Erez's %d)" % (a, s, v, ACCEPTED[(a, s)]))
+                        whole_st.append("%s on %s, %d ms (accepted %d)" % (a, s, v, ACCEPTED[(a, s)]))
                 if bad and a.startswith("Settings opened") and s.split(":")[0] in ("ST", "ST-1"):
                     bad = v > ST_DIALOG
                     if not bad:
@@ -585,8 +604,8 @@ def main():
                 cells.append("%14s" % ("%d%s" % (v, " OVER" if bad else "")))
         print("%-*s %6d  %s" % (w, a, lim, "  ".join(cells)))
     if whole_st:
-        print("within their own times (the ST's whole draws, Erez 19 Nov 2026; Settings on the ST 300, 1 Nov; "
-              "the times Erez accepted): " + "; ".join(whole_st))
+        print("within their own times (the ST's whole draws, decided 19 Nov 2026; Settings on the ST 300, 1 Nov; "
+              "the times accepted): " + "; ".join(whole_st))
     print("%d over" % over)
     return 1 if over else 0
 

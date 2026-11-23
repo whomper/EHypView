@@ -37,6 +37,10 @@ typedef struct {
    from before.  layout_free keeps the last pages' pictures for going
    back; layout_forget_kept lets them go. */
 void layout_make(playout *L, hyp_doc *doc, const hyp_page *pg);
+/* 256 colours: the screen's palette by VDI colour (VDI 0-1000), read now
+   and taken by the first page's layout as it is (theme.c's theme_palette);
+   NULL on any other screen */
+const short (*screen_palette(void))[3];
 void layout_free(playout *L);
 void layout_forget_kept(void);
 

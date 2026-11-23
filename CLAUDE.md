@@ -29,25 +29,25 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `git tag -a`); it tests, builds, tags vX.Y and publishes each file and the zip as a GitHub Release.
   A build must leave every tracked file unchanged and shows the version in `VERSION` as it is (there is
   no `-dev` label). Don't commit built programs, help files or certificates (`binary/`, `dist/`). Never reuse a number.
-- **Only formal releases leave the build machine.** Erez gets vX.Y releases made by the Release workflow from `main`, nothing else: no test builds, no CI artifacts, no builds from a branch. Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, roll back with a release: revert on `main`, release the next number, and say in the bad release's notes that it is withdrawn and which one to use.
-- **Releases go out without asking Erez** (his decision, 23 Oct 2026; guidelines 1.2), once the candidate
-  has passed **the regression gate** (Erez, 17 Nov 2026: "we need to be extra careful with regression issues as
+- **Only formal releases leave the build machine.** The owner gets vX.Y releases made by the Release workflow from `main`, nothing else: no test builds, no CI artifacts, no builds from a branch. Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, roll back with a release: revert on `main`, release the next number, and say in the bad release's notes that it is withdrawn and which one to use.
+- **Releases go out without asking the owner** (decided 23 Oct 2026; guidelines 1.2), once the candidate
+  has passed **the regression gate** (decided 17 Nov 2026: "we need to be extra careful with regression issues as
   there are users of our software. This means testing across all configurations" and "make sure we don't loose
   performance"; guidelines 1.2, AERA-Atari standards/TEST-MATRIX.md), in this order:
   1. this repo's checks (below);
-  2. the rigs on every row of the gate table EHypView runs on, on Erez's TOS images and NVDI (EmuTOS is no
+  2. the rigs on every row of the gate table EHypView runs on, on real TOS images and NVDI (EmuTOS is no
      evidence): the checks, then `make gate-test` (tests/gate.py: the rows they don't boot; row 11, network,
      isn't EHypView's), each row named by describe();
-  3. the paired speed run against the last release on Erez's configuration, Falcon-4:16 and ST:mono, timed at
+  3. the paired speed run against the last release on the reference configuration, Falcon-4:16 and ST:mono, timed at
      the shipped layout (`make speed-test`, common/tools/profpad.py): no row slower beyond a tick; fix it
-     first, only Erez accepts one;
+     first, only the owner accepts one;
   4. the candidate's commit and the results to the hub, which runs the family check and answers go or the
      faults it found;
   5. then the release. A fault a user reports becomes a case in the rigs, in the release that fixes it.
 
-  Then give Erez the link in one line, with anything he has to do, and send the hub the link. Roll
+  Then give the owner the link in one line, with anything he has to do, and send the hub the link. Roll
   back a bad release the same way. Decisions that are his still go to him first.
-- **Who decides what** (Erez, 31 Oct 2026; the guidelines' "Who decides what"). Erez's part, put
+- **Who decides what** (decided 31 Oct 2026; the guidelines' "Who decides what"). The owner's part, put
   to him before the work as a decision with a short context:
   - new programs and ideas, their core capabilities, and how they work with the other programs;
   - the user experience: the look, the layout, the way through a task, the words, the icons, the
@@ -61,7 +61,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
   How it is made is the team's, without asking: code, structure, shared code, tests, measurements,
   fixes, docs and releases inside an approved phase.
-- **No app tests with another AERA program or accessory** (Erez, 8 Nov 2026; guidelines 1.2). This
+- **No app tests with another AERA program or accessory** (decided 8 Nov 2026; guidelines 1.2). This
   app's tests run it alone: nothing else AERA is loaded beside it, started by it or fetched for it
   (`getrelease.py` is not used here). What it does with another program is tested against a stand-in
   this repo owns; the real programs together are the hub's family checks.
@@ -79,9 +79,9 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - **README:** keep the section order from the template (Highlights, Getting started, How it reaches the
   servers, Building, Source, Tests, Licence, family footer). Use British English.
 
-## Talking with Erez
+## Talking with the owner
 
-- Write to Erez only when he has a decision to make, with a short context: no progress or in-between
+- Write to the owner only when he has a decision to make, with a short context: no progress or in-between
   messages.
 - When presenting an analysis, give just the information, your assessment of it and what he should do.
 - Messages to the hub session stay as they are.
@@ -108,7 +108,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   layouts, `LIBRARY=outline` (the default: Continue, folding groups, two-line rows) and `panes`
   (Subjects | rows | details). The pages read last are `RECENT1=`... in the INF, written when a
   viewer window closes and at the end, never per page.
-- **The index is the single source of truth for where a hypertext belongs** (Erez, 27 Oct 2026): a
+- **The index is the single source of truth for where a hypertext belongs** (decided 27 Oct 2026): a
   `.HYP`'s `@subject` is read only when the scan first meets the file (by path, else by file name);
   after that the subject in EHYPVIEW.IDX counts (`known_subject` in src/core/scan.c). The library
   files hypertexts elsewhere (drag, File under..., Rename subject...) by changing the index
@@ -170,7 +170,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - Control shortcuts test `key_ctrl(kstate, key)` (common/atari/gem.h),
   never `kstate & K_CTRL` alone: a ^key typed while EHypView is busy
   arrives with kstate 0 (guidelines 3.2).
-- Tabs (Erez, 31 Oct 2026; his proposal answered "as proposed"): a viewer holds up to TABS_MAX (8)
+- Tabs (decided 31 Oct 2026; his proposal answered "as proposed"): a viewer holds up to TABS_MAX (8)
   pages, `viewer.view` the one in front, the others `view_parked` (src/view/view.c `view_park` /
   `view_unpark`: place and history kept, hypertext and page let go, read again when shown; host
   tested). src/gem/tabs.c lays the strip out (tests/test_tabs.c); it shows under the toolbar with
@@ -181,7 +181,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   BubbleGEM (`BUBBLEGEM_SHOW` to "BUBBLE  ", the text in `av_shared` memory taken before the first
   event call) when it runs, else EHypView's own box. gui-test's bubble scenario runs common's
   stand-in (tests/notify's BUBBLE.PRG as BUBBLE.ACC).
-- Presses (guidelines 5.8, Erez 1 Nov 2026): the program asks evnt_multi for one click (0x101; the
+- Presses (guidelines 5.8, decided 1 Nov 2026): the program asks evnt_multi for one click (0x101; the
   accessory two for now, the hub's call for 1.38: on TOS one lost a double click's second press;
   EHypView has no double click), a link, a library row or a Continue button is drawn chosen on the press (only
   the rows or links it left and took) and acted on when let go over it (`app_press`, common's
@@ -194,67 +194,82 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - Only `atari/plat_tos.c` is EHypView's own runtime; the rest (start-up, C library, TOS, AES/VDI,
   elf2tos.py) is `common/`.
 
-## Maintenance mode (Erez, 1 Nov 2026; 17 Nov 2026)
+## Maintenance mode (decided 1 Nov 2026; 17 Nov 2026)
 
 EHypView is in maintenance mode while EWeb, EPDF and EPlay go to 1.0 (AERA-Atari, ATARI-APP-GUIDELINES.md,
-section 8). Maintenance means no new features and no speed rounds of its own, nothing more (Erez, 17 Nov
+section 8). Maintenance means no new features and no speed rounds of its own, nothing more (decided 17 Nov
 2026: "all applications must adhere to family rules and be notified. We will review whether they need to
 issue a release. Applications on maintenance does not mean they contain faults"):
 - Every family rule holds for EHypView as for the focus apps. The hub notifies each new or changed rule
   and each shared fix, with what to do; do it, and keep `common/` synced to AERA-Atari's common branch
   (`tools/sync-common.sh`).
-- Whether a change needs a release is reviewed with Erez through the hub; a fault fix always gets one,
+- Whether a change needs a release is reviewed with the owner through the hub; a fault fix always gets one,
   and its notes say why.
-- Nothing runs in the background; the session waits for Erez or the hub.
-- Only Erez's explicit word ends this mode. The hub passes it on quoting him.
+- Nothing runs in the background; the session waits for the owner or the hub.
+- Only the owner's explicit word ends this mode. The hub passes it on quoting him.
 
-**Lifted for two items (Erez, 19 Nov 2026, choosing "Work on 1 and 2")** until both are released;
+**Lifted for two items (decided 19 Nov 2026, choosing "Work on 1 and 2")** until both are released;
 maintenance then comes back:
 1. The speed rig's open row, the line scroll within the guidelines' time on ST and Falcon-4, "and every
    other row too".
 2. EHypView's own small dialogs in the family's look: the black title band (D22), bitmap ticks and radio
    buttons up to four choices (D23, D24), buttons 10 wide (D26), an out-of-range number refused with an
    alert that says what to type (D30); common's dlgbuild and engine wherever they fit. "Look there
-   anyway?" stays as it is (Erez, 19 Nov 2026: "As it is"): `[2][C:\NOWHERE isn't a folder on this
+   anyway?" stays as it is (decided 19 Nov 2026: "As it is"): `[2][C:\NOWHERE isn't a folder on this
    Atari.|Look there anyway?][Keep|Change]`, Keep the default.
 The same gate as any release: the pairs against 2.7 (the D39 rows timed at the whole-desk layout), then
 the candidate to the hub for the family check.
 Done in 2.9 (20 Nov 2026): the speed rows (the ST's and the line scroll's times over the guidelines
-accepted by Erez, 20 Nov, named in tests/hatari/speed.py's ACCEPTED) and START as four radios. Back in
+accepted by the owner, 20 Nov, named in tests/hatari/speed.py's ACCEPTED) and START as four radios. Back in
 maintenance mode. For the next release, when it comes: the help front page's pictures loaded more frugally (the
 accessory's heap on a 1 MB machine; the hub's (c), 20 Nov).
 
-**Lifted for the FireBee edition (Erez, 22 Nov 2026: "Make the other apps native on the FireBee too";
-guidelines 7.4)** until it is released; maintenance then comes back. Two packages (Erez, 22 Nov: "two
+**Lifted for the FireBee edition (decided 22 Nov 2026: "Make the other apps native on the FireBee too";
+guidelines 7.4)** until it is released; maintenance then comes back. Two packages (decided 22 Nov: "two
 packages, one for FireBee and the other for standard ST", "Same names"): `ehypview-x.y.zip` as before, and
 `ehypview-x.y-firebee.zip` with the same names, its `ehypview.prg` and `.acc` ColdFire code made by common's
 `tools/mkfirebee.py --elf build/atari/ehypview.elf` (build/fb, binary/firebee); the loose release files are
 the standard package's. Each build names the other package (`cpu_cf_alert` and `cpu_cf_acc_alert` in the
-68000 build, `cpu_alert` and `cpu_acc_alert` under `__mcoldfire__`; Erez's words through the hub, lines of
+68000 build, `cpu_alert` and `cpu_acc_alert` under `__mcoldfire__`; the owner's words through the hub, lines of
 30 characters at most); an accessory on the wrong machine shows its alert from its Desk entry. Tests: the
 core under `qemu-m68k -cpu cfv4e` against the host's (`make cf-test`: the HYP reader, the index, the
 search), each build's alert on the wrong machine and each accessory's boot reaching the desktop
 (`make firebee-test`), and the full gate for the 68000 files against 2.9.
 Done in 2.10 (22 Nov 2026): the two packages, the alerts, the tests (gate row 7 is now the stand-in's
 refusals and the accessories' boots); the IMAGES start rows at 405 ms on ST:mono and 485 ms on ST:med
-accepted by Erez (22 Nov: "Accept, release 2.10"; AERA-Atari PERF-REVISIT 9b43ddc). Back in maintenance
+accepted by the owner (22 Nov: "Accept, release 2.10"; AERA-Atari PERF-REVISIT 9b43ddc). Back in maintenance
 mode.
 
-### UI backlog (Erez's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
+**Lifted for the family rules and speed (decided 22 Nov 2026: "Do the family rules and speed")** until
+released; maintenance then comes back. Done in 2.11 (23 Nov 2026):
+- the rules: the full-text search's `45%` and Undo to stop it (D35, 3.2); the library's selection from
+  common's theme.c (D42: `theme_keep`, `theme_palette` = pagedraw's `screen_palette()`, read once a start,
+  `theme_roles` P_SEL only, 16 colours and up); ⇧^S hides or shows the Subjects pane (D45);
+- D39: further viewers cascaded, a title bar down and right of the last, room for four steps; W18: `WINDOW=`
+  and `PANES=` written only when changed (gui-test's cascaded and INF-untouched cases);
+- speed: a picture copied only for its rows in the band, text transparent only over a picture or drawing
+  (`over_gfx`); common's scr_rows by the CPU whenever the screen's form is known. The rows over the limits
+  accepted (23 Nov 2026, "Accept and release"; AERA-Atari PERF-REVISIT 30f82bd) are in
+  tests/hatari/speed.py's ACCEPTED; the picture pages' line scrolls stay owed for when speed is the focus.
+- the owner not named as who asked or decided on GitHub (AERA-Atari c7279f0, 37e434d): comments, commits,
+  the published notes (the Notes workflow, `.github/workflows/notes.yml`, cleaned 12 of 51).
+Back in maintenance mode.
 
-Nothing here starts in maintenance mode. Take it with a release made anyway (a fault fix, or one Erez
+### UI backlog (the owner's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
+
+Nothing here starts in maintenance mode. Take it with a release made anyway (a fault fix, or one the owner
 asked for) without growing its risk: S items freely, H only if that release is otherwise untouched.
 Every GEM release still passes the speed rig. When one is done, send the hub one line with the commit.
 1. Font... from View to Options, no key; ⇧^F goes (D6, MD2). S.
-2. Index leaves ^I (D2, MD13). S. The new key is still open: change nothing until the hub passes Erez's answer.
+2. Index leaves ^I (D2, MD13). S. The new key is still open: change nothing until the hub passes the owner's answer.
 3. File: Close window, Next window, Quit, a line above the group and none inside it (MD8, MD9). S.
 4. Help: the guide item reads `EHypView help` with no key, and `Keys...` is added; the Help key still
    shows the hypertext's own help page (D10, D11, MG5, MD4). H.
 5. The asks (`[ Keep |Change]` and the like) get a black title band (D22, C4). H. Alert padding waits
-   for the hub (C19); "Look there anyway?" stays as it is (Erez, 19 Nov 2026).
-6. The viewer's first window on the whole desk (D39, W11). S. Further viewers' place is still open.
+   for the hub (C19); "Look there anyway?" stays as it is (decided 19 Nov 2026).
+6. The viewer's first window on the whole desk (D39, W11). S. Further viewers cascaded (done in 2.11).
 7. INF: `FONT=name` and `POINT=pt` become `FONT=name,points`, `POINT=` read once (D43, D44, W18). S.
-   `PANECOLS=` and saving `WINDOW=` are not decided: leave them.
+   `PANES=` and the library's `WINDOW=`, written only when changed (decided 22 Nov 2026; done in 2.11).
 8. Clipboard: `Copied to the clipboard.` for `The page is on the clipboard.` (D50, W17). S.
 9. A disabled toolbar button drawn as the AES's DISABLED, not the dim pattern (W2). S.
 10. Arrows and Shift+Up/Down page `rows - 1` (W5). S; waits for the hub (key_shift).
@@ -265,7 +280,7 @@ Every GEM release still passes the speed rig. When one is done, send the hub one
 
 Nothing to do: the toolbar's look and behaviour (D33), About first in the ≡ menu, Insert opens the menu.
 
-**Alignment (Erez, 10 Nov 2026): maintenance mode lifted for it** until the hub says it is done.
+**Alignment (decided 10 Nov 2026): maintenance mode lifted for it** until the hub says it is done.
 2.0 (11 Nov) carried items 1, 2 (Index on ⇧^T), 3, 4 and 8, with the crash catcher's XBRA fix and
 the shared code synced. The rest goes out as 2.1, with the build writing lowercase names (6.6). On main
 for 2.1: the pop-ups on `popup_m`, Settings' choices on `popup_over` (D15, D27); the name asks under a band
@@ -277,9 +292,9 @@ Falcon-4:256 with NVDI. Step 5: the first viewer window on the whole desk (D39);
 scroll it (common's `arrow_target`, D37); the library handles `WM_BOTTOMED` (W13); a disabled toolbar
 button greyed by the AES (`objc_draw` of a DISABLED box over it, W2).
 
-**At that release, Erez's configuration in the rigs** (Erez, 10 Nov 2026; AERA-Atari 148df17,
+**At that release, the reference configuration in the rigs** (decided 10 Nov 2026; AERA-Atari 148df17,
 `machines.ERZ_MACHINE`, `machines.erz_env()`): one of the Falcon function runs (hatari-test, gui-test,
 colour-test's Falcon run besides the 16-colour and true-colour cases) becomes `Falcon-4:256` with
 `AERA_WITH_NVDI=1`, in place of a second Falcon run, not added to it. Without TOS images or NVDI the
 same machine runs on EmuTOS and the report says "stand-in". At least 60% of a candidate's boots under
-NVDI, ST boots counted (Erez, 7 Nov).
+NVDI, ST boots counted (decided 7 Nov).

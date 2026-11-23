@@ -4910,8 +4910,13 @@ int app_main(void)
 	/* the family's UI palette (theme.c; D42, 5.2): the library's
 	   selection. In 256 colours its roles take the nearest of the screen's
 	   pens and none is set, so the pages' pictures keep theirs */
-	theme_keep = 1;
-	theme_init(1, NULL, 0);
+	if (ncolors >= 16)                 /* below that the selection is black: nothing to choose */
+	{
+		theme_keep = 1;
+		theme_palette = screen_palette();  /* the palette read once a start: the page's too */
+		theme_roles = 1UL << P_SEL;        /* the one role the library uses */
+		theme_init(1, NULL, 0);
+	}
 	if (colour)
 	{
 		short rgb[3];

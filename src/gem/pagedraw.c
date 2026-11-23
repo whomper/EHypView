@@ -89,12 +89,25 @@ static void probe(void)
 	st_free(mem);
 }
 
+/* the screen's palette by VDI colour (VDI 0-1000), as screen_colours
+   last read it, for theme.c (theme_palette: 256 colours only); fresh:
+   read for screen_palette() at the start, so the first page's layout
+   takes it as it is (one read of the 256 a start, not two) */
+static short vdi_pal[256][3];
+static int pal_fresh;
+
 /* read the screen's colours again (a program may have set others) */
 static void screen_colours(void)
 {
 	static int asked;
 	unsigned short i;
 	short rgb[3];
+
+	if (pal_fresh)
+	{
+		pal_fresh = 0;
+		return;                            /* just read (screen_palette) */
+	}
 
 	if (!asked)
 	{
@@ -155,6 +168,12 @@ static void screen_colours(void)
 			if (scr.vdi[i] < 0)
 				scr.vdi[i] = (short) i;
 			vq_color(vdi_h, scr.vdi[i], raw[i]);
+			if (ncol == 256)
+			{
+				vdi_pal[scr.vdi[i] & 255][0] = raw[i][0];
+				vdi_pal[scr.vdi[i] & 255][1] = raw[i][1];
+				vdi_pal[scr.vdi[i] & 255][2] = raw[i][2];
+			}
 			for (k = 0; k < 3; k++)
 				if (raw[i][k] > top)
 					top = raw[i][k];
@@ -848,6 +867,15 @@ void layout_finish(playout *L)
 
 	while (layout_work(L, &done))
 		;
+}
+
+const short (*screen_palette(void))[3]
+{
+	if (planes != 8)
+		return NULL;
+	screen_colours();
+	pal_fresh = 1;
+	return (const short (*)[3]) vdi_pal;
 }
 
 void layout_make(playout *L, hyp_doc *doc, const hyp_page *pg)
