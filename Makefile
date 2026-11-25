@@ -365,9 +365,9 @@ binary/firebee/EHYPVIEW.PRG binary/firebee/EHYPVIEW.ACC: binary/firebee/%: build
 	mkdir -p binary/firebee
 	cp $< $@
 
-# the FireBee package (the guidelines, 7.4; decided 22 Nov 2026: "Make the
-# other apps native on the FireBee too", then two packages with "Same
-# names"): the same program as ColdFire code, made by common's mkfirebee.py
+# the FireBee package (the guidelines, 7.4; decided 22 Nov 2026: the apps
+# native on the FireBee, as a second package with the same
+# names): the same program as ColdFire code, made by common's mkfirebee.py
 # from the 68000 build's own rules (build/cf/), under the same names. Each
 # build names the other package (cpu_alert, cpu_cf_alert and the
 # accessory's). In build/fb, not HATARI_DIR: the rigs boot that as C:

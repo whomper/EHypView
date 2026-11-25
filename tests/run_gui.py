@@ -1267,7 +1267,7 @@ INF_SAME_STEPS = [
     ([item(OPTIONS, 0)], ["menu settings", "dialog settings *"]),
     ([RETURN], ["dialog-closed settings ok"]),
     # the library opened and closed where it was: WINDOW= (and PANES=)
-    # written only when they changed (decided 22 Nov 2026, "Both"; 6.1)
+    # written only when they changed (decided 22 Nov 2026: both; 6.1)
     ([("ctrl", L)], ["library *"]),
     ([("ctrl", U)], ["closed library"]),
     ([("ctrl", Q)], ["quit"]),
@@ -1397,7 +1397,7 @@ def panebar():
 
 # one click, one step (guidelines 5.1, 28 Oct 2026): the AES sent a click
 # on a window's track or arrow twice, so the window moved two pages a
-# click (a report: "still jumping two positions"); TOS 4.04 every click, TOS
+# click; TOS 4.04 every click, TOS
 # 1.04 now and then (ClaudeST); common's evnt_multi_ drops the echo. On
 # the Falcon-4 with TOS 4.04 and the ST in mono with TOS 1.04: BIG.HYP,
 # whose window must fit the screen (wind_x8 had moved it 7 pixels past
