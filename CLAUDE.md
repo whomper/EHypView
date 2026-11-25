@@ -31,9 +31,8 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   no `-dev` label). Don't commit built programs, help files or certificates (`binary/`, `dist/`). Never reuse a number.
 - **Only formal releases leave the build machine.** The owner gets vX.Y releases made by the Release workflow from `main`, nothing else: no test builds, no CI artifacts, no builds from a branch. Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, roll back with a release: revert on `main`, release the next number, and say in the bad release's notes that it is withdrawn and which one to use.
 - **Releases go out without asking the owner** (decided 23 Oct 2026; guidelines 1.2), once the candidate
-  has passed **the regression gate** (decided 17 Nov 2026: "we need to be extra careful with regression issues as
-  there are users of our software. This means testing across all configurations" and "make sure we don't loose
-  performance"; guidelines 1.2, AERA-Atari standards/TEST-MATRIX.md), in this order:
+  has passed **the regression gate** (decided 17 Nov 2026: extra care with regressions, since the software has
+  users: every configuration tested, and no speed lost; guidelines 1.2, AERA-Atari standards/TEST-MATRIX.md), in this order:
   1. this repo's checks (below);
   2. the rigs on every row of the gate table EHypView runs on, on real TOS images and NVDI (EmuTOS is no
      evidence): the checks, then `make gate-test` (tests/gate.py: the rows they don't boot; row 11, network,
@@ -76,6 +75,12 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   - real addresses from the owner's network: use `192.168.1.x`, `PI_IP`, `ATARI_IP`
   - passwords, session keys, `.KEY` / `.INF` files from a test run
   - photos that still carry EXIF/GPS data
+  - anything the owner gives a session (decided 24 Nov 2026; AERA-Atari standards/GITHUB-IDENTITY.md,
+    Commits): his files, hypertexts, logs, screenshots, share links or file IDs, his messages and words,
+    his machine's settings; no commit message, test name or note quotes them either, and a decision is
+    written "decided <date>: <what>". A fault he reports becomes a case made from scratch that shows the
+    same thing. Existing quotes are put in plain words when their file is next touched; history stays
+    (decided 24 Nov 2026: current files only)
 - **README:** keep the section order from the template (Highlights, Getting started, How it reaches the
   servers, Building, Source, Tests, Licence, family footer). Use British English.
 
@@ -170,7 +175,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - Control shortcuts test `key_ctrl(kstate, key)` (common/atari/gem.h),
   never `kstate & K_CTRL` alone: a ^key typed while EHypView is busy
   arrives with kstate 0 (guidelines 3.2).
-- Tabs (decided 31 Oct 2026; his proposal answered "as proposed"): a viewer holds up to TABS_MAX (8)
+- Tabs (decided 31 Oct 2026: the proposal as it stood): a viewer holds up to TABS_MAX (8)
   pages, `viewer.view` the one in front, the others `view_parked` (src/view/view.c `view_park` /
   `view_unpark`: place and history kept, hypertext and page let go, read again when shown; host
   tested). src/gem/tabs.c lays the strip out (tests/test_tabs.c); it shows under the toolbar with
@@ -208,14 +213,14 @@ issue a release. Applications on maintenance does not mean they contain faults")
 - Nothing runs in the background; the session waits for the owner or the hub.
 - Only the owner's explicit word ends this mode. The hub passes it on quoting him.
 
-**Lifted for two items (decided 19 Nov 2026, choosing "Work on 1 and 2")** until both are released;
+**Lifted for two items (decided 19 Nov 2026: both items)** until both are released;
 maintenance then comes back:
 1. The speed rig's open row, the line scroll within the guidelines' time on ST and Falcon-4, "and every
    other row too".
 2. EHypView's own small dialogs in the family's look: the black title band (D22), bitmap ticks and radio
    buttons up to four choices (D23, D24), buttons 10 wide (D26), an out-of-range number refused with an
    alert that says what to type (D30); common's dlgbuild and engine wherever they fit. "Look there
-   anyway?" stays as it is (decided 19 Nov 2026: "As it is"): `[2][C:\NOWHERE isn't a folder on this
+   anyway?" stays as it is (decided 19 Nov 2026: unchanged): `[2][C:\NOWHERE isn't a folder on this
    Atari.|Look there anyway?][Keep|Change]`, Keep the default.
 The same gate as any release: the pairs against 2.7 (the D39 rows timed at the whole-desk layout), then
 the candidate to the hub for the family check.
@@ -224,9 +229,9 @@ accepted by the owner, 20 Nov, named in tests/hatari/speed.py's ACCEPTED) and ST
 maintenance mode. For the next release, when it comes: the help front page's pictures loaded more frugally (the
 accessory's heap on a 1 MB machine; the hub's (c), 20 Nov).
 
-**Lifted for the FireBee edition (decided 22 Nov 2026: "Make the other apps native on the FireBee too";
-guidelines 7.4)** until it is released; maintenance then comes back. Two packages (decided 22 Nov: "two
-packages, one for FireBee and the other for standard ST", "Same names"): `ehypview-x.y.zip` as before, and
+**Lifted for the FireBee edition (decided 22 Nov 2026: the apps native on the FireBee;
+guidelines 7.4)** until it is released; maintenance then comes back. Two packages (decided 22 Nov: one for the
+FireBee and one for the ST, TT and Falcon, with the same names): `ehypview-x.y.zip` as before, and
 `ehypview-x.y-firebee.zip` with the same names, its `ehypview.prg` and `.acc` ColdFire code made by common's
 `tools/mkfirebee.py --elf build/atari/ehypview.elf` (build/fb, binary/firebee); the loose release files are
 the standard package's. Each build names the other package (`cpu_cf_alert` and `cpu_cf_acc_alert` in the
@@ -237,10 +242,10 @@ search), each build's alert on the wrong machine and each accessory's boot reach
 (`make firebee-test`), and the full gate for the 68000 files against 2.9.
 Done in 2.10 (22 Nov 2026): the two packages, the alerts, the tests (gate row 7 is now the stand-in's
 refusals and the accessories' boots); the IMAGES start rows at 405 ms on ST:mono and 485 ms on ST:med
-accepted by the owner (22 Nov: "Accept, release 2.10"; AERA-Atari PERF-REVISIT 9b43ddc). Back in maintenance
+accepted by the owner (decided 22 Nov 2026, with the release; AERA-Atari PERF-REVISIT 9b43ddc). Back in maintenance
 mode.
 
-**Lifted for the family rules and speed (decided 22 Nov 2026: "Do the family rules and speed")** until
+**Lifted for the family rules and speed (decided 22 Nov 2026: the family rules and speed)** until
 released; maintenance then comes back. Done in 2.11 (23 Nov 2026):
 - the rules: the full-text search's `45%` and Undo to stop it (D35, 3.2); the library's selection from
   common's theme.c (D42: `theme_keep`, `theme_palette` = pagedraw's `screen_palette()`, read once a start,
@@ -249,7 +254,7 @@ released; maintenance then comes back. Done in 2.11 (23 Nov 2026):
   and `PANES=` written only when changed (gui-test's cascaded and INF-untouched cases);
 - speed: a picture copied only for its rows in the band, text transparent only over a picture or drawing
   (`over_gfx`); common's scr_rows by the CPU whenever the screen's form is known. The rows over the limits
-  accepted (23 Nov 2026, "Accept and release"; AERA-Atari PERF-REVISIT 30f82bd) are in
+  accepted (decided 23 Nov 2026, with the release; AERA-Atari PERF-REVISIT 30f82bd) are in
   tests/hatari/speed.py's ACCEPTED; the picture pages' line scrolls stay owed for when speed is the focus.
 - the owner not named as who asked or decided on GitHub (AERA-Atari c7279f0, 37e434d): comments, commits,
   the published notes (the Notes workflow, `.github/workflows/notes.yml`, cleaned 12 of 51).

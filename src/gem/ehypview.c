@@ -194,8 +194,8 @@ static long probe_depth(void)
 #endif
 
 /* NatFeats only where EHYPVIEW.INF says NATFEATS=1, which only the test
-   rigs write (decided 15 Nov 2026: "make it a .INF setting so that it can be
-   added in our testing but have no bearing outside"; guidelines 6.5): on a
+   rigs write (decided 15 Nov 2026: an INF setting the tests add, of no
+   effect anywhere else; guidelines 6.5): on a
    real machine nf_debug never probes, so the probe's illegal instruction
    never runs (a Vampire V4SA ended EHypView with it). The lines before the
    INF is read (own_set, in the program and the accessory alike) are held
@@ -1337,7 +1337,7 @@ static void open_window(void)
 		/* each further one cascaded: a title bar's height down and to
 		   the right of the last one opened, the same size, so every
 		   title shows; one that would leave the desk starts again at
-		   its top (decided 22 Nov 2026: "Cascaded"; D39) */
+		   its top (decided 22 Nov 2026: cascaded; D39) */
 		short t = title_h(), nx = (short) (last_place[0] + t), ny = (short) (last_place[1] + t);
 
 		/* the same size each, with room for four steps on the desk (a
@@ -1669,7 +1669,7 @@ static void scroll_area(short x, short y, short w, short h, long dy)
 		text_noclip(vdi_h);
 		/* the strip that comes in drawn at once, the screen still held
 		   and the mouse still hidden: nothing drawn between the move and
-		   it (the old rows were shown twice till it came, a video,
+		   it (the old rows were shown twice till it came,
 		   13 Nov 2026). Straight onto the page: the whole work area
 		   shows (above), so no rectangle list, and the screen and the
 		   mouse are held already (redraw's six AES calls were some 20 ms
@@ -4831,8 +4831,8 @@ static void start_mark(const char *what)
 
 
 /* the machine checked first (common/atari/cpucheck.c, or cpucheck_cf.S in
-   the FireBee package: the guidelines, 7.4, decided 22 Nov 2026 "Make the other
-   apps native on the FireBee too"). Any 68000 runs the 68000 build
+   the FireBee package: the guidelines, 7.4, decided 22 Nov 2026: the apps
+   native on the FireBee). Any 68000 runs the 68000 build
    (cpu_need 0); on a FireBee it names the FireBee package */
 const long cpu_need = 0;
 /* each build names the other package (the guidelines, 7.4: the FireBee's
