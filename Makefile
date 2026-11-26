@@ -561,8 +561,31 @@ clean:
 firebee-test: atari build/fb/ACOPEN.PRG
 	python3 tests/hatari/firebee_test.py $(HATARI_DIR) build/fb build/firebee
 
+# programs in front beside the accessory (tests/heldrun.c, heldfill.c):
+# HELDFAST.PRG with the fast-load bit, HELDSLOW.PRG without (its memory
+# cleared by TOS), each filling all it is given
+$(ATARI)/heldfast.o: tests/heldfill.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 '-DNEXT="C:\\HELDSLOW.PRG"' -c -o $@ $<
+$(ATARI)/heldslow.o: tests/heldfill.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 '-DNEXT="C:\\HELDRUN.PRG"' -c -o $@ $<
+$(ATARI)/held%.elf: $(RT_OBJ) $(ATARI)/held%.o common/atari/link.ld
+	$(XCC) $(XLDFLAGS) -o $@ $(RT_OBJ) $(ATARI)/held$*.o -lgcc
+$(HATARI_DIR)/HELDFAST.PRG: $(ATARI)/heldfast.elf common/tools/elf2tos.py
+	mkdir -p $(HATARI_DIR)
+	PRGFLAGS=1 python3 common/tools/elf2tos.py $< $@
+$(HATARI_DIR)/HELDSLOW.PRG: $(ATARI)/heldslow.elf common/tools/elf2tos.py
+	mkdir -p $(HATARI_DIR)
+	PRGFLAGS=0 python3 common/tools/elf2tos.py $< $@
+$(ATARI)/heldrun.o: tests/heldrun.c $(XHDRS) | $(ATARI)
+	$(XCC) $(XFLAGS) -std=gnu99 -c -o $@ $<
+$(HATARI_DIR)/HELDRUN.PRG: $(ATARI)/heldrun.elf common/tools/elf2tos.py
+	mkdir -p $(HATARI_DIR)
+	python3 common/tools/elf2tos.py $< $@
+
 # no family accessory on a machine with under 2 MB of ST RAM (the
 # guidelines, 2.1): on ST-1 its Desk entry's alert and nothing taken, on
-# ST-2 its usual start (tests/hatari/small_acc.py)
-small-acc-test: atari build/fb/ACOPEN.PRG
+# ST-2 its usual start, and its library and a viewer after two programs
+# in front used all their memory (tests/hatari/small_acc.py; 2.2)
+small-acc-test: atari build/fb/ACOPEN.PRG $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/HELDRUN.PRG \
+		$(HATARI_DIR)/HELDFAST.PRG $(HATARI_DIR)/HELDSLOW.PRG
 	python3 tests/hatari/small_acc.py $(HATARI_DIR) build/fb/ACOPEN.PRG build/smallacc

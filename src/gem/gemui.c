@@ -5,6 +5,7 @@
  * take from the app (common/ui/gemui.h), on EHypView's workstation and
  * in its fonts (font.c: font_sys_push, font_sys_pop).
  */
+#include <stdlib.h>
 #include <string.h>
 #include "tos.h"
 #include "gemui.h"
@@ -111,7 +112,7 @@ void *st_ram(long n)
 
 	if (buf == NULL)
 	{
-		void *p = Mxalloc(sizeof(fallback), 0);
+		void *p = acc_core(sizeof(fallback), 0);   /* the accessory's own on plain TOS (2.2) */
 
 		buf = (long) p > 0 ? p : fallback;
 	}

@@ -166,6 +166,11 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   loads no fonts and builds no index, and AC_OPEN shows `acc_small_alert` only (EHYPVIEW.PRG is the
   1 MB reader). `make small-acc-test` (tests/hatari/small_acc.py): ST-1's alert and nothing taken,
   ST-2's usual start; the accessory's 1 MB cases are ST-2's (colour-test, gate row 10).
+- An accessory's memory is its own (guidelines 2.2, common 9fd1335): every GEMDOS block it takes goes
+  through libc's `acc_core` (stmem.c's ST RAM areas, gemui.c's icon buffer; `acc_free` for any it gives
+  back), owned by it on plain TOS, never by the program that was current. small_acc.py's held case
+  (`--held`, ST-2): programs the desktop starts one after another (HELDFAST.PRG at boot, then
+  HELDSLOW.PRG with no fast-load bit, each filling all it is given), then the library and a viewer.
 - The accessory starts quietly (guideline 2.2): nothing but set-up before
   its first event call, and the index (src/core/libjob.c) in short steps
   through common/ui/bgwork.c. `make quiet-test` measures it with an

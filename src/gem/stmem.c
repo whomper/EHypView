@@ -45,14 +45,16 @@ int st_ram_addr(const void *p)
 	return (unsigned long) p < 0x01000000UL;
 }
 
-/* a block of ST RAM from GEMDOS, or NULL */
+/* a block of ST RAM from GEMDOS, or NULL; the accessory's own on plain TOS
+   (libc's acc_core: else the program in front's block would cover it, and
+   one without the fast-load bit clears it; guidelines 2.2) */
 static void *take(long n)
 {
 #ifdef EHV_TOS
-	void *p = Mxalloc(n, 0);           /* ST RAM only */
+	void *p = acc_core(n, 0);          /* ST RAM only */
 
 	if ((long) p == -32)               /* TOS 1.x: no Mxalloc, and no other RAM */
-		p = Malloc(n);
+		p = acc_core(n, -1);
 	return (long) p > 0 ? p : NULL;
 #else
 	return malloc((size_t) n);
