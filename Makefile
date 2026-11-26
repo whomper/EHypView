@@ -480,7 +480,7 @@ colour-test: atari $(HATARI_DIR)/ASKHELP.PRG $(HATARI_DIR)/LAUNCH.PRG
 
 # the accessory's disk use, job by job, against its budget (the AERA
 # guidelines, 6.5): Hatari's GEMDOS trace, on the family's Falcon:16
-# (ACC_FILES_MACHINE=ST-1 for the smallest ST, ACC_FILES_BIG=1 for a
+# (ACC_FILES_MACHINE=ST-2 for the smallest ST the accessory runs on, ACC_FILES_BIG=1 for a
 # 60-guide library too)
 acc-files-test: atari $(HATARI_DIR)/ASKHELP.PRG
 	python3 tests/hatari/acc_files.py $(HATARI_DIR) build/accfiles $(or $(ACC_FILES_MACHINE),Falcon:16)
@@ -554,9 +554,15 @@ dist: atari help
 clean:
 	rm -rf build binary dist
 
-.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test speed-test gate-test colour-test acc-files-test accnvdi-test clean FORCE
+.PHONY: icons all help test asan m68k-test atari dist hatari-test gui-test quiet-test speed-test gate-test colour-test acc-files-test small-acc-test accnvdi-test clean FORCE
 
 # each file names the other (the guidelines, 7.4): the 68000 build on the
 # FireBee stand-in, the FireBee build on a Falcon, in Hatari's AES trace
 firebee-test: atari build/fb/ACOPEN.PRG
 	python3 tests/hatari/firebee_test.py $(HATARI_DIR) build/fb build/firebee
+
+# no family accessory on a machine with under 2 MB of ST RAM (the
+# guidelines, 2.1): on ST-1 its Desk entry's alert and nothing taken, on
+# ST-2 its usual start (tests/hatari/small_acc.py)
+small-acc-test: atari build/fb/ACOPEN.PRG
+	python3 tests/hatari/small_acc.py $(HATARI_DIR) build/fb/ACOPEN.PRG build/smallacc

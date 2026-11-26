@@ -38,7 +38,8 @@ library](#the-library).
 bookmarks, and the index stay; an index from an older EHypView that the new one can't read is made
 again.
 
-**Needs:** any ST, STE, TT or Falcon with 1 MB or more; TOS, EmuTOS, MagiC or MiNT; a screen 640
+**Needs:** any ST, STE, TT or Falcon with 1 MB or more (the accessory 2 MB or more: on a smaller
+machine its Desk entry says so, and the program is the reader); TOS, EmuTOS, MagiC or MiNT; a screen 640
 pixels wide or more (on a narrower one the accessory still shows the pages other programs ask for). NVDI, SpeedoGDOS or another GDOS is optional, for more fonts.
 
 **Under TOS, put Atari's FOLDR100.PRG first in AUTO**, renamed for more room (FOLDR400.PRG).
@@ -213,7 +214,7 @@ used in `EHYPVIEW.FNT`.
 The accessory loads GDOS fonts only when the Atari starts: GDOS fonts loaded later would be lost
 when the program in front ends. Under NVDI it always loads them, so its font selector lists the same
 fonts as the program, and a font chosen is used at once. Under FONTGDOS or SpeedoGDOS it loads them
-only when `EHYPVIEW.INF` names one, to spare a 1 MB ST their memory: there a GDOS font chosen in the
+only when `EHYPVIEW.INF` names one, to spare a 2 MB ST their memory: there a GDOS font chosen in the
 accessory, or in the program while the accessory is loaded, is the accessory's from the next boot,
 and its Font dialog lists the fonts it knows "from the next start".
 

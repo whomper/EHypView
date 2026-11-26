@@ -7,8 +7,8 @@ from Hatari's GEMDOS and AES trace:
     tests/hatari/acc_files.py DIR OUT [MACHINE]
 
 DIR holds EHYPVIEW.ACC and ASKHELP.PRG (make acc-files-test: build/hatari).
-MACHINE is common/tools/machines.py's, Falcon:16 by default (ST-1 for the
-smallest ST; AERA_TOS picks the TOS as there). The library is five of
+MACHINE is common/tools/machines.py's, Falcon:16 by default (ST-2 for the
+smallest ST the accessory runs on, 2 MB; AERA_TOS picks the TOS as there). The library is five of
 the repository's test guides (tests/fixtures, the family's front page
 among them; no other AERA program's files, guidelines 1.2) in C:\\LIB1,
 and two big ones in C:\\LIB2 (PATHS= in EHYPVIEW.INF).
