@@ -30,6 +30,14 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   A build must leave every tracked file unchanged and shows the version in `VERSION` as it is (there is
   no `-dev` label). Don't commit built programs, help files or certificates (`binary/`, `dist/`). Never reuse a number.
 - **Only formal releases leave the build machine.** The owner gets vX.Y releases made by the Release workflow from `main`, nothing else: no test builds, no CI artifacts, no builds from a branch. Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, roll back with a release: revert on `main`, release the next number, and say in the bad release's notes that it is withdrawn and which one to use.
+- **Fewer releases, each carrying more** (decided 26 Nov 2026; guidelines 1.2; this replaces 23 Oct's
+  release as soon as the work is done): no release for every single fix or feature. Changes gather on
+  `main` and go out together when a body of work is complete, the fixes known at the time and the phase's
+  features, as one candidate through the gate and the hub's family check. Only a data-loss, security or
+  crash fault (or a breakage that stops users working) goes out on its own at once, with only that fix,
+  its notes saying why. A fault a user reports is fixed with its rig case and rides the next release;
+  docs, CLAUDE.md and rig changes need none; the hub's shared fixes ride the next release unless it names
+  one as the exception.
 - **Releases go out without asking the owner** (decided 23 Oct 2026; guidelines 1.2), once the candidate
   has passed **the regression gate** (decided 17 Nov 2026: extra care with regressions, since the software has
   users: every configuration tested, and no speed lost; guidelines 1.2, AERA-Atari standards/TEST-MATRIX.md), in this order:
@@ -208,8 +216,8 @@ issue a release. Applications on maintenance does not mean they contain faults")
 - Every family rule holds for EHypView as for the focus apps. The hub notifies each new or changed rule
   and each shared fix, with what to do; do it, and keep `common/` synced to AERA-Atari's common branch
   (`tools/sync-common.sh`).
-- Whether a change needs a release is reviewed with the owner through the hub; a fault fix always gets one,
-  and its notes say why.
+- Whether a change needs a release is reviewed with the owner through the hub; a fault fix rides the next
+  release unless it is the exception above (data loss, security, a crash), and the notes say why.
 - Nothing runs in the background; the session waits for the owner or the hub.
 - Only the owner's explicit word ends this mode. The hub passes it on quoting him.
 
