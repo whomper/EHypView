@@ -38,6 +38,12 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   its notes saying why. A fault a user reports is fixed with its rig case and rides the next release;
   docs, CLAUDE.md and rig changes need none; the hub's shared fixes ride the next release unless it names
   one as the exception.
+- **Nothing known is left in a queue behind a release** (decided 26 Nov 2026, for every app; guidelines
+  1.2, AERA-Atari bf0b8d5, c8429a7): before a candidate goes to the gate, every known fault and pending
+  item that can be done within a few days is folded in. The candidate's message to the hub lists what was
+  left out and why, and the hub checks it before its go. A reported fault that is waiting goes into the
+  release being prepared, not the one after. In maintenance mode this decides what a release carries, not
+  whether there is one.
 - **Releases go out without asking the owner** (decided 23 Oct 2026; guidelines 1.2), once the candidate
   has passed **the regression gate** (decided 17 Nov 2026: extra care with regressions, since the software has
   users: every configuration tested, and no speed lost; guidelines 1.2, AERA-Atari standards/TEST-MATRIX.md), in this order:
