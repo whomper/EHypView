@@ -382,12 +382,14 @@ def run_mode(name, spec, opts, vmode, pal, how):
 # picture), from a test guide of the repository's (tests/fixtures/front: no
 # other AERA program's files, guidelines 1.2), on the smallest machines:
 # it must show both pictures
-# (a Falcon cut down to 1 MB of ST RAM and no TT RAM: the least a Falcon has)
+# (a Falcon cut down to 1 MB of ST RAM and no TT RAM: the least a Falcon has).
+# The accessory runs on 2 MB or more (decided 26 Nov 2026; the guidelines,
+# 2.1): its case is ST-2, the least it runs on
 FALCON_1MB = ["--memsize", "1", "--ttram", "0"]
 SMALL = [
     ("st-1mb", "ST-1:mono", [], "prg"),
     ("falcon-1mb", "Falcon:16", FALCON_1MB, "prg"),
-    ("falcon-1mb-acc", "Falcon:16", FALCON_1MB, "acc"),
+    ("st-2mb-acc", "ST-2:mono", [], "acc"),
 ]
 
 

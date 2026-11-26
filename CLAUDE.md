@@ -146,7 +146,8 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   run it when file access changes.
 - Before pushing: `make test`, `make asan`, `make m68k-test`,
   `make hatari-test`, `make gui-test`, `make quiet-test` (these two
-  need hatari, Xvfb and xdotool) and `make colour-test`, `make cf-test` (qemu-m68k) and `make firebee-test`, and `make atari`
+  need hatari, Xvfb and xdotool) and `make colour-test`, `make cf-test` (qemu-m68k), `make firebee-test` and
+  `make small-acc-test`, and `make atari`
   with no warnings.
 - One build, for the 68000, runs on every ST, STE, TT and Falcon. GCC 13
   joins byte reads into word reads, which fault on a 68000 at an odd
@@ -160,6 +161,16 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   modes, the ST's too, and the family's help front page (a test guide,
   tests/fixtures/front, made by tests/regen.sh) on 1 MB machines; in TT low and the Falcon's 320-wide true
   colour only the accessory runs (guideline 5.2), asked by tests/askhelp.c.
+- No accessory on a machine with under 2 MB of ST RAM (decided 26 Nov 2026; guidelines 2.1): right
+  after its Desk entry, common's `acc_small_machine()`; there it takes no heap, opens no workstation,
+  loads no fonts and builds no index, and AC_OPEN shows `acc_small_alert` only (EHYPVIEW.PRG is the
+  1 MB reader). `make small-acc-test` (tests/hatari/small_acc.py): ST-1's alert and nothing taken,
+  ST-2's usual start; the accessory's 1 MB cases are ST-2's (colour-test, gate row 10).
+- An accessory's memory is its own (guidelines 2.2, common 9fd1335): every GEMDOS block it takes goes
+  through libc's `acc_core` (stmem.c's ST RAM areas, gemui.c's icon buffer; `acc_free` for any it gives
+  back), owned by it on plain TOS, never by the program that was current. small_acc.py's held case
+  (`--held`, ST-2): programs the desktop starts one after another (HELDFAST.PRG at boot, then
+  HELDSLOW.PRG with no fast-load bit, each filling all it is given), then the library and a viewer.
 - The accessory starts quietly (guideline 2.2): nothing but set-up before
   its first event call, and the index (src/core/libjob.c) in short steps
   through common/ui/bgwork.c. `make quiet-test` measures it with an
@@ -240,8 +251,9 @@ The same gate as any release: the pairs against 2.7 (the D39 rows timed at the w
 the candidate to the hub for the family check.
 Done in 2.9 (20 Nov 2026): the speed rows (the ST's and the line scroll's times over the guidelines
 accepted by the owner, 20 Nov, named in tests/hatari/speed.py's ACCEPTED) and START as four radios. Back in
-maintenance mode. For the next release, when it comes: the help front page's pictures loaded more frugally (the
-accessory's heap on a 1 MB machine; the hub's (c), 20 Nov).
+maintenance mode. The help front page's pictures loaded more frugally (the accessory's heap on a 1 MB machine;
+the hub's (c), 20 Nov) was dropped on 26 Nov 2026: the accessory runs on 2 MB or more, and colour-test's ST-2
+case shows both pictures at its first boot.
 
 **Lifted for the FireBee edition (decided 22 Nov 2026: the apps native on the FireBee;
 guidelines 7.4)** until it is released; maintenance then comes back. Two packages (decided 22 Nov: one for the

@@ -34,13 +34,14 @@ Download the latest release from **[Releases](https://github.com/whomper/EHypVie
 On the FireBee, take `ehypview-x.y-firebee.zip` instead: the same files, with the program and the
 accessory built for its ColdFire.
 
-1. Start `EHYPVIEW.PRG` from a folder of its own, or copy `EHYPVIEW.ACC` to the root of the boot drive.
+1. Start `EHYPVIEW.PRG` from a folder of its own, or copy `EHYPVIEW.ACC` to the root of the boot drive
+   (the accessory needs 2 MB or more; on a 1 MB machine use the program).
    To be the help viewer for every program, copy the accessory there as `ST-GUIDE.ACC`.
 2. Keep your hypertexts (each `.HYP` with its `.REF`) in `\GUIDES`, or add their folders in
    **Options > Settings...**; copy `EHYPVIEW.HYP` and `.REF` there too.
 3. Press ^L for the library and Help for the page's help; **Help > EHypView help** opens the guide.
 
-**Needs:** any ST, STE, TT or Falcon with 1 MB or more; TOS, EmuTOS, MagiC or MiNT; a screen 640
+**Needs:** any ST, STE, TT or Falcon with 1 MB or more (the accessory 2 MB or more); TOS, EmuTOS, MagiC or MiNT; a screen 640
 pixels wide (in 320-wide modes only the accessory, for pages other programs ask for). NVDI or another
 GDOS is optional, for more fonts.
 

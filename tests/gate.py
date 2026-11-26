@@ -21,8 +21,10 @@ alone.
   FireBee:256, the program's alert naming the FireBee package and no
   window, the accessory's boot reaching the desktop and its alert when
   opened; with its Falcon and ST cases, the FireBee build's alerts.
-- 10: tests/hatari/acc_files.py on ST-1:mono (first and second boot; the
-  Falcon's is make acc-files-test).
+- 10: tests/hatari/acc_files.py on ST-2:mono, the least the accessory runs
+  on (first and second boot; the Falcon's is make acc-files-test), and
+  tests/hatari/small_acc.py: on ST-1:mono its Desk entry's 2 MB alert and
+  nothing taken (decided 26 Nov 2026; the guidelines, 2.1).
 - 12: one boot with no NATFEATS= (the program says nothing through
   NatFeats then): LOG=1, so its own ehypview.log shows it started and
   quit, and no CRASH.LOG.
@@ -160,14 +162,24 @@ def firebee():
 def accessory():
     if WANT and "10" not in WANT:
         return
-    out = os.path.join(OUT, "gate-acc-st1")
-    r = subprocess.run(["python3", os.path.join(HERE, "hatari", "acc_files.py"), HDIR, out, "ST-1:mono"],
+    out = os.path.join(OUT, "gate-acc-st2")
+    r = subprocess.run(["python3", os.path.join(HERE, "hatari", "acc_files.py"), HDIR, out, "ST-2:mono"],
                        capture_output=True, text=True)
     ok = r.returncode == 0
     with open(out + ".log", "w") as f:
         f.write(r.stdout + r.stderr)
-    note("10", ok, "the accessory's first and second boot, " + machines.Machine("ST-1:mono", out).describe() +
+    note("10", ok, "the accessory's first and second boot, " + machines.Machine("ST-2:mono", out).describe() +
          ("" if ok else " (see %s.log)" % out))
+    out = os.path.join(OUT, "gate-acc-small")
+    r = subprocess.run(["python3", os.path.join(HERE, "hatari", "small_acc.py"), HDIR,
+                        os.path.join(ROOT, "build", "fb", "ACOPEN.PRG"), out], capture_output=True, text=True)
+    with open(out + ".log", "w") as f:
+        f.write(r.stdout + r.stderr)
+    for l in r.stdout.splitlines():
+        if l.startswith(("ok", "FAIL")):
+            note("10", l.startswith("ok"), l[6:])
+    if r.returncode != 0 and all(l.startswith("ok") for l in r.stdout.splitlines() if l.startswith(("ok", "FAIL"))):
+        note("10", False, "small_acc.py ended %d (see %s.log)" % (r.returncode, out))
 
 
 def natfeats_off():

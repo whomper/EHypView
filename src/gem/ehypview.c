@@ -4888,6 +4888,23 @@ int app_main(void)
 	{
 		menu_id = menu_register(ap_id, "  EHypView");
 		log_event("acc", menu_id >= 0 ? "registered" : "no menu entry", NULL);
+		/* no family accessory on a machine with under 2 MB of ST RAM
+		   (decided 26 Nov 2026; guidelines 2.1): no heap, no workstation,
+		   no fonts, no index, no library job; its Desk entry says so.
+		   EHYPVIEW.PRG is the reader there */
+		if (acc_small_machine())
+		{
+			log_event("acc", "small machine", NULL);
+			for (;;)
+			{
+				evnt_multi_(MU_MESAG, 0, 0, 0, 0, msg, &ev);
+				if (msg[0] == AC_OPEN)
+				{
+					log_event("acc", "small alert", NULL);
+					acc_small_alert("EHypView", "EHYPVIEW.ACC");
+				}
+			}
+		}
 	}
 	vdi_h = graf_handle(&sys_cw, &sys_ch, &d, &d);
 	ehv_ui_gl_wchar = sys_cw;
