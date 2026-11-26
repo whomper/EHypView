@@ -276,9 +276,9 @@ Back in maintenance mode.
 
 ### UI backlog (the owner's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
 
-Nothing here starts in maintenance mode. Take it with a release made anyway (a fault fix, or one the owner
-asked for) without growing its risk: S items freely, H only if that release is otherwise untouched.
-Every GEM release still passes the speed rig. When one is done, send the hub one line with the commit.
+All done (2.0, 2.1 and 2.11; checked against the code 26 Nov 2026): the list stays as the record of where
+each one went. A new UI decision from the hub is taken the way the list's were: S items with a release made
+anyway, H only if that release is otherwise untouched; every GEM release still passes the speed rig.
 1. Font... from View to Options, no key; ⇧^F goes (D6, MD2). S.
 2. Index leaves ^I (D2, MD13). S. The new key is still open: change nothing until the hub passes the owner's answer.
 3. File: Close window, Next window, Quit, a line above the group and none inside it (MD8, MD9). S.
