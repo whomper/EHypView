@@ -503,14 +503,15 @@ static int pic_unpacked(picjob *j, gimage *im)
 			at[i] = p;
 			p += j->plane;
 		}
-	/* the planes, while the picture is made, in the unpacked object itself
-	   (a 1 MB machine's accessory has some 100 KB of heap: a second copy
-	   was 16 KB of the front page's first picture), grown for the planes
-	   not stored; else a copy from the pictures' ST RAM, whose room a 1 MB
-	   machine has when its heap has none (a Falcon under EmuTOS: 26 KB
-	   left, 112 KB free there) */
+	/* the planes, while the picture is made: in the accessory, whose heap
+	   is all it has, in the unpacked object itself, grown for the planes
+	   not stored (a second copy was 27 KB of the front page's window
+	   picture, 27 Nov 2026); else, and in the program, a copy from the
+	   heap or the pictures' ST RAM, whose room a 1 MB machine has when its
+	   heap has none (a Falcon under EmuTOS: 26 KB left, 112 KB free
+	   there), the unpacked object given back to the heap */
 	need = 8 + j->plane * j->np;
-	base = need <= size + 1 ? data : realloc(data, need);
+	base = !stmem_fixed() ? NULL : need <= size + 1 ? data : realloc(data, need);
 	if (base != NULL)
 	{
 		data = base;
@@ -531,7 +532,8 @@ static int pic_unpacked(picjob *j, gimage *im)
 			j->pl[i] = data + 8 + j->plane * (unsigned long) i;
 	} else
 	{
-		if ((j->std = st_alloc((long) (j->plane * j->np))) == NULL)
+		if ((j->std = malloc(j->plane * j->np)) == NULL &&
+		    (j->std = st_alloc((long) (j->plane * j->np))) == NULL)
 		{
 			free(data);
 			return -1;

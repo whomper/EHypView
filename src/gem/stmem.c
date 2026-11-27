@@ -184,6 +184,11 @@ void st_free(void *p)
 	}
 }
 
+int stmem_fixed(void)
+{
+	return fixed;
+}
+
 long stmem_used(void)
 {
 	return used;
