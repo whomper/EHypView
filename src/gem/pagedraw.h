@@ -46,6 +46,8 @@ const short (*screen_palette(void))[3];
 void screen_palette_stale(void);
 void layout_free(playout *L);
 void layout_forget_kept(void);
+/* what pictures lost for memory needed since the last call (bytes) */
+long layout_short_take(void);
 
 /* pictures still to be made; the next piece of them (1 more to come,
    *done the picture just finished, to be drawn, or -1); all of them now */

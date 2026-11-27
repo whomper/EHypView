@@ -395,11 +395,30 @@ static void pic_free(picjob *j)
 	free(j);
 }
 
+/* what pictures lost for memory needed since layout_short_take() */
+static long short_bytes;
+
+long layout_short_take(void)
+{
+	long n = short_bytes;
+
+	short_bytes = 0;
+	return n;
+}
+
 /* the picture given up: none shown */
 static void pic_fail(gimage *im)
 {
+	picjob *j = im->job;
+
 	if (im->w > 0)
 		log_event("picture-lost", im->form.fd_addr == NULL ? "memory" : "data", NULL);
+	if (im->w > 0 && im->form.fd_addr == NULL && j != NULL)
+		/* its planes (twice, while unpacked), the form copied to the
+		   screen and its tables: for the accessory's next measure */
+		short_bytes += (long) (2 * j->plane * j->np) +
+			(long) (scr.bytes ? j->wdw * 16 * j->oh * scr.bytes : j->oplane * planes) +
+			(long) j->keys * 8 + (long) j->wdw * 16;
 	pic_free(im->job);
 	im->job = NULL;
 	st_free(im->form.fd_addr);
@@ -466,25 +485,14 @@ static int pic_unpacked(picjob *j, gimage *im)
 	unsigned long size, p = 8;
 	int i;
 
+	unsigned long need, at[8];
+	unsigned char *base;
+
 	data = hyp_unpack_take(j->u, &size);
 	j->u = NULL;
 	if (data == NULL)
 		return -1;
-	/* the planes, while the picture is made: from the heap, else from the
-	   pictures' ST RAM, whose room a 1 MB machine has when its heap has
-	   none (a Falcon under EmuTOS: 26 KB left, 112 KB free there) */
-	j->std = malloc(j->plane * j->np);
-	if (j->std == NULL)
-		j->std = st_alloc((long) (j->plane * j->np));
-	if (j->std == NULL)
-	{
-		free(data);
-		return -1;
-	}
 	for (i = 0; i < j->np; i++)
-	{
-		unsigned char *dst = j->std + j->plane * (unsigned long) i;
-
 		if (j->present & (1 << i))
 		{
 			if (p + j->plane > size)
@@ -492,16 +500,57 @@ static int pic_unpacked(picjob *j, gimage *im)
 				free(data);
 				return -1;
 			}
-			memcpy(dst, data + p, j->plane);
+			at[i] = p;
 			p += j->plane;
-		} else
-			memset(dst, (j->onoff & (1 << i)) ? 0xff : 0x00, j->plane);
+		}
+	/* the planes, while the picture is made, in the unpacked object itself
+	   (a 1 MB machine's accessory has some 100 KB of heap: a second copy
+	   was 16 KB of the front page's first picture), grown for the planes
+	   not stored; else a copy from the pictures' ST RAM, whose room a 1 MB
+	   machine has when its heap has none (a Falcon under EmuTOS: 26 KB
+	   left, 112 KB free there) */
+	need = 8 + j->plane * j->np;
+	base = need <= size + 1 ? data : realloc(data, need);
+	if (base != NULL)
+	{
+		data = base;
+		j->std = data;
+		/* from the last down: a plane only ever moves up */
+		for (i = j->np; i-- > 0;)
+		{
+			unsigned char *dst = data + 8 + j->plane * (unsigned long) i;
+
+			if (j->present & (1 << i))
+			{
+				if (data + at[i] != dst)
+					memmove(dst, data + at[i], j->plane);
+			} else
+				memset(dst, (j->onoff & (1 << i)) ? 0xff : 0x00, j->plane);
+		}
+		for (i = 0; i < j->np; i++)
+			j->pl[i] = data + 8 + j->plane * (unsigned long) i;
+	} else
+	{
+		if ((j->std = st_alloc((long) (j->plane * j->np))) == NULL)
+		{
+			free(data);
+			return -1;
+		}
+		for (i = 0; i < j->np; i++)
+		{
+			unsigned char *dst = j->std + j->plane * (unsigned long) i;
+
+			if (j->present & (1 << i))
+				memcpy(dst, data + at[i], j->plane);
+			else
+				memset(dst, (j->onoff & (1 << i)) ? 0xff : 0x00, j->plane);
+		}
+		free(data);
+		for (i = 0; i < j->np; i++)
+			j->pl[i] = j->std + j->plane * (unsigned long) i;
 	}
-	free(data);
 	if (spread[0x80] == 0)
 		make_spread();
-	for (i = 0; i < j->np; i++)
-		j->pl[i] = j->std + j->plane * (unsigned long) i;
 	j->kbuf = malloc(j->wdw * 16);                 /* a row's pixel values */
 	j->pick = malloc(j->keys * sizeof(cpick));
 	if (scr.bytes)
