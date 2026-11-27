@@ -869,6 +869,11 @@ void layout_finish(playout *L)
 		;
 }
 
+void screen_palette_stale(void)
+{
+	pal_fresh = 0;
+}
+
 const short (*screen_palette(void))[3]
 {
 	if (planes != 8)

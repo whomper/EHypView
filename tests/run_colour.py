@@ -230,12 +230,19 @@ def start(spec, drive, opts, vmode):
     return m, args
 
 
-def boot(name, spec, opts, vmode, how, hyp=FIXTURE, npics=2):
+def boot(name, spec, opts, vmode, how, hyp=FIXTURE, npics=2, pens=None, inf=None):
     """the console's lines, the screenshot's path (None: no page) and the
-    machine it ran on"""
+    machine it ran on; pens: ASKPENS.TXT's text, set before the accessory
+    is asked (tests/askhelp.c); inf: EHYPVIEW.INF's lines"""
     work = os.path.join(OUT, name)
     drive = os.path.join(work, "c")
     page = make_drive(drive, how, hyp)
+    if pens:
+        with open(os.path.join(drive, "ASKPENS.TXT"), "w") as f:
+            f.write(pens)
+    if inf:
+        with open(os.path.join(drive, "ehypview.inf"), "w") as f:
+            f.write(inf)
     m, margs = start(spec, drive, opts, vmode)
     fifo = os.path.join(work, "fifo")
     log_path = os.path.join(work, "console.log")
@@ -421,6 +428,60 @@ def front_pages():
                   (": blank " + ", ".join(blank) if blank else ": not loaded")))
 
 
+# the accessory's front page after a program in front set pens (the fault of
+# 27 Nov 2026, reported on the reference configuration: the accessory took
+# the palette it read at boot for its first page, so the window picture's
+# white and its bar came out in pens that held other colours by then). It
+# swaps them: VDI 0 and 1 another colour each, 200 and 201 white and black.
+# The pictures must come out pixel for pixel as without the change
+PENS = "0 800 600 1000\r\n1 1000 0 0\r\n200 1000 1000 1000\r\n201 0 0 0\r\n"
+
+
+def front_pens():
+    helps = os.path.join(OUT, "help")
+    os.makedirs(helps, exist_ok=True)
+    path = os.path.join(helps, "FRONT.HYP")
+    shutil.copy(os.path.join(HERE, "fixtures", "front", "front.hyp"), path)
+    keep = os.environ.get("AERA_WITH_NVDI")
+    nvdi = machines.erz_env().get("AERA_WITH_NVDI")
+    if nvdi:
+        os.environ["AERA_WITH_NVDI"] = "1"
+    try:
+        shots = []
+        for name, pens in (("front-pens-as-is", None), ("front-pens-set", PENS)):
+            # a heap both pictures fit in (a first boot's 160 KB holds one: the
+            # colours are this case's question, not the memory)
+            out, shot, m = boot(name, "Falcon-4:256", [], None, "acc", path, pens=pens, inf="HEAPKB=512\r\n")
+            evs = [l[4:] for l in out if l.startswith("EHV ")]
+            pics = [e.split()[1:] for e in evs if e.startswith("picture ")][-2:]
+            work = [list(map(int, e.split()[1:5])) for e in evs if e.startswith("work-at ")][-1:]
+            shots.append((shot, pics, any(l.strip() == "ASK pens set" for l in out) if pens else True, work))
+    finally:
+        if keep is None:
+            os.environ.pop("AERA_WITH_NVDI", None)
+        else:
+            os.environ["AERA_WITH_NVDI"] = keep
+    (a, pa, _, wa), (b, pb, set_ok, wb) = shots
+    differ, total = 0, 0
+    if a and b and len(pa) == 2 and pa == pb and wa and wa == wb:
+        # the pictures' pixels inside the work area (the AES draws the
+        # window's frame in VDI 0 and 1, which the case sets)
+        wx, wy, ww, wh = wa[0]
+        sw, sh, pxa = read_bmp(a)
+        _, _, pxb = read_bmp(b)
+        for pos, size in pa:
+            x0, y0 = map(int, pos.split(","))
+            w, h = map(int, size.split("x"))
+            for y in range(max(y0, wy), min(y0 + h, wy + wh)):
+                for x in range(max(x0, wx), min(x0 + w, wx + ww)):
+                    total += 1
+                    differ += pxa(x, y) != pxb(x, y)
+    check(set_ok and total > 0 and differ == 0,
+          "the front page test guide in the accessory on %s, after a program set pens: both pictures as "
+          "without the change (%d of %d pixels differ)%s" % (m.describe(), differ, total,
+                                                             "" if set_ok else ": the pens weren't set"))
+
+
 def main():
     if not shutil.which("hatari"):
         print("skip  colour: needs hatari")
@@ -433,6 +494,8 @@ def main():
         run_mode(*m)
     if not only or "front" in only.split(","):
         front_pages()
+    if not only or "pens" in only.split(","):
+        front_pens()
     print("%d failed" % failed)
     return 1 if failed else 0
 

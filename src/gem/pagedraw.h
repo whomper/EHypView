@@ -41,6 +41,9 @@ void layout_make(playout *L, hyp_doc *doc, const hyp_page *pg);
    and taken by the first page's layout as it is (theme.c's theme_palette);
    NULL on any other screen */
 const short (*screen_palette(void))[3];
+/* from the first event call on, the next page reads the palette again: a
+   program may have set other pens since screen_palette() read it */
+void screen_palette_stale(void);
 void layout_free(playout *L);
 void layout_forget_kept(void);
 

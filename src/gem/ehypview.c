@@ -1391,6 +1391,8 @@ static void open_window(void)
 		sprintf(at, "%d %d %d %d", x, y, w, h);
 		log_event("window-at", at, NULL);  /* for the tests: its arrows and track */
 		work_area(&x, &y, &w, &h);
+		sprintf(at, "%d %d %d %d", x, y, w, h);
+		log_event("work-at", at, NULL);    /* its work area, inside the AES's frame */
 		sprintf(at, "%d %d %d %d", x + MARGIN, y, cw, ch);
 		log_event("text-at", at, NULL);    /* and its text's first cell, for a press on a link */
 	}
@@ -5068,6 +5070,12 @@ int app_main(void)
 		app_window_closed();
 	}
 	crash_offer("EHypView", "next to EHYPVIEW.PRG");
+	/* the palette read at the start counts for a page laid out before the
+	   first event call only (the program's start page): after it, above all
+	   in the accessory, whose first page may come long after the boot, a
+	   program in front may have set the pens (the front page's pictures
+	   came out in pens that held other colours by then, 27 Nov 2026) */
+	screen_palette_stale();
 	start_mark("first-event");
 
 	{
