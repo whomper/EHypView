@@ -20,6 +20,8 @@
 
 /* the accessory, at start: an ST-RAM block of about `bytes`, its only one */
 void stmem_reserve(long bytes);
+/* 1: no more GEMDOS areas, the heap the rest (the accessory) */
+int stmem_fixed(void);
 
 /* n bytes of ST RAM, word-aligned; NULL when there are none */
 void *st_alloc(long n);

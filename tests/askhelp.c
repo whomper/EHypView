@@ -9,7 +9,10 @@
  * when it asked.  tests/run_colour.py puts another request in
  * C:\ASKHELP.TXT (a line: path and page, and maybe a second: the seconds
  * to wait before ending, ten minutes if none), for the accessory in modes
- * the program won't run in.
+ * the program won't run in.  C:\ASKPENS.TXT, when there, holds pens to set
+ * first (a line each: the VDI colour and its red, green and blue, 0-1000),
+ * as a program in front may set them while the accessory waits
+ * (tests/run_colour.py's front-page case with changed pens).
  */
 #include <string.h>
 #include "tos.h"
@@ -20,6 +23,49 @@ long nf_on = 1;                 /* a test program: NatFeats looked for (tos.h) *
 #define VA_START 0x4711
 
 static char request[128] = "C:\\GUIDES\\G000.HYP Main";
+static char pens[512];
+
+/* the next number in *p, or -1 */
+static int number(char **p)
+{
+	int v = 0, any = 0;
+
+	while (**p == ' ' || **p == '\t' || **p == '\r' || **p == '\n')
+		(*p)++;
+	for (; **p >= '0' && **p <= '9'; (*p)++, any = 1)
+		v = v * 10 + (**p - '0');
+	return any ? v : -1;
+}
+
+/* the pens ASKPENS.TXT names, set on the screen */
+static void set_pens(void)
+{
+	long fh = Fopen("C:\\ASKPENS.TXT", 0), n;
+	short d, h, work[57];
+	char *p = pens;
+
+	if (fh < 0)
+		return;
+	n = Fread((short) fh, sizeof(pens) - 1, pens);
+	Fclose((short) fh);
+	pens[n > 0 ? n : 0] = '\0';
+	h = graf_handle(&d, &d, &d, &d);
+	if ((h = v_opnvwk_(h, work)) <= 0)
+		return;
+	for (;;)
+	{
+		int i = number(&p), r = number(&p), g = number(&p), b = number(&p);
+		short rgb[3];
+
+		if (i < 0 || r < 0 || g < 0 || b < 0)
+			break;
+		rgb[0] = (short) r;
+		rgb[1] = (short) g;
+		rgb[2] = (short) b;
+		vs_color(h, (short) i, rgb);
+	}
+	nf_debug("ASK pens set\n");                /* the workstation stays open: the pens stay */
+}
 
 int main(void)
 {
@@ -53,6 +99,7 @@ int main(void)
 		Fclose((short) fh);
 	}
 	evnt_timer_(1000);
+	set_pens();
 	id = appl_find("EHYPVIEW");
 	if (id < 0)
 	{

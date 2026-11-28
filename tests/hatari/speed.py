@@ -75,13 +75,13 @@ SLICE = 100                     # a longer job's slices: a key answered within
 # Settings, has 300 ms (the guidelines' table, decided 1 Nov 2026)
 ST_DIALOG = 300
 # times accepted over the guidelines' (the row, the machine: its figure): the
-# line scroll, the copy at the bus and the scroll's own wind_update (20 Nov 2026,
-# "Accept"; AERA-Atari PERF-REVISIT)
+# line scroll, the copy at the bus and the scroll's own wind_update (decided
+# 20 Nov 2026: accepted; AERA-Atari PERF-REVISIT)
 ACCEPTED = {
     ("big page: a line scrolled (Down)", "ST:mono"): 70,
     ("big page: a line scrolled (Down)", "ST:med"): 60,
     ("big page: a line scrolled (Down)", "Falcon-4:16"): 55,
-    # the ST's rows for 2.9 (20 Nov 2026, "Accept, release 2.9")
+    # the ST's rows for 2.9 (decided 20 Nov 2026: accepted, with the release)
     ("a key: Tab chooses a link", "ST:mono"): 60,
     ("a key: Tab chooses a link", "ST:med"): 55,
     ("a letter typed in the library's search", "ST:mono"): 50,
@@ -94,7 +94,7 @@ ACCEPTED = {
     ("search: the rows found drawn", "ST:med"): 210,
     ("full-text search: its slices", "ST:mono"): 110,
     ("full-text search: its slices", "ST:med"): 115,
-    # for 2.11 (23 Nov 2026, "Accept and release"): the ticks over the
+    # for 2.11 (decided 23 Nov 2026: accepted, with the release): the ticks over the
     # figures above, the big page under NVDI, and the picture pages, whose
     # "line" is a picture's (48-80 px): their lines stay owed
     ("big page: a line scrolled (Down)", "ST:med"): 65,
@@ -113,6 +113,12 @@ ACCEPTED = {
     ("a front page (program): a line scrolled (Down)", "Falcon-4:256+nvdi"): 85,
     ("a front page (program): a page scrolled (Shift+Down)", "ST:mono"): 185,
     ("a front page (program): a page scrolled (Shift+Down)", "ST:med"): 190,
+    # for 2.12 (the hub, 28 Nov 2026: within what was accepted for them, 485
+    # ms on 22 Nov and 55 ms on 23 Nov): the IMAGES start on ST:med, which
+    # moves between 445 and 460 with the build's layout alone (2.11 445, the
+    # first common sync 455, the 1 MB rule 445, 2.12 455-460); the search
+    # letter on ST:mono, 52.5, is the 55 above
+    ("IMAGES.HYP (16-colour picture): page drawn at the start (longest stretch)", "ST:med"): 460,
 }
 
 results = {}                    # (action, limit) -> {machine: ms}

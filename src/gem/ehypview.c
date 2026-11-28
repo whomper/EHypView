@@ -1391,6 +1391,8 @@ static void open_window(void)
 		sprintf(at, "%d %d %d %d", x, y, w, h);
 		log_event("window-at", at, NULL);  /* for the tests: its arrows and track */
 		work_area(&x, &y, &w, &h);
+		sprintf(at, "%d %d %d %d", x, y, w, h);
+		log_event("work-at", at, NULL);    /* its work area, inside the AES's frame */
 		sprintf(at, "%d %d %d %d", x + MARGIN, y, cw, ch);
 		log_event("text-at", at, NULL);    /* and its text's first cell, for a press on a link */
 	}
@@ -3664,7 +3666,7 @@ static void viewer_message(short *msg)
 		{
 			/* the AES took the windows: the viewer in front is kept, with
 			   its page, for the next opening; the others go */
-			int i;
+			int i, shut = 0;
 
 			log_event("acc", "closed by the AES", NULL);
 			pick_current();
@@ -3675,11 +3677,25 @@ static void viewer_message(short *msg)
 				if (!x->used)
 					continue;
 				if (x->h > 0)
+				{
 					av_window(x->h, 0);
+					shut = 1;
+				}
 				x->h = -1;
 				x->icon = 0;
 				if (x != cur)
 					viewer_drop(x);
+			}
+			/* as when a viewer window is closed (close_window): its pages'
+			   memory measured (PAGEKB=) and the pages read written; the
+			   usual end of a Help request from the program in front, which
+			   else never grew PAGEKB=, so a page's pictures came no nearer
+			   to fitting at the next boot (27 Nov 2026) */
+			if (shut)
+			{
+				acc_mem_grow();
+				recent_save();
+				layout_forget_kept();
 			}
 			libwin_forget();
 		}
@@ -4704,6 +4720,10 @@ static void acc_mem_grow(void)
 	seen = heap_peak - index_use;
 	if (heap_peak > acc_heap_bytes - acc_heap_bytes / 8)
 		seen += seen / 2;
+	/* a picture lost for memory never took it: what it needed counts, so
+	   the next start's heap has room for it (27 Nov 2026: the front page's
+	   window picture, lost at every start of a 4 MB Falcon's accessory) */
+	seen += layout_short_take();
 	kb = (seen + 1023) / 1024 + 16;
 	sprintf(a, "page %ld KB at the most", (seen + 1023) / 1024);
 	log_event("acc-memory", a, NULL);
@@ -5068,6 +5088,12 @@ int app_main(void)
 		app_window_closed();
 	}
 	crash_offer("EHypView", "next to EHYPVIEW.PRG");
+	/* the palette read at the start counts for a page laid out before the
+	   first event call only (the program's start page): after it, above all
+	   in the accessory, whose first page may come long after the boot, a
+	   program in front may have set the pens (the front page's pictures
+	   came out in pens that held other colours by then, 27 Nov 2026) */
+	screen_palette_stale();
 	start_mark("first-event");
 
 	{
