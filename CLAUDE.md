@@ -286,6 +286,21 @@ released; maintenance then comes back. Done in 2.11 (23 Nov 2026):
   the published notes (the Notes workflow, `.github/workflows/notes.yml`, cleaned 12 of 51).
 Back in maintenance mode.
 
+**2.12 (28 Nov 2026), a fault release** (the hub's go): the help front page on a 256-colour screen in the
+accessory, reported on the reference configuration.
+- The pictures in the screen's pens of now: 2.11's one palette read at the start (`screen_palette`) counted
+  for the first page laid out, the accessory's long after its boot, when the program in front may have set
+  pens; `screen_palette_stale()` at the first event call. colour-test's pens case (MODES=pens).
+- The accessory learns what a page's pictures need: AC_CLOSE (the AES closing its window when the program
+  asking ends) measures and saves as a close does; a picture lost for memory counts what it needed
+  (`layout_short_take`); in the accessory a picture's planes are made in its unpacked block. colour-test's
+  learns case (MODES=learns): both pictures from the second start on (the first start's 160 KB holds the
+  banner beside the index job: accepted by the hub).
+- With what main held since 2.11: common to 9fd1335, no accessory under 2 MB (2.1), its memory its own (2.2).
+- Speed: the IMAGES start on ST:med at 455-460 (layout; within the 485 accepted on 22 Nov) and the search
+  letter on ST:mono at 52.5 (within the 55 of 23 Nov), named in tests/hatari/speed.py's ACCEPTED.
+Back in maintenance mode.
+
 ### UI backlog (the owner's UI decisions, 9 Nov 2026; AERA-Atari a261597, standards/ui)
 
 All done (2.0, 2.1 and 2.11; checked against the code 26 Nov 2026): the list stays as the record of where
